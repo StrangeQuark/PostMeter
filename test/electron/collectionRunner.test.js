@@ -271,6 +271,50 @@ test('runner auth refresh injects bearer tokens only into requests using refresh
   assert.equal(result.authRefresh.refreshCount, 1);
 });
 
+test('runner auth refresh injects API keys only into requests using refreshing auth', async () => {
+  const runner = {
+    id: 'runner-auto-api-key-refresh',
+    name: 'Runner Auto API Key Refresh',
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'apiKey',
+      apiKeyLocation: 'header',
+      apiKeyName: 'X-API-Key',
+      accessTokenVariable: '',
+      refreshBeforeRun: true,
+      outputs: [{ slot: 'apiKey', source: 'body', path: 'api_key', variable: '' }],
+      request: {
+        id: 'refresh-api-key',
+        name: 'Refresh API Key',
+        method: 'POST',
+        url: 'https://auth.example.test/api-key'
+      }
+    },
+    requests: [
+      { ...requestModel({ id: 'api-key-resource', name: 'API Key Resource', url: 'https://api.example.test/api-key', auth: { type: 'apiKey', location: 'header', key: 'X-API-Key', value: 'stale-key' } }), iterations: 1 },
+      { ...requestModel({ id: 'auto-api-key-resource', name: 'Auto API Key Resource', url: 'https://api.example.test/auto-api-key', auth: { type: 'autoRefresh' } }), iterations: 1 }
+    ]
+  };
+  const observed = [];
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      if (request.id === 'refresh-api-key') {
+        return response(200, JSON.stringify({ api_key: 'fresh-auto-api-key' }));
+      }
+      observed.push({ id: request.id, auth: request.auth });
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(observed, [
+    { id: 'api-key-resource', auth: { type: 'apiKey', location: 'header', key: 'X-API-Key', value: 'stale-key' } },
+    { id: 'auto-api-key-resource', auth: { type: 'apiKey', location: 'header', key: 'X-API-Key', value: 'fresh-auto-api-key' } }
+  ]);
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
 test('runner auth refresh injects refreshed cookies only into requests using refreshing auth', async () => {
   const runner = {
     id: 'runner-auto-cookie-refresh',

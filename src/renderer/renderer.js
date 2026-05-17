@@ -79,9 +79,10 @@ const AUTO_REFRESH_AUTH_TYPE = 'autoRefresh';
 const AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE = 'autoRefreshRefreshToken';
 const REFRESHING_AUTH_ACCESS_TOKEN_LABEL = 'Use Refreshing Access Token';
 const REFRESHING_AUTH_REFRESH_TOKEN_LABEL = 'Refreshing Auth Refresh Token';
+const REFRESHING_AUTH_API_KEY_LABEL = 'Use Refreshing API Key';
 const REFRESHING_AUTH_ACCESS_COOKIE_LABEL = 'Use Refreshing Access Cookie';
 const REFRESHING_AUTH_REFRESH_COOKIE_LABEL = 'Refreshing Auth Refresh Cookie';
-const AUTO_REFRESH_SUPPORTED_AUTH_TYPES = new Set(['bearer', 'cookie']);
+const AUTO_REFRESH_SUPPORTED_AUTH_TYPES = new Set(['bearer', 'apiKey', 'cookie']);
 const AUTH_REFRESH_OUTPUT_SOURCE_VALUES = new Set(['body', 'rawBody', 'header', 'cookie']);
 const AUTH_REFRESH_RAW_BODY_PATH = '$body';
 const AUTH_REFRESH_OUTPUT_PATH_LABELS = {
@@ -101,14 +102,14 @@ const AUTH_REFRESH_OUTPUT_PATH_LABELS = {
     cookie: 'API Key Cookie Name'
   },
   AwsAccessKey: {
-    body: 'Access Key Response Path',
-    header: 'Access Key Header Name',
-    cookie: 'Access Key Cookie Name'
+    body: 'Access Key ID Response Path',
+    header: 'Access Key ID Header Name',
+    cookie: 'Access Key ID Cookie Name'
   },
   AwsSecretKey: {
-    body: 'Secret Key Response Path',
-    header: 'Secret Key Header Name',
-    cookie: 'Secret Key Cookie Name'
+    body: 'Secret Access Key Response Path',
+    header: 'Secret Access Key Header Name',
+    cookie: 'Secret Access Key Cookie Name'
   },
   AwsSessionToken: {
     body: 'Session Token Response Path',
@@ -8589,6 +8590,8 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   renderAuthRefreshTokenRequestSummary(prefix, normalized.refreshTokenRequest);
   setValue(`${prefix}AuthRefreshAccessTokenPathInput`, accessTokenOutput.path);
   setValue(`${prefix}AuthRefreshRefreshTokenPathInput`, refreshTokenOutput.path);
+  setValue(`${prefix}AuthRefreshApiKeyLocationSelect`, normalized.apiKeyLocation || 'header');
+  setValue(`${prefix}AuthRefreshApiKeyNameInput`, normalized.apiKeyName || 'X-API-Key');
   setValue(`${prefix}AuthRefreshApiKeyVariableInput`, apiKeyOutput.variable);
   setValue(`${prefix}AuthRefreshApiKeyPathInput`, apiKeyOutput.path);
   setValue(`${prefix}AuthRefreshCookieNameInput`, cookieOutput.path);
@@ -8599,6 +8602,11 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   setValue(`${prefix}AuthRefreshAwsSecretKeyPathInput`, awsSecretKeyOutput.path);
   setValue(`${prefix}AuthRefreshAwsSessionTokenVariableInput`, awsSessionTokenOutput.variable);
   setValue(`${prefix}AuthRefreshAwsSessionTokenPathInput`, awsSessionTokenOutput.path);
+  setValue(`${prefix}AuthRefreshAwsCredentialsSourceSelect`, awsCredentialsOutputSource([
+    awsAccessKeyOutput,
+    awsSecretKeyOutput,
+    awsSessionTokenOutput
+  ]));
   setValue(`${prefix}AuthRefreshCustomVariableInput`, customOutput.variable);
   setValue(`${prefix}AuthRefreshCustomPathInput`, customOutput.path);
   setValue(`${prefix}AuthRefreshIntervalSecondsInput`, normalized.refreshIntervalSeconds);
@@ -8751,6 +8759,8 @@ function collectAuthRefreshFromControls(prefix, fallback = {}) {
     mode: 'interval',
     authType,
     targetScope: 'environment',
+    apiKeyLocation: $(`${prefix}AuthRefreshApiKeyLocationSelect`)?.value || existing.apiKeyLocation || 'header',
+    apiKeyName: $(`${prefix}AuthRefreshApiKeyNameInput`)?.value || existing.apiKeyName || 'X-API-Key',
     accessTokenVariable: primaryOutput?.variable || '',
     refreshTokenVariable: authType === 'bearer' || authType === 'oauth2' || authType === 'cookie'
       ? ($(`${prefix}AuthRefreshRefreshTokenVariableInput`)?.value || '')
@@ -8807,6 +8817,11 @@ function authRefreshOutputForSlot(config = {}, slot, fallback = {}) {
   };
 }
 
+function awsCredentialsOutputSource(outputs = []) {
+  const preferred = normalizeAuthRefreshOutputSource(outputs.find((output) => output?.source)?.source, 'body');
+  return preferred === 'rawBody' ? 'body' : preferred;
+}
+
 function normalizeAuthRefreshOutputSource(value, fallback = 'body') {
   const text = String(value || '').trim();
   if (AUTH_REFRESH_OUTPUT_SOURCE_VALUES.has(text)) {
@@ -8817,8 +8832,15 @@ function normalizeAuthRefreshOutputSource(value, fallback = 'body') {
 
 function setAuthRefreshOutputControls(prefix, controlName, output = {}, authType = '') {
   const source = normalizeAuthRefreshOutputSource(output.source);
-  setValue(`${prefix}AuthRefresh${controlName}SourceSelect`, source);
-  syncAuthRefreshOutputSourceField(prefix, controlName, source, authType);
+  if (!String(controlName || '').startsWith('Aws')) {
+    setValue(`${prefix}AuthRefresh${controlName}SourceSelect`, source);
+  }
+  syncAuthRefreshOutputSourceField(
+    prefix,
+    controlName,
+    String(controlName || '').startsWith('Aws') ? '' : source,
+    authType
+  );
 }
 
 function syncAuthRefreshOutputSourceFields(prefix, authType = '') {
@@ -8831,7 +8853,7 @@ function syncAuthRefreshOutputSourceField(prefix, controlName, sourceOverride = 
   const field = $(`${prefix}AuthRefresh${controlName}PathField`);
   const label = $(`${prefix}AuthRefresh${controlName}PathLabel`);
   const source = normalizeAuthRefreshOutputSource(
-    sourceOverride || $(`${prefix}AuthRefresh${controlName}SourceSelect`)?.value
+    sourceOverride || authRefreshOutputControlSource(prefix, controlName)
   );
   if (field) {
     field.hidden = source === 'rawBody';
@@ -8884,7 +8906,7 @@ function collectAuthRefreshOutputsFromControls(prefix, authType) {
 function authRefreshOutputFromControls(prefix, slot, controlName, variableSuffix, pathSuffix, fallbackSource = '') {
   const fallback = authRefreshDefaultOutput(slot);
   const source = normalizeAuthRefreshOutputSource(
-    controlName ? $(`${prefix}AuthRefresh${controlName}SourceSelect`)?.value : fallbackSource,
+    controlName ? authRefreshOutputControlSource(prefix, controlName) : fallbackSource,
     fallbackSource || fallback.source
   );
   let path = source === 'rawBody'
@@ -8899,6 +8921,16 @@ function authRefreshOutputFromControls(prefix, slot, controlName, variableSuffix
     variable: $(`${prefix}AuthRefresh${variableSuffix}`)?.value || fallback.variable,
     path
   };
+}
+
+function authRefreshOutputControlSource(prefix, controlName) {
+  const text = String(controlName || '');
+  if (text.startsWith('Aws')) {
+    return $(`${prefix}AuthRefreshAwsCredentialsSourceSelect`)?.value
+      || $(`${prefix}AuthRefresh${controlName}SourceSelect`)?.value
+      || '';
+  }
+  return $(`${prefix}AuthRefresh${controlName}SourceSelect`)?.value || '';
 }
 
 function authRefreshPrimaryOutput(authType, outputs = []) {
@@ -8942,7 +8974,7 @@ function authRefreshTypeLabels(authType) {
     return {
       variableLabel: 'Save API Key To',
       pathLabel: 'API Key Response Path',
-      help: 'The auth request uses this run environment, saves the API key to a variable, and repeats on the interval below.'
+      help: 'The auth request uses this run environment, reads the API key, and applies it to matching API key requests.'
     };
   }
   if (authType === 'cookie') {
@@ -8954,9 +8986,9 @@ function authRefreshTypeLabels(authType) {
   }
   if (authType === 'aws') {
     return {
-      variableLabel: 'Save AWS Access Key To',
-      pathLabel: 'AWS Access Key Response Path',
-      help: 'The auth request uses this run environment and saves temporary AWS credentials to variables.'
+      variableLabel: 'Save AWS Access Key ID To',
+      pathLabel: 'AWS Access Key ID Response Path',
+      help: 'The auth request uses this run environment and refreshes temporary AWS credentials on the interval below.'
     };
   }
   if (authType === 'custom') {
@@ -9223,9 +9255,12 @@ function runnerRequestRefreshingAuthField(runner, request) {
   input.checked = cookieMode
     ? request?.useRefreshingAuthCookie === true
     : request?.auth?.type === AUTO_REFRESH_AUTH_TYPE;
+  const refreshType = String(runner?.authRefresh?.authType || '').trim();
   const label = cookieMode
     ? 'Use refreshing access cookie'
-    : 'Use refreshing access token';
+    : refreshType === 'apiKey'
+      ? 'Use refreshing API key'
+      : 'Use refreshing access token';
   input.setAttribute('aria-label', `${label} for ${request.name || 'runner request'}`);
   const text = document.createElement('span');
   text.textContent = label;
@@ -10282,15 +10317,17 @@ function authRefreshAutoDetectTarget(ownerType, requestKind = 'access', authRefr
     bearer: { label: 'access token', controlName: 'AccessToken' },
     oauth2: { label: 'OAuth access token', controlName: 'AccessToken' },
     apiKey: { label: 'API key', controlName: 'ApiKey' },
-    aws: { label: 'AWS access key', controlName: 'AwsAccessKey' },
+    aws: { label: 'AWS access key ID', controlName: 'AwsAccessKey' },
     custom: { label: 'custom header value', controlName: 'Custom' }
   };
   const target = targets[authType] || targets.bearer;
   return {
     label: target.label,
-    sourceSelectId: `${prefix}AuthRefresh${target.controlName}SourceSelect`,
+    sourceSelectId: authType === 'aws'
+      ? `${prefix}AuthRefreshAwsCredentialsSourceSelect`
+      : `${prefix}AuthRefresh${target.controlName}SourceSelect`,
     pathInputId: `${prefix}AuthRefresh${target.controlName}PathInput`,
-    allowedSources: ['body', 'rawBody', 'header', 'cookie']
+    allowedSources: authType === 'aws' ? ['body', 'header', 'cookie'] : ['body', 'rawBody', 'header', 'cookie']
   };
 }
 
@@ -16194,9 +16231,14 @@ function showRefreshingAuthRefreshTokenOption(select, authRefresh = null) {
 }
 
 function refreshingAuthAccessTokenLabel(authType = '') {
-  return String(authType || '').trim() === 'cookie'
-    ? REFRESHING_AUTH_ACCESS_COOKIE_LABEL
-    : REFRESHING_AUTH_ACCESS_TOKEN_LABEL;
+  const normalizedType = String(authType || '').trim();
+  if (normalizedType === 'cookie') {
+    return REFRESHING_AUTH_ACCESS_COOKIE_LABEL;
+  }
+  if (normalizedType === 'apiKey') {
+    return REFRESHING_AUTH_API_KEY_LABEL;
+  }
+  return REFRESHING_AUTH_ACCESS_TOKEN_LABEL;
 }
 
 function refreshingAuthRefreshTokenLabel(authType = '') {

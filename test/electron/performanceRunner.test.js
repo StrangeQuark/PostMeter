@@ -140,6 +140,55 @@ test('performance auth refresh injects bearer tokens into matching request auth 
   assert.equal(result.authRefresh.refreshCount, 1);
 });
 
+test('performance auth refresh injects API keys into matching request auth automatically', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-auto-api-key-refresh',
+    name: 'Auto API Key Performance',
+    type: 'throughput',
+    request: {
+      id: 'auto-api-key-resource',
+      name: 'Auto API Key Resource',
+      method: 'GET',
+      url: 'https://api.example.test/resource',
+      auth: { type: 'apiKey', location: 'header', key: 'X-API-Key', value: 'stale-key' }
+    },
+    config: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'apiKey',
+      apiKeyLocation: 'query',
+      apiKeyName: 'api_key',
+      accessTokenVariable: '',
+      refreshBeforeRun: true,
+      outputs: [{ slot: 'apiKey', source: 'body', path: 'api_key', variable: '' }],
+      request: {
+        id: 'refresh-api-key',
+        name: 'Refresh API Key',
+        method: 'POST',
+        url: 'https://auth.example.test/api-key'
+      }
+    }
+  });
+  const observed = [];
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      if (request.id === 'refresh-api-key') {
+        return response(200, '{"api_key":"perf-auto-api-key"}');
+      }
+      observed.push(request.auth);
+      return response();
+    }
+  });
+
+  assert.equal(result.completedRequests, 1);
+  assert.equal(result.failedRequests, 0);
+  assert.deepEqual(observed, [{ type: 'apiKey', location: 'query', key: 'api_key', value: 'perf-auto-api-key' }]);
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
 test('performance auth refresh injects refreshed cookies into matching request auth automatically', async () => {
   const performanceTest = performanceTestModel({
     id: 'perf-auto-cookie-refresh',

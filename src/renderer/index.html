@@ -759,9 +759,10 @@
                 </div>
                 <div class="auth-refresh-type-panel" data-auth-refresh-types="apiKey">
                   <div class="auth-refresh-field-grid">
-                    <label class="field compact"><span>Save API Key To</span><input id="runnerAuthRefreshApiKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="API_KEY"></label>
                     <label class="field compact"><span>Read API Key From</span><select id="runnerAuthRefreshApiKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
                     <label id="runnerAuthRefreshApiKeyPathField" class="field compact"><span id="runnerAuthRefreshApiKeyPathLabel">API Key Response Path</span><input id="runnerAuthRefreshApiKeyPathInput" autocomplete="off" placeholder="api_key"></label>
+                    <label class="field compact"><span>Send API Key As</span><select id="runnerAuthRefreshApiKeyLocationSelect"><option value="header">Header</option><option value="query">Query Param</option></select></label>
+                    <label class="field compact"><span>API Key Name</span><input id="runnerAuthRefreshApiKeyNameInput" autocomplete="off" placeholder="X-API-Key"></label>
                   </div>
                 </div>
                 <div class="auth-refresh-type-panel" data-auth-refresh-types="cookie">
@@ -772,14 +773,9 @@
                 </div>
                 <div class="auth-refresh-type-panel" data-auth-refresh-types="aws">
                   <div class="auth-refresh-field-grid">
-                    <label class="field compact"><span>Save Access Key To</span><input id="runnerAuthRefreshAwsAccessKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
-                    <label class="field compact"><span>Read Access Key From</span><select id="runnerAuthRefreshAwsAccessKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                    <label id="runnerAuthRefreshAwsAccessKeyPathField" class="field compact"><span id="runnerAuthRefreshAwsAccessKeyPathLabel">Access Key Response Path</span><input id="runnerAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
-                    <label class="field compact"><span>Save Secret Key To</span><input id="runnerAuthRefreshAwsSecretKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
-                    <label class="field compact"><span>Read Secret Key From</span><select id="runnerAuthRefreshAwsSecretKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                    <label id="runnerAuthRefreshAwsSecretKeyPathField" class="field compact"><span id="runnerAuthRefreshAwsSecretKeyPathLabel">Secret Key Response Path</span><input id="runnerAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
-                    <label class="field compact"><span>Save Session Token To</span><input id="runnerAuthRefreshAwsSessionTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
-                    <label class="field compact"><span>Read Session Token From</span><select id="runnerAuthRefreshAwsSessionTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                    <label class="field compact auth-refresh-full"><span>Read Credentials From</span><select id="runnerAuthRefreshAwsCredentialsSourceSelect"><option value="body">JSON body paths</option><option value="header">Response headers</option><option value="cookie">Response cookies</option></select></label>
+                    <label id="runnerAuthRefreshAwsAccessKeyPathField" class="field compact"><span id="runnerAuthRefreshAwsAccessKeyPathLabel">Access Key ID Response Path</span><input id="runnerAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
+                    <label id="runnerAuthRefreshAwsSecretKeyPathField" class="field compact"><span id="runnerAuthRefreshAwsSecretKeyPathLabel">Secret Access Key Response Path</span><input id="runnerAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
                     <label id="runnerAuthRefreshAwsSessionTokenPathField" class="field compact"><span id="runnerAuthRefreshAwsSessionTokenPathLabel">Session Token Response Path</span><input id="runnerAuthRefreshAwsSessionTokenPathInput" autocomplete="off" placeholder="credentials.sessionToken"></label>
                   </div>
                 </div>
@@ -824,8 +820,12 @@
                   <p>Use these when you need named variables or custom failure behavior.</p>
                   <div class="auth-refresh-field-grid">
                     <label class="field compact" data-auth-refresh-types="bearer oauth2"><span id="runnerAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="runnerAuthRefreshAccessTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                    <label class="field compact" data-auth-refresh-types="apiKey"><span>Save API Key To</span><input id="runnerAuthRefreshApiKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="API_KEY"></label>
                     <label class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="runnerAuthRefreshCookieVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
                     <label class="field compact" data-auth-refresh-types="bearer oauth2 cookie"><span>Save Refresh Token To</span><input id="runnerAuthRefreshRefreshTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off"></label>
+                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="runnerAuthRefreshAwsAccessKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="runnerAuthRefreshAwsSecretKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="runnerAuthRefreshAwsSessionTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
                     <label class="checkbox-line auth-refresh-before-run"><input id="runnerAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
                     <label class="field compact"><span>On Failure</span><select id="runnerAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
                   </div>
@@ -957,9 +957,10 @@
                   </div>
                   <div class="auth-refresh-type-panel" data-auth-refresh-types="apiKey">
                     <div class="auth-refresh-field-grid">
-                      <label class="field compact"><span>Save API Key To</span><input id="performanceAuthRefreshApiKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="API_KEY"></label>
                       <label class="field compact"><span>Read API Key From</span><select id="performanceAuthRefreshApiKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
                       <label id="performanceAuthRefreshApiKeyPathField" class="field compact"><span id="performanceAuthRefreshApiKeyPathLabel">API Key Response Path</span><input id="performanceAuthRefreshApiKeyPathInput" autocomplete="off" placeholder="api_key"></label>
+                      <label class="field compact"><span>Send API Key As</span><select id="performanceAuthRefreshApiKeyLocationSelect"><option value="header">Header</option><option value="query">Query Param</option></select></label>
+                      <label class="field compact"><span>API Key Name</span><input id="performanceAuthRefreshApiKeyNameInput" autocomplete="off" placeholder="X-API-Key"></label>
                     </div>
                   </div>
                   <div class="auth-refresh-type-panel" data-auth-refresh-types="cookie">
@@ -970,14 +971,9 @@
                   </div>
                   <div class="auth-refresh-type-panel" data-auth-refresh-types="aws">
                     <div class="auth-refresh-field-grid">
-                      <label class="field compact"><span>Save Access Key To</span><input id="performanceAuthRefreshAwsAccessKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
-                      <label class="field compact"><span>Read Access Key From</span><select id="performanceAuthRefreshAwsAccessKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                      <label id="performanceAuthRefreshAwsAccessKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsAccessKeyPathLabel">Access Key Response Path</span><input id="performanceAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
-                      <label class="field compact"><span>Save Secret Key To</span><input id="performanceAuthRefreshAwsSecretKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
-                      <label class="field compact"><span>Read Secret Key From</span><select id="performanceAuthRefreshAwsSecretKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                      <label id="performanceAuthRefreshAwsSecretKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsSecretKeyPathLabel">Secret Key Response Path</span><input id="performanceAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
-                      <label class="field compact"><span>Save Session Token To</span><input id="performanceAuthRefreshAwsSessionTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
-                      <label class="field compact"><span>Read Session Token From</span><select id="performanceAuthRefreshAwsSessionTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                      <label class="field compact auth-refresh-full"><span>Read Credentials From</span><select id="performanceAuthRefreshAwsCredentialsSourceSelect"><option value="body">JSON body paths</option><option value="header">Response headers</option><option value="cookie">Response cookies</option></select></label>
+                      <label id="performanceAuthRefreshAwsAccessKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsAccessKeyPathLabel">Access Key ID Response Path</span><input id="performanceAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
+                      <label id="performanceAuthRefreshAwsSecretKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsSecretKeyPathLabel">Secret Access Key Response Path</span><input id="performanceAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
                       <label id="performanceAuthRefreshAwsSessionTokenPathField" class="field compact"><span id="performanceAuthRefreshAwsSessionTokenPathLabel">Session Token Response Path</span><input id="performanceAuthRefreshAwsSessionTokenPathInput" autocomplete="off" placeholder="credentials.sessionToken"></label>
                     </div>
                   </div>
@@ -1022,8 +1018,12 @@
                     <p>Use these when you need named variables or custom failure behavior.</p>
                     <div class="auth-refresh-field-grid">
                       <label class="field compact" data-auth-refresh-types="bearer oauth2"><span id="performanceAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="performanceAuthRefreshAccessTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                      <label class="field compact" data-auth-refresh-types="apiKey"><span>Save API Key To</span><input id="performanceAuthRefreshApiKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="API_KEY"></label>
                       <label class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="performanceAuthRefreshCookieVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
                       <label class="field compact" data-auth-refresh-types="bearer oauth2 cookie"><span>Save Refresh Token To</span><input id="performanceAuthRefreshRefreshTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off"></label>
+                      <label class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="performanceAuthRefreshAwsAccessKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                      <label class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="performanceAuthRefreshAwsSecretKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                      <label class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="performanceAuthRefreshAwsSessionTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
                       <label class="checkbox-line auth-refresh-before-run"><input id="performanceAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
                       <label class="field compact"><span>On Failure</span><select id="performanceAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
                     </div>
