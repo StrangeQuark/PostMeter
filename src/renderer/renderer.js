@@ -80,6 +80,45 @@ const AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE = 'autoRefreshRefreshToken';
 const REFRESHING_AUTH_ACCESS_TOKEN_LABEL = 'Use Refreshing Access Token';
 const REFRESHING_AUTH_REFRESH_TOKEN_LABEL = 'Refreshing Auth Refresh Token';
 const AUTO_REFRESH_SUPPORTED_AUTH_TYPES = new Set(['bearer', 'cookie']);
+const AUTH_REFRESH_OUTPUT_SOURCE_VALUES = new Set(['body', 'rawBody', 'header', 'cookie']);
+const AUTH_REFRESH_RAW_BODY_PATH = '$body';
+const AUTH_REFRESH_OUTPUT_PATH_LABELS = {
+  AccessToken: {
+    body: 'Access Token Response Path',
+    header: 'Access Token Header Name',
+    cookie: 'Access Token Cookie Name'
+  },
+  RefreshToken: {
+    body: 'Refresh Token Response Path',
+    header: 'Refresh Token Header Name',
+    cookie: 'Refresh Token Cookie Name'
+  },
+  ApiKey: {
+    body: 'API Key Response Path',
+    header: 'API Key Header Name',
+    cookie: 'API Key Cookie Name'
+  },
+  AwsAccessKey: {
+    body: 'Access Key Response Path',
+    header: 'Access Key Header Name',
+    cookie: 'Access Key Cookie Name'
+  },
+  AwsSecretKey: {
+    body: 'Secret Key Response Path',
+    header: 'Secret Key Header Name',
+    cookie: 'Secret Key Cookie Name'
+  },
+  AwsSessionToken: {
+    body: 'Session Token Response Path',
+    header: 'Session Token Header Name',
+    cookie: 'Session Token Cookie Name'
+  },
+  Custom: {
+    body: 'Header Value Response Path',
+    header: 'Header Name',
+    cookie: 'Header Value Cookie Name'
+  }
+};
 const {
   enabledQueryParams: enabledEditorQueryParams,
   queryParamsFromUrl: queryParamsFromEditorUrl,
@@ -285,6 +324,8 @@ let selectedRequestExportTarget = null;
 let expandedRequestExportCollectionIds = [];
 let selectedRequestImportFilePath = '';
 let selectedRequestImportFileName = '';
+let authRefreshAutoDetectCandidates = [];
+let selectedAuthRefreshAutoDetectCandidateId = '';
 let activeRequestExportContent = '';
 let activeVaultPromptPayload = null;
 let activeFileSourceTarget = null;
@@ -599,6 +640,7 @@ const rendererWorkflows = createRendererWorkflows({
   renderRequestTabs,
   renderRequestVariablePairs,
   renderVariablePreview,
+  ensureOpenCollectionTabForActive,
   confirm: (message) => confirmActionModal({ message }),
   prompt: (message, defaultValue) => promptTextInput({
     title: 'Choose value',
@@ -826,10 +868,12 @@ function bindUi() {
     onToggleRunnerAuthRefresh: toggleActiveRunnerAuthRefresh,
     onEditRunnerAuthRefresh: (event) => toggleAuthRefreshPanel('runner', event),
     onOpenRunnerAuthRefreshRequest: () => openExistingAuthRefreshRequest('runner'),
+    onAutoDetectRunnerAuthRefreshRequest: () => { void autoDetectAuthRefreshRequest('runner'); },
     onNewRunnerAuthRefreshRequest: () => openNewAuthRefreshRequest('runner'),
     onImportRunnerAuthRefreshRequest: () => { void promptAndImportAuthRefreshRequest('runner'); },
     onRemoveRunnerAuthRefreshRequest: () => removeAuthRefreshRequest('runner'),
     onOpenRunnerAuthRefreshTokenRequest: () => openExistingAuthRefreshRequest('runner', 'refreshToken'),
+    onAutoDetectRunnerAuthRefreshTokenRequest: () => { void autoDetectAuthRefreshRequest('runner', 'refreshToken'); },
     onNewRunnerAuthRefreshTokenRequest: () => openNewAuthRefreshRequest('runner', 'refreshToken'),
     onImportRunnerAuthRefreshTokenRequest: () => { void promptAndImportAuthRefreshRequest('runner', 'refreshToken'); },
     onRemoveRunnerAuthRefreshTokenRequest: () => removeAuthRefreshRequest('runner', 'refreshToken'),
@@ -841,10 +885,12 @@ function bindUi() {
     onTogglePerformanceAuthRefresh: toggleActivePerformanceAuthRefresh,
     onEditPerformanceAuthRefresh: (event) => toggleAuthRefreshPanel('performance', event),
     onOpenPerformanceAuthRefreshRequest: () => openExistingAuthRefreshRequest('performance'),
+    onAutoDetectPerformanceAuthRefreshRequest: () => { void autoDetectAuthRefreshRequest('performance'); },
     onNewPerformanceAuthRefreshRequest: () => openNewAuthRefreshRequest('performance'),
     onImportPerformanceAuthRefreshRequest: () => { void promptAndImportAuthRefreshRequest('performance'); },
     onRemovePerformanceAuthRefreshRequest: () => removeAuthRefreshRequest('performance'),
     onOpenPerformanceAuthRefreshTokenRequest: () => openExistingAuthRefreshRequest('performance', 'refreshToken'),
+    onAutoDetectPerformanceAuthRefreshTokenRequest: () => { void autoDetectAuthRefreshRequest('performance', 'refreshToken'); },
     onNewPerformanceAuthRefreshTokenRequest: () => openNewAuthRefreshRequest('performance', 'refreshToken'),
     onImportPerformanceAuthRefreshTokenRequest: () => { void promptAndImportAuthRefreshRequest('performance', 'refreshToken'); },
     onRemovePerformanceAuthRefreshTokenRequest: () => removeAuthRefreshRequest('performance', 'refreshToken'),
@@ -976,6 +1022,7 @@ function bindUi() {
     onCsvVariablesRowModeChange: csvVariablesRowModeChanged,
     onLoadCsvVariablesFile: () => { void loadPendingCsvVariablesFile(); },
     onKeepCsvVariablesFile: keepPendingCsvVariablesFile,
+    onConfirmAuthRefreshAutoDetectModal: confirmAuthRefreshAutoDetectModal,
     onResolveVaultPrompt: resolveVaultPrompt,
     onTrapActiveModalFocus: trapActiveModalFocus,
     getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
@@ -4083,6 +4130,7 @@ function focusInitialModalElement(modalId) {
     csvVariablesModal: 'csvVariablesSchemaInput',
     htmlReportOptionsModal: 'htmlReportIncludeResultsInput',
     confirmActionModal: 'cancelConfirmActionButton',
+    authRefreshAutoDetectModal: 'cancelAuthRefreshAutoDetectButton',
     notificationModal: 'closeNotificationModalButton',
     performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
     filePickerModal: 'filePickerBrowseButton',
@@ -8233,6 +8281,9 @@ function bindCaptureSettingsDropdownDismissal() {
     if (event.target?.closest?.('.capture-settings-menu-group')) {
       return;
     }
+    if (isAuthRefreshAutoDetectModalInteraction(event.target)) {
+      return;
+    }
     closeCaptureSettingsPanels();
   };
   const onKeyDown = (event) => {
@@ -8247,6 +8298,9 @@ function bindCaptureSettingsDropdownDismissal() {
   };
   const closeAll = () => closeCaptureSettingsPanels();
   const onScroll = (event) => {
+    if (isAuthRefreshAutoDetectModalOpen()) {
+      return;
+    }
     if (event.target?.closest?.('.capture-settings-panel')) {
       return;
     }
@@ -8264,6 +8318,22 @@ function bindCaptureSettingsDropdownDismissal() {
     window.removeEventListener('blur', closeAll);
     window.removeEventListener('resize', closeAll);
   };
+}
+
+function isAuthRefreshAutoDetectModalInteraction(target) {
+  if (target?.closest?.('#authRefreshAutoDetectModal')) {
+    return true;
+  }
+  if (!isAuthRefreshAutoDetectModalOpen()) {
+    return false;
+  }
+  const backdrop = $('modalBackdrop');
+  return Boolean(backdrop && (target === backdrop || backdrop.contains?.(target)));
+}
+
+function isAuthRefreshAutoDetectModalOpen() {
+  const modal = $('authRefreshAutoDetectModal');
+  return modal?.hidden === false;
 }
 
 function renderCapturePolicyControls(prefix, policy, enabled) {
@@ -8511,6 +8581,13 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   setChecked(`${prefix}AuthRefreshBeforeRunInput`, normalized.refreshBeforeRun === true);
   renderAuthRefreshVariableSuggestions(prefix);
   applyAuthRefreshTypeVisibility(prefix, authType);
+  setAuthRefreshOutputControls(prefix, 'AccessToken', accessTokenOutput, authType);
+  setAuthRefreshOutputControls(prefix, 'RefreshToken', refreshTokenOutput);
+  setAuthRefreshOutputControls(prefix, 'ApiKey', apiKeyOutput);
+  setAuthRefreshOutputControls(prefix, 'AwsAccessKey', awsAccessKeyOutput);
+  setAuthRefreshOutputControls(prefix, 'AwsSecretKey', awsSecretKeyOutput);
+  setAuthRefreshOutputControls(prefix, 'AwsSessionToken', awsSessionTokenOutput);
+  setAuthRefreshOutputControls(prefix, 'Custom', customOutput);
   const button = $(`${prefix}AuthRefreshButton`);
   if (button) {
     const active = enabled && normalized.enabled === true;
@@ -8539,6 +8616,10 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   if (openButton) {
     openButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.request);
   }
+  const autoDetectButton = $(`${prefix}AuthRefreshAutoDetectRequestButton`);
+  if (autoDetectButton) {
+    autoDetectButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.request);
+  }
   const removeButton = $(`${prefix}AuthRefreshRemoveRequestButton`);
   if (removeButton) {
     removeButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.request);
@@ -8546,6 +8627,10 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   const refreshTokenOpenButton = $(`${prefix}AuthRefreshTokenOpenRequestButton`);
   if (refreshTokenOpenButton) {
     refreshTokenOpenButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.refreshTokenRequest);
+  }
+  const refreshTokenAutoDetectButton = $(`${prefix}AuthRefreshTokenAutoDetectRequestButton`);
+  if (refreshTokenAutoDetectButton) {
+    refreshTokenAutoDetectButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.refreshTokenRequest);
   }
   const refreshTokenRemoveButton = $(`${prefix}AuthRefreshTokenRemoveRequestButton`);
   if (refreshTokenRemoveButton) {
@@ -8697,36 +8782,94 @@ function authRefreshOutputForSlot(config = {}, slot, fallback = {}) {
   };
 }
 
+function normalizeAuthRefreshOutputSource(value, fallback = 'body') {
+  const text = String(value || '').trim();
+  if (AUTH_REFRESH_OUTPUT_SOURCE_VALUES.has(text)) {
+    return text;
+  }
+  return AUTH_REFRESH_OUTPUT_SOURCE_VALUES.has(fallback) ? fallback : 'body';
+}
+
+function setAuthRefreshOutputControls(prefix, controlName, output = {}, authType = '') {
+  const source = normalizeAuthRefreshOutputSource(output.source);
+  setValue(`${prefix}AuthRefresh${controlName}SourceSelect`, source);
+  syncAuthRefreshOutputSourceField(prefix, controlName, source, authType);
+}
+
+function syncAuthRefreshOutputSourceFields(prefix, authType = '') {
+  for (const controlName of Object.keys(AUTH_REFRESH_OUTPUT_PATH_LABELS)) {
+    syncAuthRefreshOutputSourceField(prefix, controlName, '', authType);
+  }
+}
+
+function syncAuthRefreshOutputSourceField(prefix, controlName, sourceOverride = '', authType = '') {
+  const field = $(`${prefix}AuthRefresh${controlName}PathField`);
+  const label = $(`${prefix}AuthRefresh${controlName}PathLabel`);
+  const source = normalizeAuthRefreshOutputSource(
+    sourceOverride || $(`${prefix}AuthRefresh${controlName}SourceSelect`)?.value
+  );
+  if (field) {
+    field.hidden = source === 'rawBody';
+  }
+  if (label) {
+    label.textContent = authRefreshOutputPathLabel(controlName, source, authType);
+  }
+}
+
+function authRefreshOutputPathLabel(controlName, source, authType = '') {
+  if (controlName === 'AccessToken' && authType === 'oauth2') {
+    if (source === 'header') {
+      return 'OAuth Access Token Header Name';
+    }
+    if (source === 'cookie') {
+      return 'OAuth Access Token Cookie Name';
+    }
+    return 'OAuth Access Token Response Path';
+  }
+  const labels = AUTH_REFRESH_OUTPUT_PATH_LABELS[controlName] || {};
+  return labels[source] || labels.body || 'Response Path';
+}
+
 function collectAuthRefreshOutputsFromControls(prefix, authType) {
   if (authType === 'apiKey') {
-    return [authRefreshOutputFromControls(prefix, 'apiKey', 'body', 'ApiKeyVariableInput', 'ApiKeyPathInput')];
+    return [authRefreshOutputFromControls(prefix, 'apiKey', 'ApiKey', 'ApiKeyVariableInput', 'ApiKeyPathInput')];
   }
   if (authType === 'cookie') {
-    return [authRefreshOutputFromControls(prefix, 'cookie', 'cookie', 'CookieVariableInput', 'CookieNameInput')];
+    return [authRefreshOutputFromControls(prefix, 'cookie', '', 'CookieVariableInput', 'CookieNameInput', 'cookie')];
   }
   if (authType === 'aws') {
     return [
-      authRefreshOutputFromControls(prefix, 'awsAccessKey', 'body', 'AwsAccessKeyVariableInput', 'AwsAccessKeyPathInput'),
-      authRefreshOutputFromControls(prefix, 'awsSecretKey', 'body', 'AwsSecretKeyVariableInput', 'AwsSecretKeyPathInput'),
-      authRefreshOutputFromControls(prefix, 'awsSessionToken', 'body', 'AwsSessionTokenVariableInput', 'AwsSessionTokenPathInput')
+      authRefreshOutputFromControls(prefix, 'awsAccessKey', 'AwsAccessKey', 'AwsAccessKeyVariableInput', 'AwsAccessKeyPathInput'),
+      authRefreshOutputFromControls(prefix, 'awsSecretKey', 'AwsSecretKey', 'AwsSecretKeyVariableInput', 'AwsSecretKeyPathInput'),
+      authRefreshOutputFromControls(prefix, 'awsSessionToken', 'AwsSessionToken', 'AwsSessionTokenVariableInput', 'AwsSessionTokenPathInput')
     ];
   }
   if (authType === 'custom') {
-    return [authRefreshOutputFromControls(prefix, 'custom', 'body', 'CustomVariableInput', 'CustomPathInput')];
+    return [authRefreshOutputFromControls(prefix, 'custom', 'Custom', 'CustomVariableInput', 'CustomPathInput')];
   }
   return [
-    authRefreshOutputFromControls(prefix, 'accessToken', 'body', 'AccessTokenVariableInput', 'AccessTokenPathInput'),
-    authRefreshOutputFromControls(prefix, 'refreshToken', 'body', 'RefreshTokenVariableInput', 'RefreshTokenPathInput')
+    authRefreshOutputFromControls(prefix, 'accessToken', 'AccessToken', 'AccessTokenVariableInput', 'AccessTokenPathInput'),
+    authRefreshOutputFromControls(prefix, 'refreshToken', 'RefreshToken', 'RefreshTokenVariableInput', 'RefreshTokenPathInput')
   ];
 }
 
-function authRefreshOutputFromControls(prefix, slot, source, variableSuffix, pathSuffix) {
+function authRefreshOutputFromControls(prefix, slot, controlName, variableSuffix, pathSuffix, fallbackSource = '') {
   const fallback = authRefreshDefaultOutput(slot);
+  const source = normalizeAuthRefreshOutputSource(
+    controlName ? $(`${prefix}AuthRefresh${controlName}SourceSelect`)?.value : fallbackSource,
+    fallbackSource || fallback.source
+  );
+  let path = source === 'rawBody'
+    ? AUTH_REFRESH_RAW_BODY_PATH
+    : ($(`${prefix}AuthRefresh${pathSuffix}`)?.value || fallback.path);
+  if (source !== 'rawBody' && path === AUTH_REFRESH_RAW_BODY_PATH) {
+    path = fallback.path;
+  }
   return {
     slot,
     source,
     variable: $(`${prefix}AuthRefresh${variableSuffix}`)?.value || fallback.variable,
-    path: $(`${prefix}AuthRefresh${pathSuffix}`)?.value || fallback.path
+    path
   };
 }
 
@@ -8756,6 +8899,7 @@ function applyAuthRefreshTypeVisibility(prefix, authType) {
   setText(`${prefix}AuthRefreshHelpText`, labels.help);
   setText(`${prefix}AuthRefreshAccessTokenVariableLabel`, labels.variableLabel);
   setText(`${prefix}AuthRefreshAccessTokenPathLabel`, labels.pathLabel);
+  syncAuthRefreshOutputSourceFields(prefix, normalizedType);
 }
 
 function authRefreshTypeLabels(authType) {
@@ -9803,6 +9947,383 @@ function removeOpenAuthRefreshRequestTab(ownerType, ownerId, requestId) {
     return;
   }
   removeOpenRequestTab(`auth-request:${ownerType}:${ownerId}:${requestId}`);
+}
+
+async function autoDetectAuthRefreshRequest(ownerType, requestKind = 'access') {
+  try {
+    collectActiveEditorState();
+    const owner = activeAuthRefreshOwnerForType(ownerType);
+    if (!owner) {
+      return null;
+    }
+    const property = authRefreshRequestProperty(requestKind);
+    const request = owner.authRefresh?.[property] || null;
+    if (!authRefreshRequestConfigured(request)) {
+      setStatus(`Create or import ${authRefreshRequestArticle(requestKind)} ${authRefreshRequestLabel(requestKind).toLowerCase()} first.`);
+      renderAuthRefreshControls(ownerType, owner.authRefresh, true);
+      return null;
+    }
+    const target = authRefreshAutoDetectTarget(ownerType, requestKind, owner.authRefresh);
+    if (!target) {
+      setStatus('Auto-Detect is not available for this refreshing auth type.');
+      return null;
+    }
+    const sendRequest = window.__postmeterSendRequest || window.postmeter?.request?.send;
+    if (typeof sendRequest !== 'function') {
+      setStatus('Auto-Detect is unavailable in this runtime.');
+      return null;
+    }
+    const autoDetectModel = window.PostMeterAuthRefreshAutoDetectModel;
+    if (typeof autoDetectModel?.buildAuthRefreshAutoDetectCandidates !== 'function') {
+      setStatus('Auto-Detect response parsing is unavailable.');
+      return null;
+    }
+    setStatus(`Auto-detecting ${authRefreshRequestLabel(requestKind).toLowerCase()} response...`);
+    const response = await sendAuthRefreshAutoDetectRequest(sendRequest, owner.authRefresh || {}, requestKind, request, authRefreshAutoDetectEnvironment(ownerType, owner));
+    const candidates = autoDetectModel.buildAuthRefreshAutoDetectCandidates(response)
+      .map((candidate) => ({
+        ...candidate,
+        compatible: target.allowedSources.includes(candidate.source)
+      }));
+    const selected = await promptAuthRefreshAutoDetect(candidates, target);
+    if (!selected) {
+      setStatus('Auto-Detect cancelled.');
+      return null;
+    }
+    if (applyAuthRefreshAutoDetectCandidate(ownerType, requestKind, selected, target)) {
+      setStatus(`Auto-Detect set ${target.label} from ${authRefreshAutoDetectCandidateSummary(selected)}.`);
+    }
+    return selected;
+  } catch (error) {
+    const message = error?.message || String(error);
+    setStatus(`Auto-Detect failed: ${message}`);
+    notifyUser('Auto-Detect Failed', message);
+    return null;
+  }
+}
+
+async function sendAuthRefreshAutoDetectRequest(sendRequest, authRefresh, requestKind, request, environment) {
+  const environmentSnapshot = cloneJson(environment);
+  if (requestKind !== 'access' || request?.auth?.type !== AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE) {
+    return sendRequest(cloneJson(request) || request, environmentSnapshot);
+  }
+  const refreshRequest = authRefresh?.refreshTokenRequest || null;
+  if (!authRefreshRequestConfigured(refreshRequest)) {
+    throw new Error('Auto-Detect needs a refresh token request before it can run this access-token request.');
+  }
+  const refreshResponse = await sendRequest(cloneJson(refreshRequest) || refreshRequest, cloneJson(environment));
+  const refreshToken = extractAuthRefreshAutoDetectRefreshToken(authRefresh, refreshResponse);
+  if (!refreshToken) {
+    const refreshOutput = authRefreshAutoDetectRefreshTokenOutput(authRefresh);
+    throw new Error(`Auto-Detect could not read a refresh token from ${authRefreshOutputDescription(refreshOutput)}.`);
+  }
+  return sendRequest({
+    ...(cloneJson(request) || request),
+    auth: { type: 'bearer', token: refreshToken }
+  }, environmentSnapshot);
+}
+
+function extractAuthRefreshAutoDetectRefreshToken(authRefresh = {}, response = {}) {
+  return extractAuthRefreshAutoDetectOutput(authRefreshAutoDetectRefreshTokenOutput(authRefresh), response);
+}
+
+function authRefreshAutoDetectRefreshTokenOutput(authRefresh = {}) {
+  return authRefreshOutputForSlot(authRefresh, 'refreshToken', authRefreshDefaultOutput('refreshToken'));
+}
+
+function extractAuthRefreshAutoDetectOutput(output = {}, response = {}) {
+  const source = normalizeAuthRefreshOutputSource(output.source, 'body');
+  const path = String(output.path || '').trim();
+  if (source === 'rawBody') {
+    return String(response?.body || '').trim();
+  }
+  if (!path) {
+    return '';
+  }
+  if (source === 'header') {
+    return extractAuthRefreshAutoDetectHeader(response.headers, path);
+  }
+  if (source === 'cookie') {
+    return extractAuthRefreshAutoDetectCookie(response, path);
+  }
+  return extractAuthRefreshAutoDetectPath(parseAuthRefreshAutoDetectBody(response.body), path);
+}
+
+function parseAuthRefreshAutoDetectBody(body) {
+  if (body == null || String(body).trim() === '') {
+    return {};
+  }
+  try {
+    return JSON.parse(String(body));
+  } catch {
+    return {};
+  }
+}
+
+function extractAuthRefreshAutoDetectHeader(headers = {}, name = '') {
+  const target = String(name || '').trim().toLowerCase();
+  if (!target || !headers || typeof headers !== 'object') {
+    return '';
+  }
+  const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === target);
+  const value = key ? headers[key] : '';
+  return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+}
+
+function extractAuthRefreshAutoDetectCookie(response = {}, name = '') {
+  const target = String(name || '').trim();
+  const cookies = [
+    ...(Array.isArray(response.updatedCookies) ? response.updatedCookies : []),
+    ...(Array.isArray(response.cookies) ? response.cookies : []),
+    ...authRefreshAutoDetectSetCookieHeaderCookies(response.headers)
+  ];
+  return String(cookies.find((cookie) => cookie?.enabled !== false && String(cookie.name || '') === target)?.value || '');
+}
+
+function authRefreshAutoDetectSetCookieHeaderCookies(headers = {}) {
+  if (!headers || typeof headers !== 'object') {
+    return [];
+  }
+  const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === 'set-cookie');
+  const value = key ? headers[key] : null;
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return values
+    .map((item) => String(item || '').split(';')[0])
+    .map((pair) => {
+      const separatorIndex = pair.indexOf('=');
+      return separatorIndex > 0
+        ? { name: pair.slice(0, separatorIndex).trim(), value: pair.slice(separatorIndex + 1) }
+        : null;
+    })
+    .filter(Boolean);
+}
+
+function extractAuthRefreshAutoDetectPath(source, path) {
+  const segments = [];
+  const pattern = /[^.[\]]+|\[(\d+|(["'])(.*?)\2)\]/g;
+  for (const match of String(path || '').matchAll(pattern)) {
+    segments.push(match[1] != null ? (match[3] != null ? match[3] : Number(match[1])) : match[0]);
+  }
+  let value = source;
+  for (const segment of segments) {
+    if (value == null) {
+      return '';
+    }
+    value = value[segment];
+  }
+  return value == null ? '' : String(value);
+}
+
+function authRefreshOutputDescription(output = {}) {
+  const source = normalizeAuthRefreshOutputSource(output.source, 'body');
+  if (source === 'rawBody') {
+    return 'the entire response body';
+  }
+  const path = String(output.path || '').trim() || '(empty path)';
+  if (source === 'header') {
+    return `header "${path}"`;
+  }
+  if (source === 'cookie') {
+    return `cookie "${path}"`;
+  }
+  return `JSON body path "${path}"`;
+}
+
+function authRefreshAutoDetectEnvironment(ownerType, owner) {
+  if (ownerType === 'runner') {
+    return environmentById(owner?.environmentId) || null;
+  }
+  return performanceSelectedEnvironment(owner);
+}
+
+function authRefreshAutoDetectTarget(ownerType, requestKind = 'access', authRefresh = {}) {
+  const prefix = ownerType;
+  if (requestKind === 'refreshToken') {
+    return {
+      label: 'refresh token',
+      sourceSelectId: `${prefix}AuthRefreshRefreshTokenSourceSelect`,
+      pathInputId: `${prefix}AuthRefreshRefreshTokenPathInput`,
+      allowedSources: ['body', 'rawBody', 'header', 'cookie']
+    };
+  }
+  const authType = normalizeAuthRefreshUiType($(`${prefix}AuthRefreshTypeSelect`)?.value || authRefresh?.authType);
+  if (authType === 'cookie') {
+    return {
+      label: 'cookie',
+      sourceSelectId: '',
+      pathInputId: `${prefix}AuthRefreshCookieNameInput`,
+      allowedSources: ['cookie']
+    };
+  }
+  const targets = {
+    bearer: { label: 'access token', controlName: 'AccessToken' },
+    oauth2: { label: 'OAuth access token', controlName: 'AccessToken' },
+    apiKey: { label: 'API key', controlName: 'ApiKey' },
+    aws: { label: 'AWS access key', controlName: 'AwsAccessKey' },
+    custom: { label: 'custom header value', controlName: 'Custom' }
+  };
+  const target = targets[authType] || targets.bearer;
+  return {
+    label: target.label,
+    sourceSelectId: `${prefix}AuthRefresh${target.controlName}SourceSelect`,
+    pathInputId: `${prefix}AuthRefresh${target.controlName}PathInput`,
+    allowedSources: ['body', 'rawBody', 'header', 'cookie']
+  };
+}
+
+function promptAuthRefreshAutoDetect(candidates = [], target = {}) {
+  renderAuthRefreshAutoDetectModal(candidates, target);
+  return showModal('authRefreshAutoDetectModal', null);
+}
+
+function renderAuthRefreshAutoDetectModal(candidates = [], target = {}) {
+  authRefreshAutoDetectCandidates = candidates.map((candidate, index) => ({
+    ...candidate,
+    id: candidate.id || `candidate-${index + 1}`
+  }));
+  const compatibleCandidates = authRefreshAutoDetectCandidates.filter((candidate) => candidate.compatible === true);
+  selectedAuthRefreshAutoDetectCandidateId = '';
+  setText('authRefreshAutoDetectTitle', 'Auto-Detect');
+  setText('authRefreshAutoDetectMessage', `Select the response item PostMeter should use as the ${target.label || 'auth value'}.`);
+  const list = $('authRefreshAutoDetectList');
+  const empty = $('authRefreshAutoDetectEmpty');
+  const confirm = $('confirmAuthRefreshAutoDetectButton');
+  if (confirm) {
+    confirm.disabled = true;
+  }
+  if (!list) {
+    return;
+  }
+  list.textContent = '';
+  if (empty) {
+    empty.hidden = compatibleCandidates.length > 0;
+  }
+  for (const section of authRefreshAutoDetectSections(compatibleCandidates)) {
+    const sectionElement = document.createElement('section');
+    sectionElement.className = 'auth-refresh-auto-detect-section';
+    const heading = document.createElement('h3');
+    heading.className = 'auth-refresh-auto-detect-section-title';
+    heading.textContent = section.label;
+    sectionElement.append(heading);
+    for (const candidate of section.candidates) {
+      sectionElement.append(renderAuthRefreshAutoDetectOption(candidate));
+    }
+    list.append(sectionElement);
+  }
+}
+
+function authRefreshAutoDetectSections(candidates = []) {
+  const sections = [
+    { key: 'body', label: 'Response Body', candidates: [] },
+    { key: 'header', label: 'Headers', candidates: [] },
+    { key: 'cookie', label: 'Cookies', candidates: [] }
+  ];
+  const byKey = new Map(sections.map((section) => [section.key, section]));
+  for (const candidate of candidates) {
+    const key = candidate.source === 'rawBody' ? 'body' : candidate.source;
+    const section = byKey.get(key);
+    if (section) {
+      section.candidates.push(candidate);
+    }
+  }
+  return sections.filter((section) => section.candidates.length > 0);
+}
+
+function renderAuthRefreshAutoDetectOption(candidate) {
+  const option = document.createElement('label');
+  option.className = 'collection-pick-option auth-refresh-auto-detect-option';
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'authRefreshAutoDetectOption';
+  input.value = candidate.id;
+  input.addEventListener('change', () => selectAuthRefreshAutoDetectCandidate(candidate.id));
+  const copy = document.createElement('span');
+  copy.className = 'auth-refresh-auto-detect-copy';
+  const label = document.createElement('strong');
+  label.textContent = candidate.label || authRefreshAutoDetectCandidateSummary(candidate);
+  const detail = document.createElement('small');
+  detail.textContent = candidate.detail || candidate.valuePreview || '';
+  copy.append(label, detail);
+  option.append(input, copy);
+  return option;
+}
+
+function selectAuthRefreshAutoDetectCandidate(candidateId) {
+  selectedAuthRefreshAutoDetectCandidateId = String(candidateId || '');
+  const confirm = $('confirmAuthRefreshAutoDetectButton');
+  if (confirm) {
+    confirm.disabled = !authRefreshAutoDetectCandidates.some((candidate) =>
+      candidate.id === selectedAuthRefreshAutoDetectCandidateId && candidate.compatible === true
+    );
+  }
+}
+
+function confirmAuthRefreshAutoDetectModal() {
+  const selected = authRefreshAutoDetectCandidates.find((candidate) =>
+    candidate.id === selectedAuthRefreshAutoDetectCandidateId && candidate.compatible === true
+  );
+  if (!selected) {
+    return;
+  }
+  resolveActiveModal(selected);
+}
+
+function applyAuthRefreshAutoDetectCandidate(ownerType, requestKind, candidate, target = null) {
+  const owner = activeAuthRefreshOwnerForType(ownerType);
+  if (!owner || !candidate?.source || !candidate?.path) {
+    return false;
+  }
+  const resolvedTarget = target || authRefreshAutoDetectTarget(ownerType, requestKind, owner.authRefresh);
+  if (!resolvedTarget || !resolvedTarget.allowedSources.includes(candidate.source)) {
+    setStatus('Selected response item is not available for this refreshing auth type.');
+    return false;
+  }
+  const source = candidate.source;
+  const path = source === 'rawBody' ? AUTH_REFRESH_RAW_BODY_PATH : candidate.path;
+  if (resolvedTarget.sourceSelectId) {
+    setValue(resolvedTarget.sourceSelectId, source);
+  }
+  setValue(resolvedTarget.pathInputId, path);
+  owner.authRefresh = collectAuthRefreshFromControls(ownerType, owner.authRefresh || {});
+  markAuthRefreshOwnerDirty(ownerType);
+  renderAuthRefreshControls(ownerType, owner.authRefresh, true);
+  syncDetectedAuthRefreshControls(resolvedTarget, source, path);
+  return true;
+}
+
+function syncDetectedAuthRefreshControls(target = {}, source = '', path = '') {
+  const apply = () => {
+    if (target.sourceSelectId) {
+      setValue(target.sourceSelectId, source);
+      dispatchSyntheticEvent($(target.sourceSelectId), 'change');
+    }
+    setValue(target.pathInputId, path);
+    dispatchSyntheticEvent($(target.pathInputId), 'input');
+  };
+  apply();
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(apply);
+  }
+}
+
+function dispatchSyntheticEvent(element, type) {
+  if (!element || typeof Event !== 'function') {
+    return;
+  }
+  element.dispatchEvent(new Event(type, { bubbles: true }));
+}
+
+function authRefreshAutoDetectCandidateSummary(candidate = {}) {
+  if (candidate.source === 'rawBody') {
+    return 'the entire response body';
+  }
+  if (candidate.source === 'header') {
+    return `header "${candidate.path}"`;
+  }
+  if (candidate.source === 'cookie') {
+    return `cookie "${candidate.path}"`;
+  }
+  return `JSON body path "${candidate.path}"`;
 }
 
 function autoSelectRefreshingAuthRefreshTokenForAccessRequest(ownerType, owner) {

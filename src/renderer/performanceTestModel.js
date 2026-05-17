@@ -66,7 +66,7 @@
   const AUTH_REFRESH_SCOPES = ['environment', 'collection', 'globals'];
   const AUTH_REFRESH_FAILURE_POLICIES = ['abort', 'continue'];
   const AUTH_REFRESH_TYPES = ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'];
-  const AUTH_REFRESH_OUTPUT_SOURCES = ['body', 'header', 'cookie'];
+  const AUTH_REFRESH_OUTPUT_SOURCES = ['body', 'rawBody', 'header', 'cookie'];
   const AUTH_REFRESH_OUTPUT_SLOTS = [
     'accessToken',
     'refreshToken',
@@ -323,10 +323,12 @@
     const input = output && typeof output === 'object' && !Array.isArray(output) ? output : {};
     const slot = String(input.slot || '');
     const source = String(input.source || '');
+    const normalizedSource = AUTH_REFRESH_OUTPUT_SOURCES.includes(source) ? source : 'body';
+    const path = normalizeAuthRefreshText(input.path, '', 32768);
     return {
       slot: AUTH_REFRESH_OUTPUT_SLOTS.includes(slot) ? slot : 'custom',
-      source: AUTH_REFRESH_OUTPUT_SOURCES.includes(source) ? source : 'body',
-      path: normalizeAuthRefreshText(input.path, '', 32768),
+      source: normalizedSource,
+      path: path || (normalizedSource === 'rawBody' ? '$body' : ''),
       variable: normalizeAuthRefreshText(input.variable, '', 512)
     };
   }

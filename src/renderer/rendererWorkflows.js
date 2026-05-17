@@ -44,7 +44,7 @@
     const renderVariablePreview = options.renderVariablePreview || (() => {});
     const renderRequestTabs = options.renderRequestTabs || (() => {});
     const saveDraftRequestWithPrompt = options.saveDraftRequestWithPrompt || (async () => null);
-    const selectFirstRequest = options.selectFirstRequest || (() => {});
+    const ensureOpenCollectionTabForActive = options.ensureOpenCollectionTabForActive || (() => {});
     const selectInitialWorkspaceItem = options.selectInitialWorkspaceItem || (() => {});
     const setStatus = options.setStatus || (() => {});
     const uniqueName = options.uniqueName || ((baseName) => baseName);
@@ -1693,23 +1693,40 @@
         return;
       }
       const previousWorkspace = cloneJson(state.workspace, state.workspace);
+      const previousActiveSidebarPanel = state.activeSidebarPanel;
+      const previousActiveMainPanel = state.activeMainPanel;
       const previousActiveCollectionId = state.activeCollectionId;
       const previousActiveFolderId = state.activeFolderId;
       const previousActiveRequestId = state.activeRequestId;
+      const previousActiveRunnerRequestRunnerId = state.activeRunnerRequestRunnerId;
+      const previousActiveAuthRefreshRequestOwnerType = state.activeAuthRefreshRequestOwnerType;
+      const previousActiveAuthRefreshRequestOwnerId = state.activeAuthRefreshRequestOwnerId;
       result.collection.name = uniqueName(result.collection.name, state.workspace.collections.map((collection) => collection.name));
       promoteCookieHeadersToJar(result.collection);
       state.workspace.collections.push(result.collection);
+      state.activeSidebarPanel = 'collections';
+      state.activeMainPanel = 'request';
       state.activeCollectionId = result.collection.id;
-      selectFirstRequest(result.collection);
+      state.activeFolderId = null;
+      state.activeRequestId = null;
+      state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
+      ensureOpenCollectionTabForActive();
       renderAll();
       try {
         await saveWorkspace(true, { scope: 'all', collectEditors: false });
       } catch (error) {
         const message = error.message || String(error);
         state.workspace = previousWorkspace;
+        state.activeSidebarPanel = previousActiveSidebarPanel;
+        state.activeMainPanel = previousActiveMainPanel;
         state.activeCollectionId = previousActiveCollectionId;
         state.activeFolderId = previousActiveFolderId;
         state.activeRequestId = previousActiveRequestId;
+        state.activeRunnerRequestRunnerId = previousActiveRunnerRequestRunnerId;
+        state.activeAuthRefreshRequestOwnerType = previousActiveAuthRefreshRequestOwnerType;
+        state.activeAuthRefreshRequestOwnerId = previousActiveAuthRefreshRequestOwnerId;
         renderAll();
         setStatus(`Collection import save failed: ${message}`);
         notifyUser('Collection Import Save Failed', message);

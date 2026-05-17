@@ -1755,27 +1755,34 @@ test('renderer workflows collect the active environment editor before importing 
   assert.equal(appliedCatalogResult?.createdWorkspaceId, 'Imported Workspace.json');
 });
 
-test('renderer workflows collect the active request editor before importing a collection', async () => {
+test('renderer workflows collect the active request editor before importing and open the imported collection overview', async () => {
   const state = createRendererState();
   const pendingRequest = { id: 'request-1', name: 'Pending Request' };
   state.workspace = { collections: [], environments: [], settings: {} };
   state.activeMainPanel = 'request';
+  state.activeRequestId = pendingRequest.id;
+  state.activeSidebarPanel = 'performance';
   const collectionCountsAtCollect = [];
+  const collectedCollectionIds = [];
+  const openedCollectionIds = [];
 
   const workflows = createRendererWorkflows({
     state,
-    activeCollection: () => state.workspace.collections[0] || null,
+    activeCollection: () => state.workspace.collections.find((collection) => collection.id === state.activeCollectionId) || null,
     activeEnvironment: () => null,
-    activeRequest: () => state.workspace.collections[0]?.requests?.[0] || pendingRequest,
+    activeRequest: () => (state.activeRequestId === pendingRequest.id ? pendingRequest : null),
+    collectCollectionFromEditor: () => {
+      collectedCollectionIds.push(state.activeCollectionId);
+    },
     collectRequestFromEditor: () => {
       collectionCountsAtCollect.push(state.workspace.collections.length);
     },
     doc: createDocument(),
+    ensureOpenCollectionTabForActive: () => {
+      openedCollectionIds.push(state.activeCollectionId);
+    },
     renderAll: () => {},
     runFormatting: createRunFormatting(),
-    selectFirstRequest: () => {
-      state.activeRequestId = 'imported-request-1';
-    },
     uniqueName: (value) => value,
     windowObject: {
       postmeter: {
@@ -1799,8 +1806,15 @@ test('renderer workflows collect the active request editor before importing a co
 
   await workflows.importCollection();
 
-  assert.deepEqual(collectionCountsAtCollect, [0, 1]);
+  assert.deepEqual(collectionCountsAtCollect, [0]);
+  assert.deepEqual(collectedCollectionIds, ['collection-1']);
+  assert.deepEqual(openedCollectionIds, ['collection-1']);
   assert.equal(state.workspace.collections.length, 1);
+  assert.equal(state.activeSidebarPanel, 'collections');
+  assert.equal(state.activeMainPanel, 'request');
+  assert.equal(state.activeCollectionId, 'collection-1');
+  assert.equal(state.activeFolderId, null);
+  assert.equal(state.activeRequestId, null);
 });
 
 test('renderer workflows report workspace import failure without replacing the active workspace', async () => {

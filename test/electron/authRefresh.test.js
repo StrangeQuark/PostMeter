@@ -233,6 +233,54 @@ test('refresh manager exposes bearer and cookie values for automatic auth inject
   ).auth, { type: 'cookie', value: 'sid=cookie-auto-token' });
 });
 
+test('refresh manager can read refreshed tokens from the entire response body', async () => {
+  const bearerManager = createAuthRefreshManager({
+    enabled: true,
+    authType: 'bearer',
+    mode: 'interval',
+    refreshBeforeRun: true,
+    outputs: [{ slot: 'accessToken', source: 'rawBody', path: '', variable: 'ACCESS_TOKEN' }],
+    request: { method: 'POST', url: 'https://auth.example.test/token' }
+  }, {
+    sendRequest: async () => textResponse(200, 'raw-access-token')
+  });
+  const environment = { id: 'env', name: 'Env', variables: [] };
+  const bearerSnapshot = await bearerManager.beforeRun({ environment });
+
+  assert.equal(variable(environment, 'ACCESS_TOKEN'), 'raw-access-token');
+  assert.deepEqual(bearerSnapshot.autoRefreshAuth, { type: 'bearer', token: 'raw-access-token' });
+
+  const refreshManager = createAuthRefreshManager({
+    enabled: true,
+    authType: 'bearer',
+    mode: 'interval',
+    refreshBeforeRun: true,
+    outputs: [
+      { slot: 'refreshToken', source: 'rawBody', path: '', variable: '' },
+      { slot: 'accessToken', source: 'body', path: 'access_token', variable: '' }
+    ],
+    refreshTokenRequest: { id: 'refresh-token-request', method: 'POST', url: 'https://auth.example.test/refresh-token' },
+    request: {
+      id: 'access-token-request',
+      method: 'POST',
+      url: 'https://auth.example.test/access-token',
+      auth: { type: 'autoRefreshRefreshToken' }
+    }
+  }, {
+    sendRequest: async (request) => {
+      if (request.id === 'refresh-token-request') {
+        return textResponse(200, 'raw-refresh-token');
+      }
+      assert.deepEqual(request.auth, { type: 'bearer', token: 'raw-refresh-token' });
+      return response(200, { access_token: 'access-from-refresh-token' });
+    }
+  });
+
+  const refreshSnapshot = await refreshManager.beforeRun({ environment: { id: 'env-2', name: 'Env', variables: [] } });
+
+  assert.deepEqual(refreshSnapshot.autoRefreshAuth, { type: 'bearer', token: 'access-from-refresh-token' });
+});
+
 test('extracts nested refresh response fields and JWT expiration', () => {
   const token = unsignedJwt({ exp: 1777291260, sub: 'user' });
   assert.equal(extractPath({ data: { tokens: [{ access: 'a' }] } }, 'data.tokens[0].access'), 'a');
@@ -446,6 +494,18 @@ function response(statusCode, payload) {
     body: JSON.stringify(payload),
     durationMillis: 1,
     responseBytes: Buffer.byteLength(JSON.stringify(payload), 'utf8'),
+    finalUrl: 'https://auth.example.test/token'
+  };
+}
+
+function textResponse(statusCode, body) {
+  const text = String(body || '');
+  return {
+    statusCode,
+    headers: { 'content-type': ['text/plain'] },
+    body: text,
+    durationMillis: 1,
+    responseBytes: Buffer.byteLength(text, 'utf8'),
     finalUrl: 'https://auth.example.test/token'
   };
 }
