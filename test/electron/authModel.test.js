@@ -18,6 +18,7 @@ test('shared auth model normalizes runtime auth values by type', () => {
   assert.deepEqual(normalizeAuth({ type: 'auto refresh token', token: 'ignored' }), { type: 'autoRefresh' });
   assert.deepEqual(normalizeAuth({ type: 'Refreshing Auth Access Token', token: 'ignored' }), { type: 'autoRefresh' });
   assert.deepEqual(normalizeAuth({ type: 'Use Refreshing Access Token', token: 'ignored' }), { type: 'autoRefresh' });
+  assert.deepEqual(normalizeAuth({ type: 'Use Refreshing API Key', token: 'ignored' }), { type: 'autoRefresh' });
   assert.deepEqual(normalizeAuth({ type: 'Refreshing Auth Refresh Token', token: 'ignored' }), { type: 'autoRefreshRefreshToken' });
   assert.deepEqual(normalizeAuth({ type: 'oauth2', tokenType: 'Unknown', grantType: 'bad', redirectStrategy: 'bad' }), {
     type: 'oauth2',

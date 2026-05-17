@@ -268,6 +268,8 @@ const FIELD_SCHEMAS = {
     mode: { type: 'string', limit: 'short', enum: 'authRefreshModes', optional: true },
     authType: { type: 'string', limit: 'short', enum: 'authRefreshTypes', optional: true },
     targetScope: { type: 'string', limit: 'short', enum: 'authRefreshScopes', optional: true },
+    apiKeyLocation: { type: 'string', limit: 'short', enum: 'apiKeyLocations', optional: true },
+    apiKeyName: { type: 'string', limit: 'key', optional: true },
     accessTokenVariable: { type: 'string', limit: 'key', optional: true },
     refreshTokenVariable: { type: 'string', limit: 'key', optional: true },
     expiresAtVariable: { type: 'string', limit: 'key', optional: true },

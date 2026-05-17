@@ -8,7 +8,7 @@ const {
 } = require('./variableScope');
 
 const MILLIS_PER_SECOND = 1000;
-const AUTO_REFRESH_AUTH_TYPES = new Set(['bearer', 'cookie']);
+const AUTO_REFRESH_AUTH_TYPES = new Set(['bearer', 'apiKey', 'cookie']);
 
 function createAuthRefreshManager(authRefresh, options = {}) {
   return new AuthRefreshManager(authRefresh, options);
@@ -32,6 +32,7 @@ class AuthRefreshManager {
     this.refreshCount = 0;
     this.lastError = '';
     this.lastAccessToken = '';
+    this.lastApiKey = '';
     this.lastRefreshToken = '';
     this.lastCookieName = '';
     this.lastCookieValue = '';
@@ -283,6 +284,8 @@ class AuthRefreshManager {
   rememberAutoRefreshOutput(output = {}, value = '') {
     if (output.slot === 'accessToken') {
       this.lastAccessToken = value;
+    } else if (output.slot === 'apiKey') {
+      this.lastApiKey = value;
     } else if (output.slot === 'refreshToken') {
       this.lastRefreshToken = value;
     } else if (output.slot === 'cookie') {
@@ -319,6 +322,14 @@ class AuthRefreshManager {
     }
     if (authType === 'bearer' && this.lastAccessToken) {
       return { type: 'bearer', token: this.lastAccessToken };
+    }
+    if (authType === 'apiKey' && this.lastApiKey) {
+      return {
+        type: 'apiKey',
+        location: this.config.apiKeyLocation,
+        key: this.config.apiKeyName,
+        value: this.lastApiKey
+      };
     }
     if (authType === 'cookie' && this.lastCookieName && this.lastCookieValue) {
       return { type: 'cookie', value: `${this.lastCookieName}=${this.lastCookieValue}` };
@@ -600,6 +611,17 @@ function requestWithAutoRefreshAuth(request = {}, authRefresh = {}, autoRefreshA
     return {
       ...request,
       auth: { type: 'bearer', token: autoRefreshAuth.token }
+    };
+  }
+  if (configuredType === 'apiKey' && autoRefreshAuth.type === 'apiKey' && autoRefreshAuth.value) {
+    return {
+      ...request,
+      auth: {
+        type: 'apiKey',
+        location: autoRefreshAuth.location || authRefresh.apiKeyLocation || 'header',
+        key: autoRefreshAuth.key || authRefresh.apiKeyName || 'X-API-Key',
+        value: autoRefreshAuth.value
+      }
     };
   }
   if (configuredType === 'cookie' && autoRefreshAuth.type === 'cookie' && autoRefreshAuth.value) {

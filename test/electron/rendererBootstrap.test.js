@@ -163,8 +163,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /buildAuthRefreshAutoDetectCandidates\(response\)/);
   assert.match(rendererSource, /function confirmAuthRefreshAutoDetectModal\(\)/);
   assert.match(rendererSource, /apiKey:\s*\{\s*label:\s*'API key',\s*controlName:\s*'ApiKey'\s*\}/);
-  assert.match(rendererSource, /aws:\s*\{\s*label:\s*'AWS access key',\s*controlName:\s*'AwsAccessKey'\s*\}/);
+  assert.match(rendererSource, /aws:\s*\{\s*label:\s*'AWS access key ID',\s*controlName:\s*'AwsAccessKey'\s*\}/);
   assert.match(rendererSource, /custom:\s*\{\s*label:\s*'custom header value',\s*controlName:\s*'Custom'\s*\}/);
+  assert.match(rendererSource, /REFRESHING_AUTH_API_KEY_LABEL = 'Use Refreshing API Key'/);
   assert.match(rendererSource, /label:\s*'cookie'[\s\S]*allowedSources:\s*\['cookie'\]/);
   assert.match(rendererSource, /removeOpenAuthRefreshRequestTab\(ownerType, owner\.id, requestId\)/);
   assert.match(rendererSource, /syncVisibleRefreshingAuthTypeOptionsForOwner\(prefix, next\)/);
@@ -180,26 +181,28 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   for (const id of [
     'runnerAuthRefreshRefreshTokenSourceSelect',
     'runnerAuthRefreshApiKeySourceSelect',
-    'runnerAuthRefreshAwsAccessKeySourceSelect',
-    'runnerAuthRefreshAwsSecretKeySourceSelect',
-    'runnerAuthRefreshAwsSessionTokenSourceSelect',
     'runnerAuthRefreshCustomSourceSelect',
     'performanceAuthRefreshRefreshTokenSourceSelect',
     'performanceAuthRefreshApiKeySourceSelect',
-    'performanceAuthRefreshAwsAccessKeySourceSelect',
-    'performanceAuthRefreshAwsSecretKeySourceSelect',
-    'performanceAuthRefreshAwsSessionTokenSourceSelect',
     'performanceAuthRefreshCustomSourceSelect'
   ]) {
     assert.deepEqual(selectOptionValues(indexSource, id), ['body', 'rawBody', 'header', 'cookie'], `${id} should expose the supported response sources`);
   }
+  assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshAwsCredentialsSourceSelect'), ['body', 'header', 'cookie']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshAwsCredentialsSourceSelect'), ['body', 'header', 'cookie']);
+  assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshApiKeyLocationSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshApiKeyLocationSelect'), ['header', 'query']);
   assert.doesNotMatch(indexSource, /AuthRefreshCookieSourceSelect/);
   assert.match(rendererSource, /AUTH_REFRESH_OUTPUT_SOURCE_VALUES = new Set\(\['body', 'rawBody', 'header', 'cookie'\]\)/);
   assert.match(rendererSource, /source === 'rawBody'/);
   assert.match(indexSource, /Save Access Token To/);
   assert.match(indexSource, /Save API Key To/);
+  assert.match(indexSource, /API Key Name/);
+  assert.match(indexSource, /Send API Key As/);
+  assert.match(indexSource, /Save Access Key ID To/);
   assert.match(indexSource, /Save Session Token To/);
   assert.match(indexSource, /Access Token Response Path/);
+  assert.match(indexSource, /Read Credentials From/);
   assert.match(indexSource, /<summary>Refresh Token<\/summary>/);
   assert.match(indexSource, /<summary>Advanced<\/summary>/);
   assert.match(indexSource, /Save Refresh Token To/);

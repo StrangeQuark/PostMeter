@@ -40,6 +40,8 @@ test('normalizes auth refresh config and nested refresh request', () => {
   assert.equal(normalized.mode, 'interval');
   assert.equal(normalized.authType, 'bearer');
   assert.equal(normalized.targetScope, 'globals');
+  assert.equal(normalized.apiKeyLocation, 'header');
+  assert.equal(normalized.apiKeyName, 'X-API-Key');
   assert.equal(normalized.refreshTokenVariable, '');
   assert.deepEqual(normalized.outputs.map((item) => [item.slot, item.source, item.path, item.variable]), [
     ['accessToken', 'body', 'access_token', 'ACCESS_TOKEN']
@@ -255,7 +257,7 @@ test('refresh manager saves typed outputs from body headers and cookies', async 
   assert.equal(variable(environment, 'SESSION_COOKIE'), 'cookie-refreshed');
 });
 
-test('refresh manager exposes bearer and cookie values for automatic auth injection without variables', async () => {
+test('refresh manager exposes bearer API key and cookie values for automatic auth injection without variables', async () => {
   const bearerManager = createAuthRefreshManager({
     enabled: true,
     authType: 'bearer',
@@ -274,6 +276,37 @@ test('refresh manager exposes bearer and cookie values for automatic auth inject
     { enabled: true, authType: 'bearer' },
     bearerSnapshot.autoRefreshAuth
   ).auth, { type: 'bearer', token: 'bearer-auto-token' });
+
+  const apiKeyManager = createAuthRefreshManager({
+    enabled: true,
+    authType: 'apiKey',
+    apiKeyLocation: 'query',
+    apiKeyName: 'api_key',
+    mode: 'interval',
+    refreshBeforeRun: true,
+    outputs: [{ slot: 'apiKey', source: 'body', path: 'apiKey', variable: '' }],
+    request: { method: 'POST', url: 'https://auth.example.test/api-key' }
+  }, {
+    sendRequest: async () => response(200, { apiKey: 'api-auto-token' })
+  });
+  const apiKeySnapshot = await apiKeyManager.beforeRun({ environment: { id: 'env', name: 'Env', variables: [] } });
+
+  assert.deepEqual(apiKeySnapshot.autoRefreshAuth, {
+    type: 'apiKey',
+    location: 'query',
+    key: 'api_key',
+    value: 'api-auto-token'
+  });
+  assert.deepEqual(requestWithAutoRefreshAuth(
+    { id: 'resource', auth: { type: 'autoRefresh' } },
+    { enabled: true, authType: 'apiKey', apiKeyLocation: 'query', apiKeyName: 'api_key' },
+    apiKeySnapshot.autoRefreshAuth
+  ).auth, {
+    type: 'apiKey',
+    location: 'query',
+    key: 'api_key',
+    value: 'api-auto-token'
+  });
 
   const cookieManager = createAuthRefreshManager({
     enabled: true,

@@ -196,7 +196,10 @@
     if (lowered === 'autorefreshrefreshtoken' || lowered === 'refreshingauthrefreshtoken') {
       return 'autoRefreshRefreshToken';
     }
-    if (lowered === 'refreshingauthaccesstoken' || lowered === 'userefreshingaccesstoken') {
+    if (lowered === 'refreshingauthaccesstoken'
+      || lowered === 'userefreshingaccesstoken'
+      || lowered === 'refreshingauthapikey'
+      || lowered === 'userefreshingapikey') {
       return 'autoRefresh';
     }
     if (lowered === 'clientcertificate' || lowered === 'clientcert' || lowered === 'clientcertificateauth') {
