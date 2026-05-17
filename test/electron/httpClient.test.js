@@ -280,6 +280,37 @@ test('sends matching cookie jar cookies and stores response cookies', async () =
   }
 });
 
+test('sends host-only localhost cookie jar cookies when request auth is none', async () => {
+  const server = http.createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ cookie: request.headers.cookie || '' }));
+  });
+  await new Promise((resolve) => server.listen(0, 'localhost', resolve));
+  const { port } = server.address();
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `http://localhost:${port}/auth/access`,
+      queryParams: [],
+      headers: [],
+      auth: { type: 'none' },
+      bodyType: 'NONE',
+      body: '',
+      cookieJar: { enabled: true, storeResponses: true }
+    }, null, {
+      cookieJar: [
+        { enabled: true, name: 'refresh_token', value: 'refresh-cookie', domain: 'localhost', path: '/', secure: false, httpOnly: true, sameSite: 'Lax', hostOnly: true },
+        { enabled: true, name: 'access_token', value: 'access-cookie', domain: 'localhost', path: '/', secure: false, httpOnly: true, sameSite: 'Lax', hostOnly: true }
+      ]
+    });
+
+    assert.equal(JSON.parse(result.body).cookie, 'refresh_token=refresh-cookie; access_token=access-cookie');
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test('stores redirect-hop cookies and sends them to later hops', async () => {
   const seenCookies = [];
   const server = await createServer(async (request, response) => {

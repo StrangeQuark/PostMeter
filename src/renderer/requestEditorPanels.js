@@ -3,6 +3,7 @@
   const {
     cookieFieldIssues,
     domainFromRequestUrl,
+    newWorkspaceCookie,
     rendererCookieMatchesHost
   } = global.PostMeterCookieModel || require('./cookieModel');
 
@@ -660,6 +661,10 @@
     container.textContent = '';
 
     const activeHost = domainFromRequestUrl(options.activeRequestUrl);
+    const managedCookieNames = new Set((options.managedCookieNames || [])
+      .map((name) => String(name || '').trim())
+      .filter(Boolean));
+    ensureManagedCookies(workspace, activeHost, managedCookieNames);
     const filterActive = filterInput?.checked === true && Boolean(activeHost);
     if (filterInput) {
       filterInput.disabled = !activeHost;
@@ -684,12 +689,19 @@
     }
 
     visibleCookies.forEach(({ cookie, index }) => {
+      const managedCookie = managedCookieNames.has(String(cookie.name || '').trim())
+        && (!activeHost || rendererCookieMatchesHost(cookie, activeHost));
       const row = doc.createElement('div');
       row.className = 'cookie-row';
+      row.classList.toggle('managed-cookie-row', managedCookie);
+      if (managedCookie) {
+        row.title = 'Managed by Refreshing Auth for this request.';
+      }
 
       const enabled = doc.createElement('input');
       enabled.type = 'checkbox';
       enabled.checked = cookie.enabled !== false;
+      enabled.disabled = managedCookie;
       enabled.setAttribute('aria-label', `Cookie ${cookie.name || index + 1} enabled`);
       enabled.addEventListener('change', () => {
         onDirty();
@@ -717,6 +729,9 @@
         onDirty();
         cookie.expiresAt = next;
       }, 'text', `Cookie ${cookieLabel} expiration`);
+      for (const input of [name, value, domain, path, expires]) {
+        input.disabled = managedCookie;
+      }
 
       const secureLabel = checkboxLabel(doc, 'Secure', cookie.secure === true, (checked) => {
         onDirty();
@@ -742,6 +757,7 @@
         sameSite.append(new Option(option || 'SameSite', option));
       }
       sameSite.value = cookie.sameSite || '';
+      sameSite.disabled = managedCookie;
       sameSite.setAttribute('aria-label', `Cookie ${cookie.name || index + 1} SameSite`);
       sameSite.addEventListener('change', () => {
         if (sameSite.value === 'None' && cookie.secure !== true) {
@@ -757,6 +773,7 @@
       const remove = doc.createElement('button');
       remove.className = 'danger-button';
       remove.textContent = 'Remove';
+      remove.disabled = managedCookie;
       remove.setAttribute('aria-label', `Remove cookie ${cookie.name || index + 1}`);
       remove.addEventListener('click', () => {
         onDirty();
@@ -766,6 +783,11 @@
 
       bindCookieFieldValidation(cookie, { domain, path, expires }, activeHost);
       row.append(enabled, name, value, domain, path, expires, secureLabel, httpOnlyLabel, hostOnlyLabel, sameSite, remove);
+      if (managedCookie) {
+        for (const input of row.querySelectorAll?.('input, select, button') || []) {
+          input.disabled = true;
+        }
+      }
       container.append(row);
     });
     refreshVariableTextboxes(container);
@@ -779,6 +801,30 @@
     input.value = initialValue;
     input.addEventListener('input', () => onInput(input.value));
     return input;
+  }
+
+  function ensureManagedCookies(workspace, activeHost, managedCookieNames) {
+    if (!activeHost || !managedCookieNames?.size) {
+      return;
+    }
+    workspace.cookies ||= [];
+    for (const name of managedCookieNames) {
+      const exists = workspace.cookies.some((cookie) => String(cookie?.name || '').trim() === name
+        && rendererCookieMatchesHost(cookie, activeHost));
+      if (exists) {
+        continue;
+      }
+      workspace.cookies.push(newWorkspaceCookie({
+        name,
+        value: '',
+        domain: activeHost,
+        path: '/',
+        hostOnly: true,
+        httpOnly: true,
+        sameSite: 'Lax',
+        source: 'auth-refresh'
+      }));
+    }
   }
 
   function bindCookieFieldValidation(cookie, inputs, activeHost) {

@@ -115,7 +115,8 @@ function requestModel({
   postman,
   messages,
   methodPath,
-  refreshingAuthOriginalAuth
+  refreshingAuthOriginalAuth,
+  useRefreshingAuthCookie
 } = {}) {
   const normalizedMethod = normalizeMethod(method);
   const request = {
@@ -144,8 +145,12 @@ function requestModel({
     websocket: normalizeJsonObject(websocket, 128 * 1024),
     settings: normalizeRequestTlsSettings(settings)
   };
-  if (request.auth?.type === 'autoRefresh' && refreshingAuthOriginalAuth && typeof refreshingAuthOriginalAuth === 'object') {
+  if ((request.auth?.type === 'autoRefresh' || useRefreshingAuthCookie === true)
+    && refreshingAuthOriginalAuth && typeof refreshingAuthOriginalAuth === 'object') {
     request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(refreshingAuthOriginalAuth);
+  }
+  if (useRefreshingAuthCookie === true) {
+    request.useRefreshingAuthCookie = true;
   }
   addOptionalJsonObject(request, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
   return request;
@@ -309,7 +314,9 @@ function authRefreshRequestModel(requestInput = {}, defaults = {}) {
     metadata: requestInput.metadata,
     postman: requestInput.postman,
     messages: requestInput.messages,
-    methodPath: requestInput.methodPath
+    methodPath: requestInput.methodPath,
+    refreshingAuthOriginalAuth: requestInput.refreshingAuthOriginalAuth,
+    useRefreshingAuthCookie: requestInput.useRefreshingAuthCookie
   });
 }
 

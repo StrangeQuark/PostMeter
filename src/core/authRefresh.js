@@ -1,3 +1,4 @@
+const { resolveEnvironmentValue } = require('./environmentResolver');
 const { sendRequest } = require('./httpClient');
 const { normalizeAuthRefreshConfig } = require('./models');
 const {
@@ -198,6 +199,7 @@ class AuthRefreshManager {
         tokenForExpiry,
         requireRefreshToken: true
       });
+      this.applyManagedRefreshCookie(scope);
     }
 
     const mainStep = await this.sendRefreshRequest(this.requestWithAutoRefreshRefreshTokenAuth(this.config.request), scope, now);
@@ -205,6 +207,7 @@ class AuthRefreshManager {
       tokenForExpiry,
       requireRefreshToken: false
     });
+    this.applyManagedAccessCookie(scope);
     const expiresAtValue = extractPath(mainStep.payload, this.config.expiresAtPath);
     const expiresInValue = extractPath(mainStep.payload, this.config.expiresInPath);
     const expiresAtMillis = refreshExpiresAtMillis({
@@ -292,6 +295,17 @@ class AuthRefreshManager {
     if (request?.auth?.type !== 'autoRefreshRefreshToken' || !this.lastRefreshToken) {
       return request;
     }
+    if (String(this.config.authType || '').trim() === 'cookie') {
+      return {
+        ...request,
+        auth: { type: 'none' },
+        cookieJar: {
+          ...(request.cookieJar || {}),
+          enabled: true,
+          storeResponses: true
+        }
+      };
+    }
     return {
       ...request,
       auth: { type: 'bearer', token: this.lastRefreshToken }
@@ -310,6 +324,20 @@ class AuthRefreshManager {
       return { type: 'cookie', value: `${this.lastCookieName}=${this.lastCookieValue}` };
     }
     return null;
+  }
+
+  applyManagedRefreshCookie(scope = {}) {
+    if (String(this.config.authType || '').trim() !== 'cookie' || !this.lastRefreshToken) {
+      return;
+    }
+    upsertRuntimeCookie(scope, this.config.request, this.config, refreshTokenCookieName(this.config), this.lastRefreshToken);
+  }
+
+  applyManagedAccessCookie(scope = {}) {
+    if (String(this.config.authType || '').trim() !== 'cookie' || !this.lastCookieName || !this.lastCookieValue) {
+      return;
+    }
+    upsertRuntimeCookie(scope, this.config.request, this.config, this.lastCookieName, this.lastCookieValue);
   }
 }
 
@@ -342,6 +370,59 @@ function currentAccessToken(config, scope) {
     return '';
   }
   return getVariable(targetVariables(config, scope), config.accessTokenVariable) || '';
+}
+
+function refreshTokenCookieName(config = {}) {
+  const output = Array.isArray(config.outputs)
+    ? config.outputs.find((item) => item?.slot === 'refreshToken')
+    : null;
+  const name = String(output?.path || config.refreshTokenPath || config.refreshTokenVariable || '').trim();
+  return name && name !== '$body' ? name : 'refresh_token';
+}
+
+function upsertRuntimeCookie(scope = {}, request = {}, config = {}, name = '', value = '') {
+  const cookieName = String(name || '').trim();
+  const cookieValue = String(value ?? '');
+  if (!cookieName) {
+    return;
+  }
+  const url = resolvedRequestUrl(request, config, scope);
+  if (!url) {
+    return;
+  }
+  scope.cookies = Array.isArray(scope.cookies) ? scope.cookies : [];
+  const domain = url.hostname.toLowerCase();
+  const path = '/';
+  const existing = scope.cookies.find((cookie) => String(cookie?.name || '') === cookieName
+    && String(cookie?.domain || '').toLowerCase() === domain
+    && String(cookie?.path || '/') === path);
+  if (existing) {
+    existing.enabled = true;
+    existing.value = cookieValue;
+    existing.hostOnly = existing.hostOnly !== false;
+    return;
+  }
+  scope.cookies.push({
+    enabled: true,
+    name: cookieName,
+    value: cookieValue,
+    domain,
+    path,
+    secure: url.protocol === 'https:',
+    httpOnly: true,
+    sameSite: 'Lax',
+    hostOnly: true,
+    source: 'auth-refresh'
+  });
+}
+
+function resolvedRequestUrl(request = {}, config = {}, scope = {}) {
+  try {
+    const environment = refreshResolutionEnvironment(config, scope, request);
+    return new URL(resolveEnvironmentValue(request?.url || '', environment).trim());
+  } catch {
+    return null;
+  }
 }
 
 function isWithinRefreshWindow(expiresAtMillis, now, refreshWindowSeconds) {
@@ -505,11 +586,14 @@ function requestWithAutoRefreshAuth(request = {}, authRefresh = {}, autoRefreshA
   }
   const configuredType = String(authRefresh.authType || '').trim();
   const requestType = String(request?.auth?.type || 'none').trim();
+  const requestUsesRefreshingCookie = request?.useRefreshingAuthCookie === true;
   if (!AUTO_REFRESH_AUTH_TYPES.has(configuredType)) {
     return request;
   }
   const matchConfiguredAuthType = options.matchConfiguredAuthType !== false;
-  if (requestType !== 'autoRefresh' && (!matchConfiguredAuthType || requestType !== configuredType)) {
+  if (requestType !== 'autoRefresh'
+    && !requestUsesRefreshingCookie
+    && (!matchConfiguredAuthType || requestType !== configuredType)) {
     return request;
   }
   if (configuredType === 'bearer' && autoRefreshAuth.type === 'bearer' && autoRefreshAuth.token) {
@@ -521,7 +605,12 @@ function requestWithAutoRefreshAuth(request = {}, authRefresh = {}, autoRefreshA
   if (configuredType === 'cookie' && autoRefreshAuth.type === 'cookie' && autoRefreshAuth.value) {
     return {
       ...request,
-      auth: { type: 'cookie', value: autoRefreshAuth.value }
+      auth: { type: 'none' },
+      cookieJar: {
+        ...(request.cookieJar || {}),
+        enabled: true,
+        storeResponses: true
+      }
     };
   }
   return request;

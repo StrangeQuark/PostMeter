@@ -4052,6 +4052,26 @@
       assertUiSmoke(performanceAutoRefreshAccessOption && !performanceAutoRefreshAccessOption.hidden && !performanceAutoRefreshAccessOption.disabled, 'Performance request should reinsert Use Refreshing Access Token when changed to Bearer while refreshing auth is already on.');
       assertUiSmoke(performanceTest.request.auth?.type === 'autoRefresh', 'Changing a performance request to Bearer while refreshing auth is on should auto-select Use Refreshing Access Token.');
       assertUiSmoke($('performanceAuthTypeSelect').value === 'autoRefresh', 'Performance request Auth Type should return to Use Refreshing Access Token after selecting Bearer while refreshing auth is on.');
+      $('performanceAuthRefreshTypeSelect').value = 'cookie';
+      dispatchChange($('performanceAuthRefreshTypeSelect'));
+      $('performanceAuthRefreshCookieNameInput').value = 'perf_session';
+      dispatchInput($('performanceAuthRefreshCookieNameInput'));
+      await nextPaint();
+      performanceAutoRefreshAccessOption = $('performanceAuthTypeSelect').querySelector('option[value="autoRefresh"]');
+      assertUiSmoke(!performanceAutoRefreshAccessOption || performanceAutoRefreshAccessOption.hidden === true, 'Cookie performance refreshing auth should not expose Use Refreshing Access Token in the Auth Type list.');
+      assertUiSmoke(performanceTest.request.auth?.type === 'none', 'Cookie performance refreshing auth should force the request Auth Type to None.');
+      assertUiSmoke(performanceTest.request.useRefreshingAuthCookie === true, 'Cookie performance refreshing auth should mark the performance request as using the refreshing cookie.');
+      assertUiSmoke($('performanceAuthTypeSelect').value === 'none' && $('performanceAuthTypeSelect').disabled === true, 'Cookie performance refreshing auth should lock the Auth Type selector on None.');
+      assertUiSmoke($('performanceRequestCookieJarEnabledInput').checked === true && $('performanceRequestCookieJarEnabledInput').disabled === true, 'Cookie performance refreshing auth should force the cookie jar on.');
+      $('performanceRequestCookiesTabButton').click();
+      await nextPaint();
+      const managedPerformanceCookieRow = Array.from($('performanceCookiesTable').querySelectorAll('.cookie-row'))
+        .find((row) => row.querySelector('[aria-label$=" name"]')?.value === 'perf_session');
+      assertUiSmoke(managedPerformanceCookieRow, 'Cookie performance refreshing auth should show the managed cookie in the Cookies tab.');
+      assertUiSmoke(
+        Array.from(managedPerformanceCookieRow.querySelectorAll('input, select, button')).every((control) => control.disabled === true),
+        'Cookie performance refreshing auth managed cookie row should be uneditable.'
+      );
       $('performanceRequestParamsTabButton').click();
       for (const [tabId, type, label] of [
         ['performanceDiagnosisTabButton', 'diagnosis', 'Full Endpoint Diagnosis'],
@@ -4949,6 +4969,31 @@
       await nextPaint();
       assertUiSmoke($('runnerAuthRefreshRequestSummary').textContent.includes('No auth request selected'), 'Removing the auth request should clear its summary.');
       assertUiSmoke(!openRequestTabs.some((tab) => tab.requestId === authAccessRequestId), 'Removing the auth request should close its request tab.');
+      $('runnerAuthRefreshTypeSelect').value = 'cookie';
+      dispatchChange($('runnerAuthRefreshTypeSelect'));
+      await nextPaint();
+      assertUiSmoke(
+        !$('runnerAuthRefreshPanel').querySelector('.auth-refresh-refresh-token')?.hidden,
+        'Cookie refreshing auth should expose the same refresh-token request section as Bearer / JWT.'
+      );
+      runnerLocalRow = $('runnerRequestList').querySelector('.runner-request-row');
+      assertUiSmoke(
+        runnerLocalRow?.querySelector('.runner-row-refresh-auth span')?.textContent === 'Use refreshing access cookie',
+        'Runner cookie refreshing auth rows should use a cookie-specific checkbox label.'
+      );
+      openNewAuthRefreshRequest('runner', 'refreshToken');
+      $('urlInput').value = 'https://auth.example.test/refresh-cookie';
+      dispatchInput($('urlInput'));
+      collectRequestFromEditor();
+      selectRunnerItem(runner.id);
+      openNewAuthRefreshRequest('runner', 'access');
+      await nextPaint();
+      const runnerAutoRefreshCookieOption = $('authTypeSelect').querySelector('option[value="autoRefreshRefreshToken"]');
+      assertUiSmoke(!runnerAutoRefreshCookieOption || runnerAutoRefreshCookieOption.hidden === true, 'Cookie auth refresh request Auth Type list should not expose the refresh-token auth helper.');
+      assertUiSmoke(activeRequest()?.auth?.type === 'none', 'Creating a cookie access auth request after the refresh-token request should force Auth Type to None.');
+      assertUiSmoke(activeRequest()?.useRefreshingAuthCookie === true, 'Creating a cookie access auth request after the refresh-token request should mark it as using the refreshing cookie.');
+      assertUiSmoke($('authTypeSelect').value === 'none' && $('authTypeSelect').disabled === true, 'Cookie access auth request Auth Type should show locked None.');
+      assertUiSmoke($('requestCookieJarEnabledInput').checked === true && $('requestCookieJarEnabledInput').disabled === true, 'Cookie access auth request should force the cookie jar on.');
       editRunnerRequest(runner, runnerLocalRequest);
       await nextPaint();
       runner.csvVariables = {

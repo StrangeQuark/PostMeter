@@ -134,6 +134,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerAuthRefreshTokenManageRequestButton"[^>]*>Manage<\/button>/);
   assert.match(indexSource, /id="runnerAuthRefreshTokenAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
   assert.match(indexSource, /id="runnerAuthRefreshTokenRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
+  assert.match(indexSource, /class="auth-refresh-refresh-token" data-auth-refresh-types="bearer oauth2 cookie"/);
   assert.match(indexSource, /id="performanceAuthRefreshManageRequestButton"[^>]*>Manage<\/button>/);
   assert.match(indexSource, /id="performanceAuthRefreshAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
   assert.match(indexSource, /id="performanceAuthRefreshRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
@@ -170,6 +171,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /Refresh token request/);
   assert.match(indexSource, /id="runnerAuthRefreshTypeSelect"[\s\S]*Bearer \/ JWT[\s\S]*AWS Temporary Credentials/);
   assert.match(indexSource, /id="performanceAuthRefreshTypeSelect"[\s\S]*API Key[\s\S]*Custom Header/);
+  assert.equal(selectOptionValues(indexSource, 'authTypeSelect').includes('cookie'), false);
+  assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('cookie'), false);
+  assert.equal(selectOptionValues(indexSource, 'runnerAuthRefreshTypeSelect').includes('cookie'), true);
+  assert.equal(selectOptionValues(indexSource, 'performanceAuthRefreshTypeSelect').includes('cookie'), true);
   assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
   assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
   for (const id of [
@@ -203,6 +208,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.doesNotMatch(indexSource, /Refreshing Auth Refresh Token/);
   assert.match(rendererSource, /REFRESHING_AUTH_ACCESS_TOKEN_LABEL = 'Use Refreshing Access Token'/);
   assert.match(rendererSource, /REFRESHING_AUTH_REFRESH_TOKEN_LABEL = 'Refreshing Auth Refresh Token'/);
+  assert.match(rendererSource, /REFRESHING_AUTH_ACCESS_COOKIE_LABEL = 'Use Refreshing Access Cookie'/);
+  assert.match(rendererSource, /REFRESHING_AUTH_REFRESH_COOKIE_LABEL = 'Refreshing Auth Refresh Cookie'/);
   assert.doesNotMatch(indexSource, /AuthRefreshMode/);
   assert.doesNotMatch(indexSource, /AuthRefreshTarget/);
   assert.doesNotMatch(indexSource, /Expires At Variable/);

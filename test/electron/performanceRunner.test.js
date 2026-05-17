@@ -150,7 +150,10 @@ test('performance auth refresh injects refreshed cookies into matching request a
       name: 'Auto Cookie Resource',
       method: 'GET',
       url: 'https://api.example.test/resource',
-      auth: { type: 'autoRefresh' }
+      auth: { type: 'none' },
+      cookieJar: { enabled: true, storeResponses: true },
+      useRefreshingAuthCookie: true,
+      refreshingAuthOriginalAuth: { type: 'none' }
     },
     config: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
     safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
@@ -172,21 +175,25 @@ test('performance auth refresh injects refreshed cookies into matching request a
   const observed = [];
 
   const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
-    sendRequest: async (request) => {
+    sendRequest: async (request, _environment, options = {}) => {
       if (request.id === 'refresh-cookie') {
         return {
           ...response(200, '{}'),
           updatedCookies: [{ enabled: true, name: 'sid', value: 'perf-cookie', domain: 'example.test', path: '/' }]
         };
       }
-      observed.push(request.auth);
+      observed.push({
+        auth: request.auth,
+        cookieJar: (options.cookieJar || []).map((cookie) => `${cookie.name}=${cookie.value}`),
+        cookieJarEnabled: request.cookieJar?.enabled === true
+      });
       return response();
     }
   });
 
   assert.equal(result.completedRequests, 1);
   assert.equal(result.failedRequests, 0);
-  assert.deepEqual(observed, [{ type: 'cookie', value: 'sid=perf-cookie' }]);
+  assert.deepEqual(observed, [{ auth: { type: 'none' }, cookieJar: ['sid=perf-cookie', 'sid=perf-cookie'], cookieJarEnabled: true }]);
   assert.equal(result.authRefresh.refreshCount, 1);
 });
 
