@@ -196,7 +196,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /AUTH_REFRESH_OUTPUT_SOURCE_VALUES = new Set\(\['body', 'rawBody', 'header', 'cookie'\]\)/);
   assert.match(rendererSource, /source === 'rawBody'/);
   assert.match(indexSource, /Save Access Token To/);
-  assert.match(indexSource, /Save API Key To/);
+  assert.doesNotMatch(indexSource, /Save API Key To/);
   assert.match(indexSource, /API Key Name/);
   assert.match(indexSource, /Send API Key As/);
   assert.match(indexSource, /Save Access Key ID To/);

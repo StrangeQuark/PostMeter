@@ -8592,7 +8592,6 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   setValue(`${prefix}AuthRefreshRefreshTokenPathInput`, refreshTokenOutput.path);
   setValue(`${prefix}AuthRefreshApiKeyLocationSelect`, normalized.apiKeyLocation || 'header');
   setValue(`${prefix}AuthRefreshApiKeyNameInput`, normalized.apiKeyName || 'X-API-Key');
-  setValue(`${prefix}AuthRefreshApiKeyVariableInput`, apiKeyOutput.variable);
   setValue(`${prefix}AuthRefreshApiKeyPathInput`, apiKeyOutput.path);
   setValue(`${prefix}AuthRefreshCookieNameInput`, cookieOutput.path);
   setValue(`${prefix}AuthRefreshCookieVariableInput`, cookieOutput.variable);
@@ -8799,7 +8798,7 @@ function authRefreshDefaultOutput(slot) {
   const defaults = {
     accessToken: { slot: 'accessToken', source: 'body', path: 'access_token', variable: 'ACCESS_TOKEN' },
     refreshToken: { slot: 'refreshToken', source: 'body', path: 'refresh_token', variable: 'REFRESH_TOKEN' },
-    apiKey: { slot: 'apiKey', source: 'body', path: 'api_key', variable: 'API_KEY' },
+    apiKey: { slot: 'apiKey', source: 'body', path: 'api_key', variable: '' },
     cookie: { slot: 'cookie', source: 'cookie', path: '', variable: '' },
     awsAccessKey: { slot: 'awsAccessKey', source: 'body', path: 'credentials.accessKeyId', variable: 'AWS_ACCESS_KEY_ID' },
     awsSecretKey: { slot: 'awsSecretKey', source: 'body', path: 'credentials.secretAccessKey', variable: 'AWS_SECRET_ACCESS_KEY' },
@@ -8972,7 +8971,7 @@ function authRefreshTypeLabels(authType) {
   }
   if (authType === 'apiKey') {
     return {
-      variableLabel: 'Save API Key To',
+      variableLabel: '',
       pathLabel: 'API Key Response Path',
       help: 'The auth request uses this run environment, reads the API key, and applies it to matching API key requests.'
     };

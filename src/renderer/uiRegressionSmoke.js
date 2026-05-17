@@ -4800,6 +4800,7 @@
       await nextPaint();
       const runnerAutoRefreshApiKeyOption = $('authTypeSelect').querySelector('option[value="autoRefresh"]');
       assertUiSmoke(runnerAutoRefreshApiKeyOption?.textContent === 'Use Refreshing API Key', 'API key request Auth Type should show Use Refreshing API Key.');
+      assertUiSmoke($('authTypeSelect').value === 'autoRefresh' && $('authTypeSelect').disabled === true, 'API key request Auth Type should be locked while using the refreshing API key.');
       selectRunnerItem(runner.id);
       runnerLocalRow = $('runnerRequestList').querySelector('.runner-request-row');
       const runnerApiKeyRefreshRestoreCheckbox = runnerLocalRow?.querySelector('.runner-row-refresh-auth input[type="checkbox"]');
