@@ -555,6 +555,7 @@ const FIELD_SCHEMAS = {
     extraData: { type: 'string', limit: 'value', optional: true },
     app: { type: 'string', limit: 'value', optional: true },
     delegation: { type: 'string', limit: 'value', optional: true },
+    includePayloadHash: { type: 'boolean', optional: true },
     accessKey: { type: 'string', limit: 'value', optional: true },
     secretKey: { type: 'string', limit: 'value', optional: true },
     region: { type: 'string', limit: 'value', optional: true },

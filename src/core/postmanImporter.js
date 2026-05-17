@@ -771,12 +771,14 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'hawk',
       authId: authParam(authNode.hawk, 'authId') || authParam(authNode.hawk, 'id'),
       authKey: authParam(authNode.hawk, 'authKey') || authParam(authNode.hawk, 'key'),
-      algorithm: authParam(authNode.hawk, 'algorithm') || 'sha256',
+      algorithm: normalizeHawkAlgorithm(authParam(authNode.hawk, 'algorithm')),
       user: authParam(authNode.hawk, 'user'),
       nonce: authParam(authNode.hawk, 'nonce'),
       extraData: authParam(authNode.hawk, 'extraData') || authParam(authNode.hawk, 'ext'),
       app: authParam(authNode.hawk, 'app'),
-      delegation: authParam(authNode.hawk, 'delegation') || authParam(authNode.hawk, 'dlg')
+      delegation: authParam(authNode.hawk, 'delegation') || authParam(authNode.hawk, 'dlg'),
+      timestamp: authParam(authNode.hawk, 'timestamp') || authParam(authNode.hawk, 'ts'),
+      includePayloadHash: String(authParam(authNode.hawk, 'includePayloadHash') || authParam(authNode.hawk, 'includePayloadHas')).toLowerCase() === 'true'
     };
   }
   if (type === 'awsv4' || type === 'aws') {
@@ -893,6 +895,15 @@ function authRawParam(values, key) {
     return values[key];
   }
   return undefined;
+}
+
+function normalizeHawkAlgorithm(value) {
+  const label = String(value || 'sha256').trim();
+  const normalized = label.toLowerCase().replace(/[\s_-]+/g, '');
+  if (normalized === 'sha1') {
+    return 'sha1';
+  }
+  return normalized === 'sha256' ? 'sha256' : label;
 }
 
 function authBooleanParam(values, key) {
@@ -1533,12 +1544,14 @@ function exportPostmanAuthModel(auth) {
       hawk: [
         { key: 'authId', value: auth.authId || '', type: 'string' },
         { key: 'authKey', value: auth.authKey || '', type: 'string' },
-        { key: 'algorithm', value: auth.algorithm || 'sha256', type: 'string' },
+        { key: 'algorithm', value: normalizeHawkAlgorithm(auth.algorithm), type: 'string' },
         { key: 'user', value: auth.user || '', type: 'string' },
         { key: 'nonce', value: auth.nonce || '', type: 'string' },
         { key: 'extraData', value: auth.extraData || '', type: 'string' },
         { key: 'app', value: auth.app || '', type: 'string' },
-        { key: 'delegation', value: auth.delegation || '', type: 'string' }
+        { key: 'delegation', value: auth.delegation || '', type: 'string' },
+        { key: 'timestamp', value: auth.timestamp || '', type: 'string' },
+        { key: 'includePayloadHash', value: auth.includePayloadHash === true ? 'true' : 'false', type: 'boolean' }
       ]
     };
   }

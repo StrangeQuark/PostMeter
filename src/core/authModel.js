@@ -130,12 +130,19 @@
         type,
         authId: auth.authId ?? auth.id ?? '',
         authKey: auth.authKey ?? auth.key ?? '',
-        algorithm: auth.algorithm ?? 'sha256',
+        algorithm: normalizeHawkAlgorithm(auth.algorithm),
         user: auth.user ?? '',
         nonce: auth.nonce ?? '',
         extraData: auth.extraData ?? auth.ext ?? '',
         app: auth.app ?? '',
-        delegation: auth.delegation ?? auth.dlg ?? ''
+        delegation: auth.delegation ?? auth.dlg ?? '',
+        timestamp: auth.timestamp ?? auth.ts ?? '',
+        includePayloadHash: authBoolean(
+          auth.includePayloadHash
+          ?? auth.includePayloadHas
+          ?? auth.payloadHash
+          ?? auth.includeBodyHash
+        )
       };
     }
     if (type === 'aws') {
@@ -252,6 +259,9 @@
     if (lowered === 'awsv4' || lowered === 'aws' || lowered === 'awssignature') {
       return 'aws';
     }
+    if (lowered === 'hawk' || lowered === 'hawkauth' || lowered === 'hawkauthentication') {
+      return 'hawk';
+    }
     if (lowered === 'oauth1' || lowered === 'oauth10' || lowered === 'oauth1auth') {
       return 'oauth1';
     }
@@ -269,6 +279,18 @@
 
   function authBoolean(value) {
     return value === true || String(value).trim().toLowerCase() === 'true';
+  }
+
+  function normalizeHawkAlgorithm(value) {
+    const label = String(value ?? '').trim();
+    const normalized = label.toLowerCase().replace(/[\s_-]+/g, '');
+    if (!normalized || normalized === 'sha256') {
+      return 'sha256';
+    }
+    if (normalized === 'sha1') {
+      return 'sha1';
+    }
+    return label;
   }
 
   function normalizeOAuth1SignatureMethod(value) {
@@ -474,6 +496,16 @@
       digestNonceCount: '',
       digestClientNonce: '',
       digestOpaque: '',
+      hawkAuthId: '',
+      hawkAuthKey: '',
+      hawkAlgorithm: 'sha256',
+      hawkUser: '',
+      hawkNonce: '',
+      hawkExtraData: '',
+      hawkApp: '',
+      hawkDelegation: '',
+      hawkTimestamp: '',
+      hawkIncludePayloadHash: false,
       clientPfxPath: '',
       clientCertPath: '',
       clientKeyPath: '',
@@ -557,6 +589,19 @@
       state.digestNonceCount = normalized.nonceCount;
       state.digestClientNonce = normalized.clientNonce;
       state.digestOpaque = normalized.opaque;
+      return state;
+    }
+    if (normalized.type === 'hawk') {
+      state.hawkAuthId = normalized.authId;
+      state.hawkAuthKey = normalized.authKey;
+      state.hawkAlgorithm = normalized.algorithm;
+      state.hawkUser = normalized.user;
+      state.hawkNonce = normalized.nonce;
+      state.hawkExtraData = normalized.extraData;
+      state.hawkApp = normalized.app;
+      state.hawkDelegation = normalized.delegation;
+      state.hawkTimestamp = normalized.timestamp;
+      state.hawkIncludePayloadHash = normalized.includePayloadHash;
       return state;
     }
     if (normalized.type === 'oauth1') {
@@ -693,6 +738,21 @@
         opaque: state.digestOpaque ?? ''
       });
     }
+    if (type === 'hawk') {
+      return normalizeAuth({
+        type,
+        authId: state.hawkAuthId ?? '',
+        authKey: state.hawkAuthKey ?? '',
+        algorithm: state.hawkAlgorithm ?? 'sha256',
+        user: state.hawkUser ?? '',
+        nonce: state.hawkNonce ?? '',
+        extraData: state.hawkExtraData ?? '',
+        app: state.hawkApp ?? '',
+        delegation: state.hawkDelegation ?? '',
+        timestamp: state.hawkTimestamp ?? '',
+        includePayloadHash: state.hawkIncludePayloadHash === true
+      });
+    }
     if (type === 'oauth1') {
       return normalizeAuth({
         type,
@@ -713,7 +773,7 @@
         addEmptyParamsToSign: state.oauth1AddEmptyParamsToSign === true
       });
     }
-    if (['hawk', 'aws', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
+    if (['aws', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
       const existing = normalizeAuth(existingAuth);
       return normalizeAuth(existing.type === type ? existing : { type });
     }

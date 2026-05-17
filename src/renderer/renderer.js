@@ -737,6 +737,7 @@ initializeRenderer({
     queueUiSnapshotSmoke();
     queueUiTypographySmoke();
     queueUiOauthSmoke();
+    queueUiHawkSmoke();
     markUiWorkflowStartupStep('after-smoke-queue');
   }
 });
@@ -21125,5 +21126,6 @@ function isAutomatedUiSmoke() {
     || params.get('uiRegressionSmoke') === '1'
     || params.get('uiSnapshotSmoke') === '1'
     || params.get('uiTypographySmoke') === '1'
-    || params.get('uiOauthSmoke') === '1';
+    || params.get('uiOauthSmoke') === '1'
+    || params.get('uiHawkSmoke') === '1';
 }

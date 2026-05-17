@@ -40,6 +40,30 @@ function assertDigestAdvancedMarkup(source, ids) {
   assert.ok(advancedSource.includes(`title="${retryTooltip}"`));
 }
 
+function assertHawkAdvancedMarkup(source, ids) {
+  const authIdIndex = source.indexOf(`id="${ids.authId}"`);
+  assert.notEqual(authIdIndex, -1, `Expected ${ids.authId} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', authIdIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.authId} Hawk advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.authId} Hawk advanced disclosure to close.`);
+
+  const visibleSource = source.slice(authIdIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the Hawk advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /Include payload hash/);
+}
+
 function assertOauth1AdvancedMarkup(source, ids) {
   const signatureIndex = source.indexOf(`id="${ids.signatureMethod}"`);
   assert.notEqual(signatureIndex, -1, `Expected ${ids.signatureMethod} to exist.`);
@@ -306,6 +330,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     'SHA-512-256',
     'SHA-512-256-sess'
   ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authHawkAlgorithmSelect'), ['sha256', 'sha1']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthHawkAlgorithmSelect'), ['sha256', 'sha1']);
   assert.deepEqual(selectOptionValues(indexSource, 'authOauth1SignatureMethodSelect'), [
     'HMAC-SHA1',
     'HMAC-SHA256',
@@ -476,6 +502,40 @@ test('renderer accessibility source keeps splitters body editor and pane save re
       'performanceAuthDigestNonceCountInput',
       'performanceAuthDigestClientNonceInput',
       'performanceAuthDigestOpaqueInput'
+    ]
+  });
+  assertHawkAdvancedMarkup(indexSource, {
+    authId: 'authHawkAuthIdInput',
+    main: [
+      'authHawkAuthIdInput',
+      'authHawkAuthKeyInput',
+      'authHawkAlgorithmSelect'
+    ],
+    advanced: [
+      'authHawkUserInput',
+      'authHawkNonceInput',
+      'authHawkExtraDataInput',
+      'authHawkAppInput',
+      'authHawkDelegationInput',
+      'authHawkTimestampInput',
+      'authHawkIncludePayloadHashInput'
+    ]
+  });
+  assertHawkAdvancedMarkup(indexSource, {
+    authId: 'performanceAuthHawkAuthIdInput',
+    main: [
+      'performanceAuthHawkAuthIdInput',
+      'performanceAuthHawkAuthKeyInput',
+      'performanceAuthHawkAlgorithmSelect'
+    ],
+    advanced: [
+      'performanceAuthHawkUserInput',
+      'performanceAuthHawkNonceInput',
+      'performanceAuthHawkExtraDataInput',
+      'performanceAuthHawkAppInput',
+      'performanceAuthHawkDelegationInput',
+      'performanceAuthHawkTimestampInput',
+      'performanceAuthHawkIncludePayloadHashInput'
     ]
   });
   assert.doesNotMatch(indexSource, /Yes, disable retrying the request/);

@@ -68,6 +68,16 @@
     'authDigestNonceCountInput',
     'authDigestClientNonceInput',
     'authDigestOpaqueInput',
+    'authHawkAuthIdInput',
+    'authHawkAuthKeyInput',
+    'authHawkAlgorithmSelect',
+    'authHawkUserInput',
+    'authHawkNonceInput',
+    'authHawkExtraDataInput',
+    'authHawkAppInput',
+    'authHawkDelegationInput',
+    'authHawkTimestampInput',
+    'authHawkIncludePayloadHashInput',
     'authClientPfxPathInput',
     'authClientCertPathInput',
     'authClientKeyPathInput',
@@ -128,7 +138,8 @@
       ['uiRegressionSmoke', 'PostMeter UI Regression'],
       ['uiSnapshotSmoke', 'PostMeter UI Snapshot'],
       ['uiTypographySmoke', 'PostMeter UI Typography'],
-      ['uiOauthSmoke', 'PostMeter UI OAuth']
+      ['uiOauthSmoke', 'PostMeter UI OAuth'],
+      ['uiHawkSmoke', 'PostMeter UI Hawk']
     ]) {
       if (params.get(flag) === '1') {
         doc.title = `${prefix}:FAIL:${message}`;

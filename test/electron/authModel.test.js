@@ -117,7 +117,32 @@ test('shared auth model normalizes runtime auth values by type', () => {
     includeBodyHash: true,
     addEmptyParamsToSign: true
   });
-});
+  assert.deepEqual(normalizeAuth({
+    type: 'Hawk Authentication',
+    id: 'hawk-id',
+    key: 'hawk-key',
+    algorithm: 'SHA-1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    ext: 'extra-data',
+    app: 'postmeter-app',
+    dlg: 'delegated-by',
+    ts: '1777291200',
+    includePayloadHash: 'true'
+  }), {
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-key',
+    algorithm: 'sha1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+  });
 
 test('shared auth model keeps persisted auth shallow for workspace compatibility', () => {
   assert.deepEqual(normalizePersistedAuth({ type: 'basic', username: 'alice' }), {
@@ -208,6 +233,16 @@ test('shared auth model maps runtime auth to renderer editor fields', () => {
     digestNonceCount: '',
     digestClientNonce: '',
     digestOpaque: '',
+    hawkAuthId: '',
+    hawkAuthKey: '',
+    hawkAlgorithm: 'sha256',
+    hawkUser: '',
+    hawkNonce: '',
+    hawkExtraData: '',
+    hawkApp: '',
+    hawkDelegation: '',
+    hawkTimestamp: '',
+    hawkIncludePayloadHash: false,
     clientPfxPath: '',
     clientCertPath: '',
     clientKeyPath: '',
@@ -298,6 +333,16 @@ test('shared auth model maps Digest auth to and from renderer editor fields', ()
     digestNonceCount: '00000005',
     digestClientNonce: '0a4f113b',
     digestOpaque: 'opaque-token',
+    hawkAuthId: '',
+    hawkAuthKey: '',
+    hawkAlgorithm: 'sha256',
+    hawkUser: '',
+    hawkNonce: '',
+    hawkExtraData: '',
+    hawkApp: '',
+    hawkDelegation: '',
+    hawkTimestamp: '',
+    hawkIncludePayloadHash: false,
     clientPfxPath: '',
     clientCertPath: '',
     clientKeyPath: '',
@@ -329,6 +374,51 @@ test('shared auth model maps Digest auth to and from renderer editor fields', ()
     opaque: 'opaque-token',
     clientNonce: '0a4f113b',
     nonceCount: '00000005'
+  });
+});
+
+test('shared auth model maps Hawk auth to and from renderer editor fields', () => {
+  const editorState = authEditorState({
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-key',
+    algorithm: 'SHA-1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+  assert.equal(editorState.hawkAuthId, 'hawk-id');
+  assert.equal(editorState.hawkAlgorithm, 'sha1');
+  assert.equal(editorState.hawkIncludePayloadHash, true);
+
+  assert.deepEqual(authFromEditorState({
+    type: 'hawk',
+    hawkAuthId: 'hawk-id',
+    hawkAuthKey: 'hawk-key',
+    hawkAlgorithm: 'sha1',
+    hawkUser: 'ada',
+    hawkNonce: 'nonce-value',
+    hawkExtraData: 'extra-data',
+    hawkApp: 'postmeter-app',
+    hawkDelegation: 'delegated-by',
+    hawkTimestamp: '1777291200',
+    hawkIncludePayloadHash: true
+  }), {
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-key',
+    algorithm: 'sha1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
   });
 });
 

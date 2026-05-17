@@ -114,6 +114,18 @@ test('validates auth helper required fields', () => {
     consumerKey: 'consumer',
     consumerSecret: ''
   }, null), ['OAuth 1.0 consumer secret is required.']);
+  assert.deepEqual(validateAuth({
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-secret',
+    algorithm: 'SHA-1'
+  }, null), []);
+  assert.deepEqual(validateAuth({
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-secret',
+    algorithm: 'SHA-512'
+  }, null), ['Unsupported Hawk auth algorithm: SHA-512.']);
 });
 
 test('applies supported auth helpers during request execution', async () => {
@@ -265,6 +277,96 @@ test('applies advanced Postman auth helpers through the brokered HTTP sender', a
       workstation: 'WORKSTATION'
     });
     assert.match(ntlm.authorization, /^NTLM TlRMTVNTUAAD/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes Hawk auth against a localhost server with advanced fields and payload hash', async () => {
+  const server = await createServer(async (request, response) => {
+    const bodyText = await readRequestBody(request);
+    const sha1 = request.url.startsWith('/hawk-sha1');
+    const verification = verifyHawkRequest({
+      algorithm: sha1 ? 'sha1' : 'sha256',
+      authKey: sha1 ? 'hawk-sha1-secret' : 'hawk-secret',
+      body: bodyText,
+      contentType: request.headers['content-type'],
+      expectedApp: sha1 ? '' : 'postmeter-app',
+      expectedDelegation: sha1 ? '' : 'delegated-by',
+      expectedExt: sha1 ? '' : 'extra-data',
+      expectedId: sha1 ? 'hawk-sha1-id' : 'hawk-id',
+      expectedNonce: sha1 ? 'sha1-nonce' : 'fixed-nonce',
+      expectedTs: sha1 ? '1777291300' : '1777291200',
+      includePayloadHash: !sha1,
+      method: request.method,
+      url: `http://${request.headers.host}${request.url}`
+    }, request.headers.authorization || '');
+    response.statusCode = verification.verified ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      body: bodyText,
+      fields: verification.fields,
+      reason: verification.reason,
+      verified: verification.verified
+    }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/hawk?mode=advanced`,
+      queryParams: [],
+      headers: [{ enabled: true, key: 'Content-Type', value: 'application/json; charset=utf-8' }],
+      bodyType: 'RAW_JSON',
+      body: '{"server":"hawk"}',
+      auth: {
+        type: 'hawk',
+        authId: 'hawk-id',
+        authKey: 'hawk-secret',
+        algorithm: 'SHA-256',
+        user: 'ada',
+        nonce: 'fixed-nonce',
+        extraData: 'extra-data',
+        app: 'postmeter-app',
+        delegation: 'delegated-by',
+        timestamp: '1777291200',
+        includePayloadHash: true
+      }
+    });
+    const body = JSON.parse(result.body);
+    assert.equal(result.statusCode, 200);
+    assert.equal(body.verified, true);
+    assert.equal(body.fields.id, 'hawk-id');
+    assert.equal(body.fields.ts, '1777291200');
+    assert.equal(body.fields.nonce, 'fixed-nonce');
+    assert.equal(body.fields.ext, 'extra-data');
+    assert.equal(body.fields.app, 'postmeter-app');
+    assert.equal(body.fields.dlg, 'delegated-by');
+    assert.match(body.fields.hash, /\S+/);
+    assert.match(body.fields.mac, /\S+/);
+    assert.equal(Object.prototype.hasOwnProperty.call(body.fields, 'user'), false);
+
+    const sha1Result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/hawk-sha1`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'hawk',
+        authId: 'hawk-sha1-id',
+        authKey: 'hawk-sha1-secret',
+        algorithm: 'SHA-1',
+        nonce: 'sha1-nonce',
+        timestamp: '1777291300'
+      }
+    });
+    const sha1Body = JSON.parse(sha1Result.body);
+    assert.equal(sha1Result.statusCode, 200);
+    assert.equal(sha1Body.verified, true);
+    assert.equal(sha1Body.fields.id, 'hawk-sha1-id');
+    assert.equal(Object.prototype.hasOwnProperty.call(sha1Body.fields, 'hash'), false);
   } finally {
     await server.close();
   }
@@ -2119,6 +2221,86 @@ function digestAlgorithm(value) {
 
 function digestHash(algorithm, value) {
   return crypto.createHash(algorithm).update(value, 'utf8').digest('hex');
+}
+
+function parseHawkAuthorization(header) {
+  const value = String(header || '').replace(/^Hawk\s+/i, '');
+  const fields = {};
+  const pattern = /([A-Za-z0-9_-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^,]*))(?:,|$)/g;
+  let match;
+  while ((match = pattern.exec(value)) !== null) {
+    fields[match[1]] = match[2] != null
+      ? match[2].replace(/\\(["\\])/g, '$1')
+      : String(match[3] || '').trim();
+  }
+  return fields;
+}
+
+function verifyHawkRequest(expected, header) {
+  const fields = parseHawkAuthorization(header);
+  const required = [
+    ['id', expected.expectedId],
+    ['ts', expected.expectedTs],
+    ['nonce', expected.expectedNonce]
+  ];
+  for (const [key, value] of required) {
+    if (fields[key] !== value) {
+      return { fields, reason: `${key} mismatch`, verified: false };
+    }
+  }
+  if ((fields.ext || '') !== expected.expectedExt) {
+    return { fields, reason: 'ext mismatch', verified: false };
+  }
+  if ((fields.app || '') !== expected.expectedApp) {
+    return { fields, reason: 'app mismatch', verified: false };
+  }
+  if ((fields.dlg || '') !== expected.expectedDelegation) {
+    return { fields, reason: 'dlg mismatch', verified: false };
+  }
+  const payloadHash = expected.includePayloadHash
+    ? hawkPayloadHash(expected.algorithm, expected.body, expected.contentType)
+    : '';
+  if (expected.includePayloadHash && fields.hash !== payloadHash) {
+    return { fields, reason: 'payload hash mismatch', verified: false };
+  }
+  if (!expected.includePayloadHash && Object.prototype.hasOwnProperty.call(fields, 'hash')) {
+    return { fields, reason: 'unexpected payload hash', verified: false };
+  }
+  const parsedUrl = new URL(expected.url);
+  const port = parsedUrl.port || (parsedUrl.protocol === 'https:' ? '443' : '80');
+  const normalized = [
+    'hawk.1.header',
+    fields.ts,
+    fields.nonce,
+    String(expected.method || 'GET').toUpperCase(),
+    `${parsedUrl.pathname}${parsedUrl.search}`,
+    parsedUrl.hostname.toLowerCase(),
+    port,
+    payloadHash,
+    fields.ext || '',
+    fields.app || '',
+    fields.dlg || '',
+    ''
+  ].join('\n');
+  const mac = crypto.createHmac(expected.algorithm, expected.authKey).update(normalized, 'utf8').digest('base64');
+  return { fields, reason: fields.mac === mac ? '' : 'mac mismatch', verified: fields.mac === mac };
+}
+
+function hawkPayloadHash(algorithm, body, contentType = '') {
+  const hash = crypto.createHash(algorithm);
+  hash.update('hawk.1.payload\n', 'utf8');
+  hash.update(normalizeHawkContentType(contentType), 'utf8');
+  hash.update('\n', 'utf8');
+  hash.update(String(body || ''), 'utf8');
+  hash.update('\n', 'utf8');
+  return hash.digest('base64');
+}
+
+function normalizeHawkContentType(contentType = '') {
+  return String(contentType || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
 }
 
 function parseOAuthAuthorization(header) {

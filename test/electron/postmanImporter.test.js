@@ -244,6 +244,66 @@ test('imports and exports OAuth 2.0 Postman controls', () => {
   assert.deepEqual(exportedAuth.refreshRequestParams, refreshRequestParams);
 });
 
+test('imports and exports Hawk Postman controls', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Hawk Controls',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'Hawk',
+      request: {
+        method: 'POST',
+        url: 'https://api.example.test/hawk',
+        auth: {
+          type: 'hawk',
+          hawk: [
+            { key: 'authId', value: 'hawk-id' },
+            { key: 'authKey', value: '{{hawkKey}}' },
+            { key: 'algorithm', value: 'SHA-256' },
+            { key: 'user', value: 'ada' },
+            { key: 'nonce', value: 'fixed-nonce' },
+            { key: 'extraData', value: 'extra-data' },
+            { key: 'app', value: 'postmeter-app' },
+            { key: 'delegation', value: 'delegated-by' },
+            { key: 'timestamp', value: '1777291200' },
+            { key: 'includePayloadHash', value: true, type: 'boolean' }
+          ]
+        }
+      }
+    }]
+  });
+
+  const auth = collection.requests[0].auth;
+  assert.deepEqual(auth, {
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: '{{hawkKey}}',
+    algorithm: 'sha256',
+    user: 'ada',
+    nonce: 'fixed-nonce',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+
+  const exported = exportPostmanCollection(collection);
+  const exportedAuth = Object.fromEntries(exported.item[0].request.auth.hawk.map((item) => [item.key, item.value]));
+  assert.equal(exported.item[0].request.auth.type, 'hawk');
+  assert.equal(exportedAuth.authId, 'hawk-id');
+  assert.equal(exportedAuth.authKey, '{{hawkKey}}');
+  assert.equal(exportedAuth.algorithm, 'SHA-256');
+  assert.equal(exportedAuth.user, 'ada');
+  assert.equal(exportedAuth.nonce, 'fixed-nonce');
+  assert.equal(exportedAuth.extraData, 'extra-data');
+  assert.equal(exportedAuth.app, 'postmeter-app');
+  assert.equal(exportedAuth.delegation, 'delegated-by');
+  assert.equal(exportedAuth.timestamp, '1777291200');
+  assert.equal(exportedAuth.includePayloadHash, true);
+});
+
 test('round-trips Postman request cookie source metadata without promoting disabled cookies', () => {
   const sourceCookies = [{
     name: 'expiresCookie',

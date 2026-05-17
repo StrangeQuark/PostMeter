@@ -74,6 +74,24 @@ function oauth2EditorValues(prefix = '', overrides = {}) {
   return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
 }
 
+function hawkEditorValues(prefix = '', overrides = {}) {
+  const base = prefix ? `${prefix}AuthHawk` : 'authHawk';
+  const values = {
+    AuthIdInput: { value: '' },
+    AuthKeyInput: { value: '' },
+    AlgorithmSelect: { value: 'sha256' },
+    UserInput: { value: '' },
+    NonceInput: { value: '' },
+    ExtraDataInput: { value: '' },
+    AppInput: { value: '' },
+    DelegationInput: { value: '' },
+    TimestampInput: { value: '' },
+    IncludePayloadHashInput: { checked: false },
+    ...overrides
+  };
+  return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
+}
+
 test('request editor panels choose code editor language from body type', () => {
   assert.equal(bodyTypeCodeLanguage('RAW_JSON'), 'json');
   assert.equal(bodyTypeCodeLanguage('RAW_TEXT'), 'text');
@@ -170,7 +188,7 @@ test('request editor panels read auth editor inputs through the shared auth mode
     ['authApiKeyNameInput', { value: '' }],
     ['authApiKeyValueInput', { value: '' }],
     ['authCookieValueInput', { value: '' }],
-    ...oauth2EditorValues('', {
+      ...oauth2EditorValues('', {
       GrantTypeSelect: { value: 'deviceCode' },
       TokenTypeSelect: { value: 'MAC' },
       HeaderPrefixInput: { value: 'Token' },
@@ -205,9 +223,10 @@ test('request editor panels read auth editor inputs through the shared auth mode
       RefreshRequestParamValueInput: { value: 'trace' },
       RefreshRequestParamSendInSelect: { value: 'header' },
       UserCodeInput: { value: 'NEXT-CODE' }
-    }),
-    ...oauth1EditorValues(),
-    ['authDigestUsernameInput', { value: '' }],
+      }),
+      ...oauth1EditorValues(),
+      ...hawkEditorValues(),
+      ['authDigestUsernameInput', { value: '' }],
     ['authDigestPasswordInput', { value: '' }],
     ['authDigestDisableRetryingRequestInput', { checked: false }],
     ['authDigestRealmInput', { value: '' }],
@@ -302,9 +321,10 @@ test('request editor panels read Digest auth editor inputs', () => {
     ['authApiKeyNameInput', { value: '' }],
     ['authApiKeyValueInput', { value: '' }],
     ['authCookieValueInput', { value: '' }],
-    ...oauth2EditorValues(),
-    ...oauth1EditorValues(),
-    ['authDigestUsernameInput', { value: 'ada' }],
+      ...oauth2EditorValues(),
+      ...oauth1EditorValues(),
+      ...hawkEditorValues(),
+      ['authDigestUsernameInput', { value: 'ada' }],
     ['authDigestPasswordInput', { value: 'secret' }],
     ['authDigestDisableRetryingRequestInput', { checked: true }],
     ['authDigestRealmInput', { value: 'postmeter' }],
@@ -345,6 +365,71 @@ test('request editor panels read Digest auth editor inputs', () => {
   });
 });
 
+test('request editor panels read Hawk auth editor inputs', () => {
+  const values = new Map([
+    ['authTypeSelect', { value: 'hawk' }],
+    ['authBearerTokenInput', { value: '' }],
+    ['authBasicUsernameInput', { value: '' }],
+    ['authBasicPasswordInput', { value: '' }],
+    ['authApiKeyLocationSelect', { value: 'header' }],
+    ['authApiKeyNameInput', { value: '' }],
+    ['authApiKeyValueInput', { value: '' }],
+    ['authCookieValueInput', { value: '' }],
+    ...oauth2EditorValues(),
+    ...oauth1EditorValues(),
+    ...hawkEditorValues('', {
+      AuthIdInput: { value: 'hawk-id' },
+      AuthKeyInput: { value: 'hawk-key' },
+      AlgorithmSelect: { value: 'sha1' },
+      UserInput: { value: 'ada' },
+      NonceInput: { value: 'nonce-value' },
+      ExtraDataInput: { value: 'extra-data' },
+      AppInput: { value: 'postmeter-app' },
+      DelegationInput: { value: 'delegated-by' },
+      TimestampInput: { value: '1777291200' },
+      IncludePayloadHashInput: { checked: true }
+    }),
+    ['authDigestUsernameInput', { value: '' }],
+    ['authDigestPasswordInput', { value: '' }],
+    ['authDigestDisableRetryingRequestInput', { checked: false }],
+    ['authDigestRealmInput', { value: '' }],
+    ['authDigestNonceInput', { value: '' }],
+    ['authDigestAlgorithmSelect', { value: 'MD5' }],
+    ['authDigestQopInput', { value: 'auth' }],
+    ['authDigestNonceCountInput', { value: '' }],
+    ['authDigestClientNonceInput', { value: '' }],
+    ['authDigestOpaqueInput', { value: '' }],
+    ['authClientPfxPathInput', { value: '' }],
+    ['authClientCertPathInput', { value: '' }],
+    ['authClientKeyPathInput', { value: '' }],
+    ['authClientCaPathInput', { value: '' }],
+    ['authClientPassphraseInput', { value: '' }]
+  ]);
+  const fakeDoc = {
+    getElementById(id) {
+      const value = values.get(id);
+      if (!value) {
+        throw new Error(`Unexpected element lookup: ${id}`);
+      }
+      return value;
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc }), {
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-key',
+    algorithm: 'sha1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+});
+
 test('request editor panels read OAuth 1.0 auth editor inputs', () => {
   const values = new Map([
     ['authTypeSelect', { value: 'oauth1' }],
@@ -355,8 +440,8 @@ test('request editor panels read OAuth 1.0 auth editor inputs', () => {
     ['authApiKeyNameInput', { value: '' }],
     ['authApiKeyValueInput', { value: '' }],
     ['authCookieValueInput', { value: '' }],
-    ...oauth2EditorValues(),
-    ...oauth1EditorValues('', {
+      ...oauth2EditorValues(),
+      ...oauth1EditorValues('', {
       SignatureMethodSelect: { value: 'HMAC-SHA256' },
       ConsumerKeyInput: { value: 'consumer' },
       ConsumerSecretInput: { value: 'consumer-secret' },
@@ -372,8 +457,9 @@ test('request editor panels read OAuth 1.0 auth editor inputs', () => {
       RealmInput: { value: 'postmeter' },
       IncludeBodyHashInput: { checked: true },
       AddEmptyParamsToSignInput: { checked: true }
-    }),
-    ['authDigestUsernameInput', { value: '' }],
+      }),
+      ...hawkEditorValues(),
+      ['authDigestUsernameInput', { value: '' }],
     ['authDigestPasswordInput', { value: '' }],
     ['authDigestDisableRetryingRequestInput', { checked: false }],
     ['authDigestRealmInput', { value: '' }],
@@ -573,8 +659,8 @@ test('request editor panels clear dynamic refreshing auth selections when option
 });
 
 test('request editor panels can read prefixed auth editor inputs for performance requests', () => {
-  const values = new Map([
-    ['performanceAuthTypeSelect', { value: 'apiKey' }],
+    const values = new Map([
+      ['performanceAuthTypeSelect', { value: 'apiKey' }],
     ['performanceAuthBearerTokenInput', { value: '' }],
     ['performanceAuthBasicUsernameInput', { value: '' }],
     ['performanceAuthBasicPasswordInput', { value: '' }],
@@ -582,9 +668,10 @@ test('request editor panels can read prefixed auth editor inputs for performance
     ['performanceAuthApiKeyNameInput', { value: 'token' }],
     ['performanceAuthApiKeyValueInput', { value: 'abc123' }],
     ['performanceAuthCookieValueInput', { value: '' }],
-    ...oauth2EditorValues('performance'),
-    ...oauth1EditorValues('performance'),
-    ['performanceAuthDigestUsernameInput', { value: '' }],
+      ...oauth2EditorValues('performance'),
+      ...oauth1EditorValues('performance'),
+      ...hawkEditorValues('performance'),
+      ['performanceAuthDigestUsernameInput', { value: '' }],
     ['performanceAuthDigestPasswordInput', { value: '' }],
     ['performanceAuthDigestDisableRetryingRequestInput', { checked: false }],
     ['performanceAuthDigestRealmInput', { value: '' }],

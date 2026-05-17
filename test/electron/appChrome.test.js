@@ -334,6 +334,8 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
 
   assert.equal(rendererUrl, `${APP_PROTOCOL_SCHEME}://bundle/src/renderer/index.html?uiWorkflowSmoke=1`);
   assert.deepEqual([...APP_RENDERER_QUERY_KEYS].sort(), [
+    'uiHawkBaseUrl',
+    'uiHawkSmoke',
     'uiOauthBaseUrl',
     'uiOauthSmoke',
     'uiRegressionSmoke',

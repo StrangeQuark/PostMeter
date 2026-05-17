@@ -1658,7 +1658,12 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       nonce: authField(source, 'nonce') || source.nonce || '',
       extraData: authField(source, 'extraData') || authField(source, 'ext') || source.extraData || source.ext || '',
       app: authField(source, 'app') || source.app || '',
-      delegation: authField(source, 'delegation') || authField(source, 'dlg') || source.delegation || source.dlg || ''
+      delegation: authField(source, 'delegation') || authField(source, 'dlg') || source.delegation || source.dlg || '',
+      timestamp: authField(source, 'timestamp') || authField(source, 'ts') || source.timestamp || source.ts || '',
+      includePayloadHash: boolAuthField(source, 'includePayloadHash')
+        || boolAuthField(source, 'includePayloadHas')
+        || boolAuthField(source, 'payloadHash')
+        || source.includePayloadHash === true
     };
   }
   if (type === 'aws') {

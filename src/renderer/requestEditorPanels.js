@@ -511,6 +511,16 @@
     setOptionElementValue(doc, options, 'authDigestNonceCountInput', fields.digestNonceCount);
     setOptionElementValue(doc, options, 'authDigestClientNonceInput', fields.digestClientNonce);
     setOptionElementValue(doc, options, 'authDigestOpaqueInput', fields.digestOpaque);
+    setOptionElementValue(doc, options, 'authHawkAuthIdInput', fields.hawkAuthId);
+    setOptionElementValue(doc, options, 'authHawkAuthKeyInput', fields.hawkAuthKey);
+    setOptionElementValue(doc, options, 'authHawkAlgorithmSelect', fields.hawkAlgorithm);
+    setOptionElementValue(doc, options, 'authHawkUserInput', fields.hawkUser);
+    setOptionElementValue(doc, options, 'authHawkNonceInput', fields.hawkNonce);
+    setOptionElementValue(doc, options, 'authHawkExtraDataInput', fields.hawkExtraData);
+    setOptionElementValue(doc, options, 'authHawkAppInput', fields.hawkApp);
+    setOptionElementValue(doc, options, 'authHawkDelegationInput', fields.hawkDelegation);
+    setOptionElementValue(doc, options, 'authHawkTimestampInput', fields.hawkTimestamp);
+    setOptionElementChecked(doc, options, 'authHawkIncludePayloadHashInput', fields.hawkIncludePayloadHash);
     setOptionElementValue(doc, options, 'authClientPfxPathInput', fields.clientPfxPath);
     setOptionElementValue(doc, options, 'authClientCertPathInput', fields.clientCertPath);
     setOptionElementValue(doc, options, 'authClientKeyPathInput', fields.clientKeyPath);
@@ -590,6 +600,16 @@
       digestNonceCount: optionElementValue(doc, options, 'authDigestNonceCountInput'),
       digestClientNonce: optionElementValue(doc, options, 'authDigestClientNonceInput'),
       digestOpaque: optionElementValue(doc, options, 'authDigestOpaqueInput'),
+      hawkAuthId: optionElementValue(doc, options, 'authHawkAuthIdInput'),
+      hawkAuthKey: optionElementValue(doc, options, 'authHawkAuthKeyInput'),
+      hawkAlgorithm: optionElementValue(doc, options, 'authHawkAlgorithmSelect'),
+      hawkUser: optionElementValue(doc, options, 'authHawkUserInput'),
+      hawkNonce: optionElementValue(doc, options, 'authHawkNonceInput'),
+      hawkExtraData: optionElementValue(doc, options, 'authHawkExtraDataInput'),
+      hawkApp: optionElementValue(doc, options, 'authHawkAppInput'),
+      hawkDelegation: optionElementValue(doc, options, 'authHawkDelegationInput'),
+      hawkTimestamp: optionElementValue(doc, options, 'authHawkTimestampInput'),
+      hawkIncludePayloadHash: optionElementChecked(doc, options, 'authHawkIncludePayloadHashInput'),
       clientPfxPath: optionElementValue(doc, options, 'authClientPfxPathInput'),
       clientCertPath: optionElementValue(doc, options, 'authClientCertPathInput'),
       clientKeyPath: optionElementValue(doc, options, 'authClientKeyPathInput'),

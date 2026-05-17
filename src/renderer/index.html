@@ -330,7 +330,7 @@
                 <option value="apiKey">API Key</option>
                 <option value="oauth2">OAuth 2.0</option>
                 <option value="digest">Digest Auth</option>
-                <option value="hawk">Hawk Auth</option>
+                <option value="hawk">Hawk Authentication</option>
                 <option value="aws">AWS Signature</option>
                 <option value="oauth1">OAuth 1.0</option>
                 <option value="ntlm">NTLM</option>
@@ -695,6 +695,57 @@
                   <label class="field">
                     <span>Opaque</span>
                     <input id="authDigestOpaqueInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="hawk">
+              <label class="field">
+                <span>Hawk Auth ID</span>
+                <input id="authHawkAuthIdInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Hawk Auth Key</span>
+                <input id="authHawkAuthKeyInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Algorithm</span>
+                <select id="authHawkAlgorithmSelect">
+                  <option value="sha256">SHA-256</option>
+                  <option value="sha1">SHA-1</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>User</span>
+                    <input id="authHawkUserInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authHawkNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>ext</span>
+                    <input id="authHawkExtraDataInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>app</span>
+                    <input id="authHawkAppInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>dlg</span>
+                    <input id="authHawkDelegationInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Timestamp</span>
+                    <input id="authHawkTimestampInput" autocomplete="off">
+                  </label>
+                  <label class="checkbox-line auth-wide">
+                    <input id="authHawkIncludePayloadHashInput" type="checkbox">
+                    <span>Include payload hash</span>
                   </label>
                 </div>
               </details>
@@ -1318,7 +1369,7 @@
                     <option value="apiKey">API Key</option>
                     <option value="oauth2">OAuth 2.0</option>
                     <option value="digest">Digest Auth</option>
-                    <option value="hawk">Hawk Auth</option>
+                    <option value="hawk">Hawk Authentication</option>
                     <option value="aws">AWS Signature</option>
                     <option value="oauth1">OAuth 1.0</option>
                     <option value="ntlm">NTLM</option>
@@ -1674,6 +1725,57 @@
                       <label class="field">
                         <span>Opaque</span>
                         <input id="performanceAuthDigestOpaqueInput" autocomplete="off">
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="auth-section" data-auth-section="hawk">
+                  <label class="field">
+                    <span>Hawk Auth ID</span>
+                    <input id="performanceAuthHawkAuthIdInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Hawk Auth Key</span>
+                    <input id="performanceAuthHawkAuthKeyInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Algorithm</span>
+                    <select id="performanceAuthHawkAlgorithmSelect">
+                      <option value="sha256">SHA-256</option>
+                      <option value="sha1">SHA-1</option>
+                    </select>
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="field">
+                        <span>User</span>
+                        <input id="performanceAuthHawkUserInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Nonce</span>
+                        <input id="performanceAuthHawkNonceInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>ext</span>
+                        <input id="performanceAuthHawkExtraDataInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>app</span>
+                        <input id="performanceAuthHawkAppInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>dlg</span>
+                        <input id="performanceAuthHawkDelegationInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Timestamp</span>
+                        <input id="performanceAuthHawkTimestampInput" autocomplete="off">
+                      </label>
+                      <label class="checkbox-line auth-wide">
+                        <input id="performanceAuthHawkIncludePayloadHashInput" type="checkbox">
+                        <span>Include payload hash</span>
                       </label>
                     </div>
                   </details>
@@ -2799,6 +2901,7 @@
   <script src="uiSnapshotSmoke.js"></script>
   <script src="uiTypographySmoke.js"></script>
   <script src="uiOauthSmoke.js"></script>
+  <script src="uiHawkSmoke.js"></script>
   <script src="uiSmoke.js"></script>
 </body>
 </html>

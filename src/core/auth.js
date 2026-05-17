@@ -326,8 +326,8 @@ function validateAuth(auth = {}, environment) {
   } else if (normalized.type === 'hawk') {
     requireResolved(normalized.authId, environment, 'Hawk auth ID', errors);
     requireResolved(normalized.authKey, environment, 'Hawk auth key', errors);
-    const algorithm = String(resolveEnvironmentValue(normalized.algorithm, environment) || 'sha256').toLowerCase();
-    if (algorithm !== 'sha1' && algorithm !== 'sha256') {
+    const algorithm = normalizeHawkAlgorithm(resolveEnvironmentValue(normalized.algorithm, environment));
+    if (!algorithm) {
       errors.push(`Unsupported Hawk auth algorithm: ${normalized.algorithm}.`);
     }
   } else if (normalized.type === 'aws') {
@@ -997,15 +997,19 @@ function digestHash(algorithm, value) {
 function buildHawkAuthorizationHeader(auth, environment, target) {
   const id = resolveEnvironmentValue(auth.authId, environment);
   const key = resolveEnvironmentValue(auth.authKey, environment);
-  const algorithm = String(resolveEnvironmentValue(auth.algorithm, environment) || 'sha256').toLowerCase();
-  if (algorithm !== 'sha1' && algorithm !== 'sha256') {
-    throw new Error(`Unsupported Hawk auth algorithm: ${auth.algorithm}.`);
+  const algorithmName = resolveEnvironmentValue(auth.algorithm, environment);
+  const algorithm = normalizeHawkAlgorithm(algorithmName);
+  if (!algorithm) {
+    throw new Error(`Unsupported Hawk auth algorithm: ${algorithmName || auth.algorithm}.`);
   }
-  const ts = String(Math.floor(Number(target.now || Date.now()) / 1000));
+  const ts = resolveEnvironmentValue(auth.timestamp, environment).trim() || String(Math.floor(Number(target.now || Date.now()) / 1000));
   const nonce = resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(6).toString('hex');
   const ext = resolveEnvironmentValue(auth.extraData, environment);
   const app = resolveEnvironmentValue(auth.app, environment);
   const dlg = resolveEnvironmentValue(auth.delegation, environment);
+  const hash = auth.includePayloadHash === true
+    ? hawkPayloadHash(algorithm, target.body || '', headerValue(target.headers || {}, 'Content-Type'))
+    : '';
   const port = target.url.port || (target.url.protocol === 'https:' ? '443' : '80');
   const normalized = [
     'hawk.1.header',
@@ -1015,7 +1019,7 @@ function buildHawkAuthorizationHeader(auth, environment, target) {
     `${target.url.pathname}${target.url.search}`,
     target.url.hostname.toLowerCase(),
     port,
-    '',
+    hash,
     ext,
     app,
     dlg,
@@ -1028,6 +1032,9 @@ function buildHawkAuthorizationHeader(auth, environment, target) {
     ['nonce', nonce],
     ['mac', mac]
   ];
+  if (hash) {
+    fields.push(['hash', hash]);
+  }
   if (ext) {
     fields.push(['ext', ext]);
   }
@@ -1038,6 +1045,38 @@ function buildHawkAuthorizationHeader(auth, environment, target) {
     fields.push(['dlg', dlg]);
   }
   return `Hawk ${fields.map(([name, value]) => `${name}=${quoteAuthValue(value)}`).join(', ')}`;
+}
+
+function hawkPayloadHash(algorithm, body, contentType = '') {
+  const hash = crypto.createHash(algorithm);
+  hash.update('hawk.1.payload\n', 'utf8');
+  hash.update(normalizeHawkContentType(contentType), 'utf8');
+  hash.update('\n', 'utf8');
+  if (Buffer.isBuffer(body)) {
+    hash.update(body);
+  } else {
+    hash.update(String(body || ''), 'utf8');
+  }
+  hash.update('\n', 'utf8');
+  return hash.digest('base64');
+}
+
+function normalizeHawkAlgorithm(value) {
+  const normalized = String(value || 'sha256').trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (normalized === 'sha1') {
+    return 'sha1';
+  }
+  if (normalized === 'sha256') {
+    return 'sha256';
+  }
+  return null;
+}
+
+function normalizeHawkContentType(contentType = '') {
+  return String(contentType || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
 }
 
 function applyAwsSignature(auth, environment, target) {
