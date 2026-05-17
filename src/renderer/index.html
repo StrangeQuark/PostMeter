@@ -457,6 +457,85 @@
               </label>
             </div>
 
+            <div class="auth-section" data-auth-section="oauth1">
+              <label class="field">
+                <span>Signature Method</span>
+                <select id="authOauth1SignatureMethodSelect">
+                  <option value="HMAC-SHA1">HMAC-SHA1</option>
+                  <option value="HMAC-SHA256">HMAC-SHA256</option>
+                  <option value="HMAC-SHA512">HMAC-SHA512</option>
+                  <option value="RSA-SHA1">RSA-SHA1</option>
+                  <option value="RSA-SHA256">RSA-SHA256</option>
+                  <option value="RSA-SHA512">RSA-SHA512</option>
+                  <option value="PLAINTEXT">PLAINTEXT</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Consumer Key</span>
+                <input id="authOauth1ConsumerKeyInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth1-mode="shared">
+                <span>Consumer Secret</span>
+                <input id="authOauth1ConsumerSecretInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Access Token</span>
+                <input id="authOauth1TokenInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth1-mode="shared">
+                <span>Token Secret</span>
+                <input id="authOauth1TokenSecretInput" type="text" autocomplete="off">
+              </label>
+              <label class="field auth-wide" data-oauth1-mode="rsa">
+                <span>Private Key</span>
+                <textarea id="authOauth1PrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <label class="field">
+                <span>Add authorization data to</span>
+                <select id="authOauth1AddAuthDataToSelect">
+                  <option value="header">Request Headers</option>
+                  <option value="queryOrBody">Request Body / Request URL</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Callback URL</span>
+                    <input id="authOauth1CallbackInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Verifier</span>
+                    <input id="authOauth1VerifierInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Timestamp</span>
+                    <input id="authOauth1TimestampInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authOauth1NonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Version</span>
+                    <input id="authOauth1VersionInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Realm</span>
+                    <input id="authOauth1RealmInput" autocomplete="off">
+                  </label>
+                  <label class="checkbox-line auth-wide">
+                    <input id="authOauth1IncludeBodyHashInput" type="checkbox">
+                    <span>Include body hash</span>
+                  </label>
+                  <label class="checkbox-line auth-wide">
+                    <input id="authOauth1AddEmptyParamsToSignInput" type="checkbox">
+                    <span>Add empty parameters to signature</span>
+                  </label>
+                </div>
+              </details>
+            </div>
+
             <div class="auth-section" data-auth-section="clientCertificate">
               <label class="field">
                 <span>PFX/P12 Bundle Path</span>
@@ -1268,6 +1347,85 @@
                     <span>Verification URL</span>
                     <input id="performanceAuthOauthVerificationUriInput" readonly>
                   </label>
+                </div>
+
+                <div class="auth-section" data-auth-section="oauth1">
+                  <label class="field">
+                    <span>Signature Method</span>
+                    <select id="performanceAuthOauth1SignatureMethodSelect">
+                      <option value="HMAC-SHA1">HMAC-SHA1</option>
+                      <option value="HMAC-SHA256">HMAC-SHA256</option>
+                      <option value="HMAC-SHA512">HMAC-SHA512</option>
+                      <option value="RSA-SHA1">RSA-SHA1</option>
+                      <option value="RSA-SHA256">RSA-SHA256</option>
+                      <option value="RSA-SHA512">RSA-SHA512</option>
+                      <option value="PLAINTEXT">PLAINTEXT</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Consumer Key</span>
+                    <input id="performanceAuthOauth1ConsumerKeyInput" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth1-mode="shared">
+                    <span>Consumer Secret</span>
+                    <input id="performanceAuthOauth1ConsumerSecretInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Access Token</span>
+                    <input id="performanceAuthOauth1TokenInput" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth1-mode="shared">
+                    <span>Token Secret</span>
+                    <input id="performanceAuthOauth1TokenSecretInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide" data-oauth1-mode="rsa">
+                    <span>Private Key</span>
+                    <textarea id="performanceAuthOauth1PrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+                  </label>
+                  <label class="field">
+                    <span>Add authorization data to</span>
+                    <select id="performanceAuthOauth1AddAuthDataToSelect">
+                      <option value="header">Request Headers</option>
+                      <option value="queryOrBody">Request Body / Request URL</option>
+                    </select>
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="field">
+                        <span>Callback URL</span>
+                        <input id="performanceAuthOauth1CallbackInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Verifier</span>
+                        <input id="performanceAuthOauth1VerifierInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Timestamp</span>
+                        <input id="performanceAuthOauth1TimestampInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Nonce</span>
+                        <input id="performanceAuthOauth1NonceInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Version</span>
+                        <input id="performanceAuthOauth1VersionInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Realm</span>
+                        <input id="performanceAuthOauth1RealmInput" autocomplete="off">
+                      </label>
+                      <label class="checkbox-line auth-wide">
+                        <input id="performanceAuthOauth1IncludeBodyHashInput" type="checkbox">
+                        <span>Include body hash</span>
+                      </label>
+                      <label class="checkbox-line auth-wide">
+                        <input id="performanceAuthOauth1AddEmptyParamsToSignInput" type="checkbox">
+                        <span>Add empty parameters to signature</span>
+                      </label>
+                    </div>
+                  </details>
                 </div>
 
                 <div class="auth-section" data-auth-section="clientCertificate">

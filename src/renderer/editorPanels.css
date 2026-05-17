@@ -1156,9 +1156,18 @@ textarea.code-editor-input.has-openable-variable-hover {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   min-height: 34px;
   padding: 8px 10px;
+}
+
+.field textarea {
+  min-height: 118px;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: var(--editor-font-size);
+  line-height: 1.45;
 }
 
 .auth-grid {
@@ -1185,6 +1194,11 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .auth-wide {
   grid-column: 1 / -1;
+}
+
+.auth-section[data-auth-section="oauth1"]:not([data-oauth1-signature-kind="rsa"]) [data-oauth1-mode="rsa"],
+.auth-section[data-auth-section="oauth1"][data-oauth1-signature-kind="rsa"] [data-oauth1-mode="shared"] {
+  display: none;
 }
 
 .auth-advanced {

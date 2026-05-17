@@ -40,6 +40,31 @@ function assertDigestAdvancedMarkup(source, ids) {
   assert.ok(advancedSource.includes(`title="${retryTooltip}"`));
 }
 
+function assertOauth1AdvancedMarkup(source, ids) {
+  const signatureIndex = source.indexOf(`id="${ids.signatureMethod}"`);
+  assert.notEqual(signatureIndex, -1, `Expected ${ids.signatureMethod} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', signatureIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.signatureMethod} OAuth 1.0 advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.signatureMethod} OAuth 1.0 advanced disclosure to close.`);
+
+  const visibleSource = source.slice(signatureIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the OAuth 1.0 advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /Include body hash/);
+  assert.match(advancedSource, /Add empty parameters to signature/);
+}
+
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
   const windowListeners = new Map();
@@ -217,6 +242,74 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     'SHA-512-256',
     'SHA-512-256-sess'
   ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauth1SignatureMethodSelect'), [
+    'HMAC-SHA1',
+    'HMAC-SHA256',
+    'HMAC-SHA512',
+    'RSA-SHA1',
+    'RSA-SHA256',
+    'RSA-SHA512',
+    'PLAINTEXT'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauth1SignatureMethodSelect'), [
+    'HMAC-SHA1',
+    'HMAC-SHA256',
+    'HMAC-SHA512',
+    'RSA-SHA1',
+    'RSA-SHA256',
+    'RSA-SHA512',
+    'PLAINTEXT'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauth1AddAuthDataToSelect'), ['header', 'queryOrBody']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauth1AddAuthDataToSelect'), ['header', 'queryOrBody']);
+  assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="oauth1"\]:not\(\[data-oauth1-signature-kind="rsa"\]\) \[data-oauth1-mode="rsa"\]/);
+  assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="oauth1"\]\[data-oauth1-signature-kind="rsa"\] \[data-oauth1-mode="shared"\]/);
+  assert.match(indexSource, /data-oauth1-mode="shared"[\s\S]*id="authOauth1ConsumerSecretInput"/);
+  assert.match(indexSource, /data-oauth1-mode="shared"[\s\S]*id="authOauth1TokenSecretInput"/);
+  assert.match(indexSource, /data-oauth1-mode="rsa"[\s\S]*id="authOauth1PrivateKeyInput"/);
+  assert.match(indexSource, /data-oauth1-mode="rsa"[\s\S]*id="performanceAuthOauth1PrivateKeyInput"/);
+  assertOauth1AdvancedMarkup(indexSource, {
+    signatureMethod: 'authOauth1SignatureMethodSelect',
+    main: [
+      'authOauth1ConsumerKeyInput',
+      'authOauth1ConsumerSecretInput',
+      'authOauth1TokenInput',
+      'authOauth1TokenSecretInput',
+      'authOauth1PrivateKeyInput',
+      'authOauth1AddAuthDataToSelect'
+    ],
+    advanced: [
+      'authOauth1CallbackInput',
+      'authOauth1VerifierInput',
+      'authOauth1TimestampInput',
+      'authOauth1NonceInput',
+      'authOauth1VersionInput',
+      'authOauth1RealmInput',
+      'authOauth1IncludeBodyHashInput',
+      'authOauth1AddEmptyParamsToSignInput'
+    ]
+  });
+  assertOauth1AdvancedMarkup(indexSource, {
+    signatureMethod: 'performanceAuthOauth1SignatureMethodSelect',
+    main: [
+      'performanceAuthOauth1ConsumerKeyInput',
+      'performanceAuthOauth1ConsumerSecretInput',
+      'performanceAuthOauth1TokenInput',
+      'performanceAuthOauth1TokenSecretInput',
+      'performanceAuthOauth1PrivateKeyInput',
+      'performanceAuthOauth1AddAuthDataToSelect'
+    ],
+    advanced: [
+      'performanceAuthOauth1CallbackInput',
+      'performanceAuthOauth1VerifierInput',
+      'performanceAuthOauth1TimestampInput',
+      'performanceAuthOauth1NonceInput',
+      'performanceAuthOauth1VersionInput',
+      'performanceAuthOauth1RealmInput',
+      'performanceAuthOauth1IncludeBodyHashInput',
+      'performanceAuthOauth1AddEmptyParamsToSignInput'
+    ]
+  });
   assertDigestAdvancedMarkup(indexSource, {
     username: 'authDigestUsernameInput',
     password: 'authDigestPasswordInput',

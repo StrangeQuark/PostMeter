@@ -37,6 +37,15 @@
     return optionElement(doc, options, id)?.checked === true;
   }
 
+  function syncOauth1SignatureFields(options = {}) {
+    const doc = options.doc || document;
+    const signatureMethod = optionElementValue(doc, options, 'authOauth1SignatureMethodSelect') || 'HMAC-SHA1';
+    const section = optionElement(doc, options, 'authOauth1SignatureMethodSelect')?.closest?.('[data-auth-section="oauth1"]');
+    if (section) {
+      section.dataset.oauth1SignatureKind = String(signatureMethod).toUpperCase().startsWith('RSA-') ? 'rsa' : 'shared';
+    }
+  }
+
   function bodyTypeCodeLanguage(bodyType) {
     return bodyType === 'RAW_JSON' ? 'json' : 'text';
   }
@@ -444,6 +453,22 @@
     setOptionElementValue(doc, options, 'authOauthScopesInput', fields.oauthScopes);
     setOptionElementValue(doc, options, 'authOauthUserCodeInput', fields.oauthUserCode);
     setOptionElementValue(doc, options, 'authOauthVerificationUriInput', fields.oauthVerificationUri);
+    setOptionElementValue(doc, options, 'authOauth1SignatureMethodSelect', fields.oauth1SignatureMethod);
+    setOptionElementValue(doc, options, 'authOauth1ConsumerKeyInput', fields.oauth1ConsumerKey);
+    setOptionElementValue(doc, options, 'authOauth1ConsumerSecretInput', fields.oauth1ConsumerSecret);
+    setOptionElementValue(doc, options, 'authOauth1TokenInput', fields.oauth1Token);
+    setOptionElementValue(doc, options, 'authOauth1TokenSecretInput', fields.oauth1TokenSecret);
+    setOptionElementValue(doc, options, 'authOauth1PrivateKeyInput', fields.oauth1PrivateKey);
+    setOptionElementValue(doc, options, 'authOauth1AddAuthDataToSelect', fields.oauth1AddAuthDataTo);
+    setOptionElementValue(doc, options, 'authOauth1CallbackInput', fields.oauth1Callback);
+    setOptionElementValue(doc, options, 'authOauth1VerifierInput', fields.oauth1Verifier);
+    setOptionElementValue(doc, options, 'authOauth1TimestampInput', fields.oauth1Timestamp);
+    setOptionElementValue(doc, options, 'authOauth1NonceInput', fields.oauth1Nonce);
+    setOptionElementValue(doc, options, 'authOauth1VersionInput', fields.oauth1Version);
+    setOptionElementValue(doc, options, 'authOauth1RealmInput', fields.oauth1Realm);
+    setOptionElementChecked(doc, options, 'authOauth1IncludeBodyHashInput', fields.oauth1IncludeBodyHash);
+    setOptionElementChecked(doc, options, 'authOauth1AddEmptyParamsToSignInput', fields.oauth1AddEmptyParamsToSign);
+    syncOauth1SignatureFields({ ...options, doc });
     setOptionElementValue(doc, options, 'authDigestUsernameInput', fields.digestUsername);
     setOptionElementValue(doc, options, 'authDigestPasswordInput', fields.digestPassword);
     setOptionElementChecked(doc, options, 'authDigestDisableRetryingRequestInput', fields.digestDisableRetryingRequest);
@@ -463,6 +488,7 @@
 
   function collectAuthFromEditor(options = {}) {
     const doc = options.doc || document;
+    syncOauth1SignatureFields({ ...options, doc });
     return authFromEditorState({
       type: optionElementValue(doc, options, 'authTypeSelect'),
       bearerToken: optionElementValue(doc, options, 'authBearerTokenInput'),
@@ -484,6 +510,21 @@
       oauthClientSecret: optionElementValue(doc, options, 'authOauthClientSecretInput'),
       oauthScopes: optionElementValue(doc, options, 'authOauthScopesInput'),
       oauthUserCode: optionElementValue(doc, options, 'authOauthUserCodeInput'),
+      oauth1SignatureMethod: optionElementValue(doc, options, 'authOauth1SignatureMethodSelect'),
+      oauth1ConsumerKey: optionElementValue(doc, options, 'authOauth1ConsumerKeyInput'),
+      oauth1ConsumerSecret: optionElementValue(doc, options, 'authOauth1ConsumerSecretInput'),
+      oauth1Token: optionElementValue(doc, options, 'authOauth1TokenInput'),
+      oauth1TokenSecret: optionElementValue(doc, options, 'authOauth1TokenSecretInput'),
+      oauth1PrivateKey: optionElementValue(doc, options, 'authOauth1PrivateKeyInput'),
+      oauth1AddAuthDataTo: optionElementValue(doc, options, 'authOauth1AddAuthDataToSelect'),
+      oauth1Callback: optionElementValue(doc, options, 'authOauth1CallbackInput'),
+      oauth1Verifier: optionElementValue(doc, options, 'authOauth1VerifierInput'),
+      oauth1Timestamp: optionElementValue(doc, options, 'authOauth1TimestampInput'),
+      oauth1Nonce: optionElementValue(doc, options, 'authOauth1NonceInput'),
+      oauth1Version: optionElementValue(doc, options, 'authOauth1VersionInput'),
+      oauth1Realm: optionElementValue(doc, options, 'authOauth1RealmInput'),
+      oauth1IncludeBodyHash: optionElementChecked(doc, options, 'authOauth1IncludeBodyHashInput'),
+      oauth1AddEmptyParamsToSign: optionElementChecked(doc, options, 'authOauth1AddEmptyParamsToSignInput'),
       digestUsername: optionElementValue(doc, options, 'authDigestUsernameInput'),
       digestPassword: optionElementValue(doc, options, 'authDigestPasswordInput'),
       digestDisableRetryingRequest: optionElementChecked(doc, options, 'authDigestDisableRetryingRequestInput'),
@@ -945,6 +986,7 @@
     renderAuthEditor,
     renderCookieJarEditor,
     renderRequestPairs,
+    syncOauth1SignatureFields,
     syncRefreshingAuthSelectOptions,
     renderVariablePairs,
     renderVariablePreview

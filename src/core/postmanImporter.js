@@ -772,6 +772,7 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
     };
   }
   if (type === 'oauth1') {
+    const addParamsToHeader = authParam(authNode.oauth1, 'addParamsToHeader');
     return {
       type: 'oauth1',
       consumerKey: authParam(authNode.oauth1, 'consumerKey'),
@@ -779,10 +780,19 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       token: authParam(authNode.oauth1, 'token'),
       tokenSecret: authParam(authNode.oauth1, 'tokenSecret'),
       signatureMethod: authParam(authNode.oauth1, 'signatureMethod') || 'HMAC-SHA1',
+      privateKey: authParam(authNode.oauth1, 'privateKey'),
+      addAuthDataTo: addParamsToHeader === ''
+        ? (authParam(authNode.oauth1, 'addAuthDataTo') || 'header')
+        : (String(addParamsToHeader).trim().toLowerCase() === 'false' ? 'queryOrBody' : 'header'),
+      callback: authParam(authNode.oauth1, 'callback') || authParam(authNode.oauth1, 'callbackUrl'),
+      verifier: authParam(authNode.oauth1, 'verifier'),
       timestamp: authParam(authNode.oauth1, 'timestamp'),
       nonce: authParam(authNode.oauth1, 'nonce'),
       version: authParam(authNode.oauth1, 'version') || '1.0',
-      realm: authParam(authNode.oauth1, 'realm')
+      realm: authParam(authNode.oauth1, 'realm'),
+      includeBodyHash: authBooleanParam(authNode.oauth1, 'includeBodyHash'),
+      addEmptyParamsToSign: authBooleanParam(authNode.oauth1, 'addEmptyParamsToSign')
+        || authBooleanParam(authNode.oauth1, 'addEmptyParametersToSignature')
     };
   }
   if (type === 'ntlm') {
@@ -1441,10 +1451,16 @@ function exportPostmanAuthModel(auth) {
         { key: 'token', value: auth.token || '', type: 'string' },
         { key: 'tokenSecret', value: auth.tokenSecret || '', type: 'string' },
         { key: 'signatureMethod', value: auth.signatureMethod || 'HMAC-SHA1', type: 'string' },
+        { key: 'privateKey', value: auth.privateKey || '', type: 'string' },
+        { key: 'addParamsToHeader', value: auth.addAuthDataTo === 'queryOrBody' ? 'false' : 'true', type: 'boolean' },
+        { key: 'callback', value: auth.callback || '', type: 'string' },
+        { key: 'verifier', value: auth.verifier || '', type: 'string' },
         { key: 'timestamp', value: auth.timestamp || '', type: 'string' },
         { key: 'nonce', value: auth.nonce || '', type: 'string' },
         { key: 'version', value: auth.version || '1.0', type: 'string' },
-        { key: 'realm', value: auth.realm || '', type: 'string' }
+        { key: 'realm', value: auth.realm || '', type: 'string' },
+        { key: 'includeBodyHash', value: auth.includeBodyHash === true ? 'true' : 'false', type: 'boolean' },
+        { key: 'addEmptyParamsToSign', value: auth.addEmptyParamsToSign === true ? 'true' : 'false', type: 'boolean' }
       ]
     };
   }

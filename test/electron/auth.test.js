@@ -25,6 +25,15 @@ const DIGEST_ALGORITHM_OPTIONS = [
   'SHA-512-256',
   'SHA-512-256-sess'
 ];
+const OAUTH1_SIGNATURE_METHOD_OPTIONS = [
+  'HMAC-SHA1',
+  'HMAC-SHA256',
+  'HMAC-SHA512',
+  'RSA-SHA1',
+  'RSA-SHA256',
+  'RSA-SHA512',
+  'PLAINTEXT'
+];
 
 test('normalizes unsupported auth types to none', () => {
   assert.deepEqual(normalizeAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });
@@ -70,6 +79,26 @@ test('validates auth helper required fields', () => {
   assert.deepEqual(validateAuth({ type: 'clientCertificate', certPath: '/tmp/client.pem', keyPath: '/tmp/client.key' }, null), []);
   assert.deepEqual(validateAuth({ type: 'clientCertificate', pfxPath: '/tmp/client.p12' }, null), []);
   assert.deepEqual(validateAuth({ type: 'clientCertificate', certificateId: 'cert-1' }, null), []);
+  assert.deepEqual(validateAuth({
+    type: 'oauth1',
+    signatureMethod: 'RSA-SHA256',
+    consumerKey: 'consumer',
+    consumerSecret: '',
+    privateKey: 'private-key'
+  }, null), []);
+  assert.deepEqual(validateAuth({
+    type: 'oauth1',
+    signatureMethod: 'RSA-SHA256',
+    consumerKey: 'consumer',
+    consumerSecret: '',
+    privateKey: ''
+  }, null), ['OAuth 1.0 private key is required.']);
+  assert.deepEqual(validateAuth({
+    type: 'oauth1',
+    signatureMethod: 'HMAC-SHA512',
+    consumerKey: 'consumer',
+    consumerSecret: ''
+  }, null), ['OAuth 1.0 consumer secret is required.']);
 });
 
 test('applies supported auth helpers during request execution', async () => {
@@ -221,6 +250,271 @@ test('applies advanced Postman auth helpers through the brokered HTTP sender', a
       workstation: 'WORKSTATION'
     });
     assert.match(ntlm.authorization, /^NTLM TlRMTVNTUAAD/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes OAuth 1.0 header auth against a localhost server with advanced fields', async () => {
+  const server = await createServer(async (request, response) => {
+    const bodyText = await readRequestBody(request);
+    const fields = parseOAuthAuthorization(request.headers.authorization || '');
+    const verified = verifyOAuth1Request({
+      body: bodyText,
+      consumerSecret: 'consumer-secret',
+      contentType: request.headers['content-type'],
+      includeEmptyParams: true,
+      method: request.method,
+      oauthParams: fields,
+      placement: 'header',
+      tokenSecret: 'token-secret',
+      url: `http://${request.headers.host}${request.url}`
+    });
+    response.statusCode = verified ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ fields, verified }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/oauth1-header?existing=1`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'RAW_TEXT',
+      body: 'signed body',
+      auth: {
+        type: 'oauth1',
+        signatureMethod: 'HMAC-SHA256',
+        consumerKey: 'consumer',
+        consumerSecret: 'consumer-secret',
+        token: 'token',
+        tokenSecret: 'token-secret',
+        callback: 'https://client.example.test/callback',
+        verifier: '',
+        timestamp: '1777291200',
+        nonce: 'oauth-nonce',
+        version: '1.0',
+        realm: 'postmeter',
+        includeBodyHash: true,
+        addEmptyParamsToSign: true
+      }
+    }, null, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    const body = JSON.parse(result.body);
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(body.verified, true);
+    assert.equal(body.fields.realm, 'postmeter');
+    assert.equal(body.fields.oauth_signature_method, 'HMAC-SHA256');
+    assert.equal(body.fields.oauth_consumer_key, 'consumer');
+    assert.equal(body.fields.oauth_token, 'token');
+    assert.equal(body.fields.oauth_callback, 'https://client.example.test/callback');
+    assert.equal(body.fields.oauth_verifier, '');
+    assert.equal(body.fields.oauth_body_hash, crypto.createHash('sha1').update('signed body', 'utf8').digest('base64'));
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes OAuth 1.0 header auth for every Signature Method dropdown option', async () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+  });
+  const server = await createServer(async (request, response) => {
+    const fields = parseOAuthAuthorization(request.headers.authorization || '');
+    const verified = verifyOAuth1Request({
+      body: '',
+      consumerSecret: fields.oauth_signature_method?.startsWith('RSA-') ? privateKey : 'consumer-secret',
+      contentType: request.headers['content-type'],
+      includeEmptyParams: false,
+      method: request.method,
+      oauthParams: fields,
+      placement: 'header',
+      publicKey,
+      tokenSecret: fields.oauth_signature_method?.startsWith('RSA-') ? '' : 'token-secret',
+      url: `http://${request.headers.host}${request.url}`
+    });
+    response.statusCode = verified ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ fields, verified }));
+  });
+
+  try {
+    for (const signatureMethod of OAUTH1_SIGNATURE_METHOD_OPTIONS) {
+      const rsa = signatureMethod.startsWith('RSA-');
+      const result = await sendRequest({
+        method: 'GET',
+        url: `${server.baseUrl}/oauth1-method/${encodeURIComponent(signatureMethod)}?existing=1`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        auth: {
+          type: 'oauth1',
+          signatureMethod,
+          consumerKey: 'consumer',
+          consumerSecret: rsa ? '' : 'consumer-secret',
+          privateKey: rsa ? privateKey : '',
+          token: 'token',
+          tokenSecret: rsa ? '' : 'token-secret',
+          nonce: `nonce-${signatureMethod}`,
+          timestamp: '1777291200'
+        }
+      });
+      const body = JSON.parse(result.body);
+      assert.equal(result.statusCode, 200, `${signatureMethod} should authenticate successfully`);
+      assert.equal(body.verified, true, `${signatureMethod} should verify against the localhost server`);
+      assert.equal(body.fields.oauth_signature_method, signatureMethod);
+      assert.match(body.fields.oauth_signature, /\S+/);
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes OAuth 1.0 RSA auth using Private Key over hidden shared-secret fields', async () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+  });
+  const server = await createServer(async (request, response) => {
+    const fields = parseOAuthAuthorization(request.headers.authorization || '');
+    const verified = verifyOAuth1Request({
+      body: '',
+      consumerSecret: 'stale-consumer-secret',
+      contentType: request.headers['content-type'],
+      includeEmptyParams: false,
+      method: request.method,
+      oauthParams: fields,
+      placement: 'header',
+      publicKey,
+      tokenSecret: 'stale-token-secret',
+      url: `http://${request.headers.host}${request.url}`
+    });
+    response.statusCode = verified ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ fields, verified }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/oauth1-rsa-private-key?existing=1`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth1',
+        signatureMethod: 'RSA-SHA256',
+        consumerKey: 'consumer',
+        consumerSecret: 'stale-consumer-secret',
+        privateKey,
+        token: 'token',
+        tokenSecret: 'stale-token-secret',
+        nonce: 'rsa-private-key-nonce',
+        timestamp: '1777291200'
+      }
+    });
+    const body = JSON.parse(result.body);
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(body.verified, true);
+    assert.equal(body.fields.oauth_signature_method, 'RSA-SHA256');
+    assert.equal(body.fields.oauth_consumer_key, 'consumer');
+    assert.equal(body.fields.oauth_token, 'token');
+    assert.equal(body.fields.oauth_nonce, 'rsa-private-key-nonce');
+    assert.match(body.fields.oauth_signature, /\S+/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes OAuth 1.0 auth data placement in the request URL and URL-encoded body', async () => {
+  const server = await createServer(async (request, response) => {
+    const bodyText = await readRequestBody(request);
+    const url = new URL(request.url, 'http://127.0.0.1');
+    const bodyParams = new URLSearchParams(bodyText);
+    const oauthParams = request.method === 'GET'
+      ? oauthParamsFromSearchParams(url.searchParams)
+      : oauthParamsFromSearchParams(bodyParams);
+    const verified = verifyOAuth1Request({
+      body: bodyText,
+      consumerSecret: 'consumer-secret',
+      contentType: request.headers['content-type'],
+      includeEmptyParams: false,
+      method: request.method,
+      oauthParams,
+      placement: request.method === 'GET' ? 'query' : 'body',
+      tokenSecret: 'token-secret',
+      url: `http://${request.headers.host}${request.url}`
+    });
+    response.statusCode = verified && !request.headers.authorization ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      bodyParams: Object.fromEntries(bodyParams.entries()),
+      queryParams: Object.fromEntries(url.searchParams.entries()),
+      authorization: request.headers.authorization || '',
+      oauthParams,
+      verified
+    }));
+  });
+
+  try {
+    const getResult = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/oauth1-query?existing=1`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth1',
+        addAuthDataTo: 'queryOrBody',
+        consumerKey: 'consumer',
+        consumerSecret: 'consumer-secret',
+        token: 'token',
+        tokenSecret: 'token-secret',
+        nonce: 'query-nonce',
+        timestamp: '1777291200'
+      }
+    });
+    const getBody = JSON.parse(getResult.body);
+    assert.equal(getResult.statusCode, 200);
+    assert.equal(getBody.verified, true);
+    assert.equal(getBody.authorization, '');
+    assert.equal(getBody.queryParams.oauth_consumer_key, 'consumer');
+    assert.equal(getBody.queryParams.oauth_signature_method, 'HMAC-SHA1');
+    assert.match(getBody.queryParams.oauth_signature, /\S+/);
+
+    const postResult = await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/oauth1-body?existing=1`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'URLENCODED',
+      body: 'payload=value',
+      auth: {
+        type: 'oauth1',
+        addAuthDataTo: 'queryOrBody',
+        consumerKey: 'consumer',
+        consumerSecret: 'consumer-secret',
+        token: 'token',
+        tokenSecret: 'token-secret',
+        nonce: 'body-nonce',
+        timestamp: '1777291200'
+      }
+    });
+    const postBody = JSON.parse(postResult.body);
+    assert.equal(postResult.statusCode, 200);
+    assert.equal(postBody.verified, true);
+    assert.equal(postBody.authorization, '');
+    assert.equal(postBody.bodyParams.payload, 'value');
+    assert.equal(postBody.bodyParams.oauth_consumer_key, 'consumer');
+    assert.match(postBody.bodyParams.oauth_signature, /\S+/);
   } finally {
     await server.close();
   }
@@ -1342,6 +1636,130 @@ function digestAlgorithm(value) {
 
 function digestHash(algorithm, value) {
   return crypto.createHash(algorithm).update(value, 'utf8').digest('hex');
+}
+
+function parseOAuthAuthorization(header) {
+  const value = String(header || '').replace(/^OAuth\s+/i, '');
+  const fields = {};
+  const pattern = /([A-Za-z0-9_-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^,]*))(?:,|$)/g;
+  let match;
+  while ((match = pattern.exec(value)) !== null) {
+    const rawValue = match[2] != null ? match[2].replace(/\\"/g, '"') : String(match[3] || '').trim();
+    fields[match[1]] = oauthDecode(rawValue);
+  }
+  return fields;
+}
+
+function oauthParamsFromSearchParams(searchParams) {
+  return Object.fromEntries([...searchParams.entries()].filter(([key]) => key.startsWith('oauth_')));
+}
+
+function verifyOAuth1Request(options) {
+  const url = new URL(options.url, 'http://127.0.0.1');
+  const signatureMethod = options.oauthParams.oauth_signature_method || 'HMAC-SHA1';
+  const params = [];
+  appendOAuth1TestParams(params, url.searchParams, options.includeEmptyParams, { excludeSignature: true });
+  if (String(options.contentType || '').toLowerCase().split(';')[0].trim() === 'application/x-www-form-urlencoded') {
+    appendOAuth1TestParams(params, new URLSearchParams(options.body || ''), options.includeEmptyParams, { excludeSignature: true });
+  }
+  if (options.placement === 'header') {
+    for (const [key, value] of Object.entries(options.oauthParams)) {
+      if (key !== 'realm' && key !== 'oauth_signature' && (options.includeEmptyParams || String(value) !== '')) {
+        params.push([key, value]);
+      }
+    }
+  }
+  const expected = oauth1TestSignature({
+    consumerSecret: options.consumerSecret,
+    method: options.method,
+    params,
+    oauthSignature: options.oauthParams.oauth_signature,
+    publicKey: options.publicKey,
+    signatureMethod,
+    tokenSecret: options.tokenSecret,
+    url
+  });
+  if (typeof expected === 'boolean') {
+    return expected;
+  }
+  return options.oauthParams.oauth_signature === expected;
+}
+
+function appendOAuth1TestParams(target, source, includeEmpty, options = {}) {
+  for (const [key, value] of source.entries()) {
+    if (options.excludeSignature && key === 'oauth_signature') {
+      continue;
+    }
+    if (includeEmpty || String(value) !== '') {
+      target.push([key, value]);
+    }
+  }
+}
+
+function oauth1TestSignature(options) {
+  const signingKey = `${oauthPercentEncodeTest(options.consumerSecret)}&${oauthPercentEncodeTest(options.tokenSecret)}`;
+  if (options.signatureMethod === 'PLAINTEXT') {
+    return signingKey;
+  }
+  const baseString = oauth1TestBaseString(options);
+  if (options.signatureMethod?.startsWith('RSA-')) {
+    return crypto
+      .createVerify(oauth1TestRsaSignatureAlgorithm(options.signatureMethod))
+      .update(baseString, 'utf8')
+      .verify(options.publicKey, options.oauthSignature || options.params.find(([key]) => key === 'oauth_signature')?.[1] || '', 'base64');
+  }
+  return crypto
+    .createHmac(oauth1TestHmacHashAlgorithm(options.signatureMethod), signingKey)
+    .update(baseString, 'utf8')
+    .digest('base64');
+}
+
+function oauth1TestBaseString(options) {
+  const baseUrl = `${options.url.protocol}//${options.url.host}${options.url.pathname}`;
+  const normalizedParams = options.params
+    .map(([key, value]) => [oauthPercentEncodeTest(key), oauthPercentEncodeTest(value)])
+    .sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  const baseString = [
+    String(options.method || 'GET').toUpperCase(),
+    oauthPercentEncodeTest(baseUrl),
+    oauthPercentEncodeTest(normalizedParams)
+  ].join('&');
+  return baseString;
+}
+
+function oauth1TestHmacHashAlgorithm(signatureMethod) {
+  if (signatureMethod === 'HMAC-SHA512') {
+    return 'sha512';
+  }
+  if (signatureMethod === 'HMAC-SHA256') {
+    return 'sha256';
+  }
+  return 'sha1';
+}
+
+function oauth1TestRsaSignatureAlgorithm(signatureMethod) {
+  if (signatureMethod === 'RSA-SHA512') {
+    return 'RSA-SHA512';
+  }
+  if (signatureMethod === 'RSA-SHA256') {
+    return 'RSA-SHA256';
+  }
+  return 'RSA-SHA1';
+}
+
+function oauthDecode(value) {
+  try {
+    return decodeURIComponent(String(value || ''));
+  } catch {
+    return String(value || '');
+  }
+}
+
+function oauthPercentEncodeTest(value) {
+  return encodeURIComponent(String(value == null ? '' : value))
+    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 function ntlmType2Challenge() {

@@ -5,8 +5,32 @@ const {
   bodyTypeCodeLanguage,
   buildVariablePreviewText,
   collectAuthFromEditor,
+  syncOauth1SignatureFields,
   syncRefreshingAuthSelectOptions
 } = require('../../src/renderer/requestEditorPanels');
+
+function oauth1EditorValues(prefix = '', overrides = {}) {
+  const base = prefix ? `${prefix}AuthOauth1` : 'authOauth1';
+  const values = {
+    SignatureMethodSelect: { value: 'HMAC-SHA1' },
+    ConsumerKeyInput: { value: '' },
+    ConsumerSecretInput: { value: '' },
+    TokenInput: { value: '' },
+    TokenSecretInput: { value: '' },
+    PrivateKeyInput: { value: '' },
+    AddAuthDataToSelect: { value: 'header' },
+    CallbackInput: { value: '' },
+    VerifierInput: { value: '' },
+    TimestampInput: { value: '' },
+    NonceInput: { value: '' },
+    VersionInput: { value: '1.0' },
+    RealmInput: { value: '' },
+    IncludeBodyHashInput: { checked: false },
+    AddEmptyParamsToSignInput: { checked: false },
+    ...overrides
+  };
+  return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
+}
 
 test('request editor panels choose code editor language from body type', () => {
   assert.equal(bodyTypeCodeLanguage('RAW_JSON'), 'json');
@@ -116,6 +140,7 @@ test('request editor panels read auth editor inputs through the shared auth mode
     ['authOauthClientSecretInput', { value: 'client-secret' }],
     ['authOauthScopesInput', { value: 'openid profile' }],
     ['authOauthUserCodeInput', { value: 'NEXT-CODE' }],
+    ...oauth1EditorValues(),
     ['authDigestUsernameInput', { value: '' }],
     ['authDigestPasswordInput', { value: '' }],
     ['authDigestDisableRetryingRequestInput', { checked: false }],
@@ -201,6 +226,7 @@ test('request editor panels read Digest auth editor inputs', () => {
     ['authOauthClientSecretInput', { value: '' }],
     ['authOauthScopesInput', { value: '' }],
     ['authOauthUserCodeInput', { value: '' }],
+    ...oauth1EditorValues(),
     ['authDigestUsernameInput', { value: 'ada' }],
     ['authDigestPasswordInput', { value: 'secret' }],
     ['authDigestDisableRetryingRequestInput', { checked: true }],
@@ -240,6 +266,153 @@ test('request editor panels read Digest auth editor inputs', () => {
     clientNonce: '0a4f113b',
     nonceCount: '00000005'
   });
+});
+
+test('request editor panels read OAuth 1.0 auth editor inputs', () => {
+  const values = new Map([
+    ['authTypeSelect', { value: 'oauth1' }],
+    ['authBearerTokenInput', { value: '' }],
+    ['authBasicUsernameInput', { value: '' }],
+    ['authBasicPasswordInput', { value: '' }],
+    ['authApiKeyLocationSelect', { value: 'header' }],
+    ['authApiKeyNameInput', { value: '' }],
+    ['authApiKeyValueInput', { value: '' }],
+    ['authCookieValueInput', { value: '' }],
+    ['authOauthGrantTypeSelect', { value: 'authorizationCode' }],
+    ['authOauthTokenTypeSelect', { value: 'Bearer' }],
+    ['authOauthAccessTokenInput', { value: '' }],
+    ['authOauthRefreshTokenInput', { value: '' }],
+    ['authOauthAuthorizationUrlInput', { value: '' }],
+    ['authOauthRedirectStrategySelect', { value: 'loopback' }],
+    ['authOauthDeviceAuthorizationUrlInput', { value: '' }],
+    ['authOauthTokenUrlInput', { value: '' }],
+    ['authOauthClientIdInput', { value: '' }],
+    ['authOauthClientSecretInput', { value: '' }],
+    ['authOauthScopesInput', { value: '' }],
+    ['authOauthUserCodeInput', { value: '' }],
+    ...oauth1EditorValues('', {
+      SignatureMethodSelect: { value: 'HMAC-SHA256' },
+      ConsumerKeyInput: { value: 'consumer' },
+      ConsumerSecretInput: { value: 'consumer-secret' },
+      TokenInput: { value: 'token' },
+      TokenSecretInput: { value: 'token-secret' },
+      PrivateKeyInput: { value: 'private-key' },
+      AddAuthDataToSelect: { value: 'queryOrBody' },
+      CallbackInput: { value: 'https://client.example.test/callback' },
+      VerifierInput: { value: 'verifier' },
+      TimestampInput: { value: '1777291200' },
+      NonceInput: { value: 'nonce' },
+      VersionInput: { value: '1.0' },
+      RealmInput: { value: 'postmeter' },
+      IncludeBodyHashInput: { checked: true },
+      AddEmptyParamsToSignInput: { checked: true }
+    }),
+    ['authDigestUsernameInput', { value: '' }],
+    ['authDigestPasswordInput', { value: '' }],
+    ['authDigestDisableRetryingRequestInput', { checked: false }],
+    ['authDigestRealmInput', { value: '' }],
+    ['authDigestNonceInput', { value: '' }],
+    ['authDigestAlgorithmSelect', { value: 'MD5' }],
+    ['authDigestQopInput', { value: 'auth' }],
+    ['authDigestNonceCountInput', { value: '' }],
+    ['authDigestClientNonceInput', { value: '' }],
+    ['authDigestOpaqueInput', { value: '' }],
+    ['authClientPfxPathInput', { value: '' }],
+    ['authClientCertPathInput', { value: '' }],
+    ['authClientKeyPathInput', { value: '' }],
+    ['authClientCaPathInput', { value: '' }],
+    ['authClientPassphraseInput', { value: '' }]
+  ]);
+  const fakeDoc = {
+    getElementById(id) {
+      const value = values.get(id);
+      if (!value) {
+        throw new Error(`Unexpected element lookup: ${id}`);
+      }
+      return value;
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc }), {
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    signatureMethod: 'HMAC-SHA256',
+    addAuthDataTo: 'queryOrBody',
+    callback: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    version: '1.0',
+    realm: 'postmeter',
+    includeBodyHash: true,
+    addEmptyParamsToSign: true
+  });
+});
+
+test('request editor panels collect OAuth 1.0 RSA auth from the Private Key field', () => {
+  const values = new Map([
+    ['authTypeSelect', { value: 'oauth1' }],
+    ...oauth1EditorValues('', {
+      SignatureMethodSelect: { value: 'RSA-SHA512' },
+      ConsumerKeyInput: { value: 'consumer' },
+      ConsumerSecretInput: { value: '' },
+      TokenInput: { value: 'token' },
+      TokenSecretInput: { value: '' },
+      PrivateKeyInput: { value: 'rsa-private-key' }
+    })
+  ]);
+  const fakeDoc = {
+    getElementById(id) {
+      return values.get(id) || { checked: false, value: '' };
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc }), {
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: '',
+    token: 'token',
+    tokenSecret: '',
+    privateKey: 'rsa-private-key',
+    signatureMethod: 'RSA-SHA512',
+    addAuthDataTo: 'header',
+    callback: '',
+    verifier: '',
+    timestamp: '',
+    nonce: '',
+    version: '1.0',
+    realm: '',
+    includeBodyHash: false,
+    addEmptyParamsToSign: false
+  });
+});
+
+test('request editor panels toggles OAuth 1.0 RSA-specific fields from the signature method', () => {
+  const section = { dataset: {} };
+  const signatureSelect = {
+    value: 'HMAC-SHA1',
+    closest(selector) {
+      assert.equal(selector, '[data-auth-section="oauth1"]');
+      return section;
+    }
+  };
+  const fakeDoc = {
+    getElementById(id) {
+      assert.equal(id, 'authOauth1SignatureMethodSelect');
+      return signatureSelect;
+    }
+  };
+
+  syncOauth1SignatureFields({ doc: fakeDoc });
+  assert.equal(section.dataset.oauth1SignatureKind, 'shared');
+
+  signatureSelect.value = 'RSA-SHA256';
+  syncOauth1SignatureFields({ doc: fakeDoc });
+  assert.equal(section.dataset.oauth1SignatureKind, 'rsa');
 });
 
 test('request editor panels collect auto refresh auth type', () => {
@@ -355,6 +528,7 @@ test('request editor panels can read prefixed auth editor inputs for performance
     ['performanceAuthOauthClientSecretInput', { value: '' }],
     ['performanceAuthOauthScopesInput', { value: '' }],
     ['performanceAuthOauthUserCodeInput', { value: '' }],
+    ...oauth1EditorValues('performance'),
     ['performanceAuthDigestUsernameInput', { value: '' }],
     ['performanceAuthDigestPasswordInput', { value: '' }],
     ['performanceAuthDigestDisableRetryingRequestInput', { checked: false }],

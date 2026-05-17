@@ -52,6 +52,16 @@ const AUTH_REFRESH_OUTPUT_SLOTS = [
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
 const OAUTH2_GRANT_TYPES = ['authorizationCode', 'clientCredentials', 'deviceCode'];
 const OAUTH2_REDIRECT_STRATEGIES = ['loopback', 'customScheme'];
+const OAUTH1_SIGNATURE_METHODS = [
+  'HMAC-SHA1',
+  'HMAC-SHA256',
+  'HMAC-SHA512',
+  'RSA-SHA1',
+  'RSA-SHA256',
+  'RSA-SHA512',
+  'PLAINTEXT'
+];
+const OAUTH1_ADD_AUTH_DATA_TO = ['header', 'queryOrBody'];
 const OAUTH_PROGRESS_TYPES = ['pkce', 'device'];
 const OAUTH_PROGRESS_STATUSES = [
   'starting',
@@ -137,6 +147,8 @@ const SCHEMA_ENUMS = {
   oauth2GrantTypes: OAUTH2_GRANT_TYPES,
   oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
+  oauth1AddAuthDataTo: OAUTH1_ADD_AUTH_DATA_TO,
+  oauth1SignatureMethods: OAUTH1_SIGNATURE_METHODS,
   oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
   oauthProgressTypes: OAUTH_PROGRESS_TYPES,
   requestProtocols: REQUEST_PROTOCOLS,
@@ -524,12 +536,18 @@ const FIELD_SCHEMAS = {
     service: { type: 'string', limit: 'value', optional: true },
     sessionToken: { type: 'string', limit: 'value', optional: true },
     addAuthDataToQuery: { type: 'boolean', optional: true },
+    addAuthDataTo: { type: 'string', limit: 'short', enum: 'oauth1AddAuthDataTo', optional: true },
     consumerKey: { type: 'string', limit: 'value', optional: true },
     consumerSecret: { type: 'string', limit: 'value', optional: true },
     tokenSecret: { type: 'string', limit: 'value', optional: true },
-    signatureMethod: { type: 'string', limit: 'short', optional: true },
+    signatureMethod: { type: 'string', limit: 'short', enum: 'oauth1SignatureMethods', optional: true },
+    privateKey: { type: 'string', limit: 'value', optional: true },
+    callback: { type: 'string', limit: 'value', optional: true },
+    verifier: { type: 'string', limit: 'value', optional: true },
     timestamp: { type: 'string', limit: 'value', optional: true },
     version: { type: 'string', limit: 'short', optional: true },
+    includeBodyHash: { type: 'boolean', optional: true },
+    addEmptyParamsToSign: { type: 'boolean', optional: true },
     domain: { type: 'string', limit: 'value', optional: true },
     workstation: { type: 'string', limit: 'value', optional: true },
     clientToken: { type: 'string', limit: 'value', optional: true },
@@ -570,6 +588,8 @@ const payloadSchemas = {
     oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
     oauth2GrantTypes: OAUTH2_GRANT_TYPES,
     oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
+    oauth1AddAuthDataTo: OAUTH1_ADD_AUTH_DATA_TO,
+    oauth1SignatureMethods: OAUTH1_SIGNATURE_METHODS,
     oauthProgressTypes: OAUTH_PROGRESS_TYPES,
     oauthProgressStatuses: OAUTH_PROGRESS_STATUSES
   },
@@ -670,6 +690,8 @@ const exported = {
   OAUTH2_GRANT_TYPES,
   OAUTH2_REDIRECT_STRATEGIES,
   OAUTH2_TOKEN_TYPES,
+  OAUTH1_ADD_AUTH_DATA_TO,
+  OAUTH1_SIGNATURE_METHODS,
   OAUTH_PROGRESS_STATUSES,
   OAUTH_PROGRESS_TYPES,
   PAYLOAD_SCHEMA_VERSION,

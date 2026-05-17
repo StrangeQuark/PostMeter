@@ -230,7 +230,15 @@ const DIGEST_SUPPORTED_ALGORITHMS = new Map([
   ['sha-512-256-sess', 'sha512-256']
 ]);
 const AWS_ALGORITHM = 'AWS4-HMAC-SHA256';
-const OAUTH1_SIGNATURE_METHODS = new Set(['HMAC-SHA1', 'HMAC-SHA256', 'PLAINTEXT']);
+const OAUTH1_SIGNATURE_METHODS = new Set([
+  'HMAC-SHA1',
+  'HMAC-SHA256',
+  'HMAC-SHA512',
+  'RSA-SHA1',
+  'RSA-SHA256',
+  'RSA-SHA512',
+  'PLAINTEXT'
+]);
 
 function validateAuth(auth = {}, environment) {
   const normalized = normalizeAuth(auth);
@@ -321,10 +329,13 @@ function validateAuth(auth = {}, environment) {
     requireResolved(normalized.service, environment, 'AWS service', errors);
   } else if (normalized.type === 'oauth1') {
     requireResolved(normalized.consumerKey, environment, 'OAuth 1.0 consumer key', errors);
-    requireResolved(normalized.consumerSecret, environment, 'OAuth 1.0 consumer secret', errors);
     const signatureMethod = normalizeOAuth1SignatureMethod(resolveEnvironmentValue(normalized.signatureMethod, environment));
     if (!OAUTH1_SIGNATURE_METHODS.has(signatureMethod)) {
       errors.push(`Unsupported OAuth 1.0 signature method: ${normalized.signatureMethod}.`);
+    } else if (signatureMethod.startsWith('RSA-')) {
+      requireResolved(normalized.privateKey || normalized.consumerSecret, environment, 'OAuth 1.0 private key', errors);
+    } else {
+      requireResolved(normalized.consumerSecret, environment, 'OAuth 1.0 consumer secret', errors);
     }
   } else if (normalized.type === 'ntlm') {
     requireResolved(normalized.username, environment, 'NTLM auth username', errors);
@@ -981,6 +992,7 @@ function applyOAuth1Signature(auth, environment, target) {
   if (!OAUTH1_SIGNATURE_METHODS.has(signatureMethod)) {
     throw new Error(`Unsupported OAuth 1.0 signature method: ${auth.signatureMethod}.`);
   }
+  const addEmptyParamsToSign = auth.addEmptyParamsToSign === true;
   const params = {
     oauth_consumer_key: resolveEnvironmentValue(auth.consumerKey, environment),
     oauth_nonce: resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(12).toString('hex'),
@@ -988,16 +1000,15 @@ function applyOAuth1Signature(auth, environment, target) {
     oauth_timestamp: resolveEnvironmentValue(auth.timestamp, environment).trim() || String(Math.floor(Number(target.now || Date.now()) / 1000)),
     oauth_version: resolveEnvironmentValue(auth.version, environment).trim() || '1.0'
   };
-  const token = resolveEnvironmentValue(auth.token, environment);
-  if (token) {
-    params.oauth_token = token;
+  appendOptionalOAuth1Param(params, 'oauth_token', resolveEnvironmentValue(auth.token, environment), addEmptyParamsToSign);
+  appendOptionalOAuth1Param(params, 'oauth_callback', resolveEnvironmentValue(auth.callback, environment), addEmptyParamsToSign);
+  appendOptionalOAuth1Param(params, 'oauth_verifier', resolveEnvironmentValue(auth.verifier, environment), addEmptyParamsToSign);
+  if (auth.includeBodyHash === true) {
+    params.oauth_body_hash = oauth1BodyHash(target.body);
   }
-  const baseParams = new URLSearchParams(target.url.search);
-  for (const [key, value] of Object.entries(params)) {
-    baseParams.append(key, value);
-  }
+  const baseParams = oauth1SignatureBaseParams(target, params, addEmptyParamsToSign);
   const baseUrl = `${target.url.protocol}//${target.url.host}${target.url.pathname}`;
-  const normalizedParams = [...baseParams.entries()]
+  const normalizedParams = baseParams
     .map(([key, value]) => [oauthPercentEncode(key), oauthPercentEncode(value)])
     .sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey))
     .map(([key, value]) => `${key}=${value}`)
@@ -1007,23 +1018,133 @@ function applyOAuth1Signature(auth, environment, target) {
     oauthPercentEncode(baseUrl),
     oauthPercentEncode(normalizedParams)
   ].join('&');
-  const signingKey = `${oauthPercentEncode(resolveEnvironmentValue(auth.consumerSecret, environment))}&${oauthPercentEncode(resolveEnvironmentValue(auth.tokenSecret, environment))}`;
-  const signature = signatureMethod === 'PLAINTEXT'
-    ? signingKey
-    : crypto
-      .createHmac(signatureMethod === 'HMAC-SHA256' ? 'sha256' : 'sha1', signingKey)
-      .update(baseString, 'utf8')
-      .digest('base64');
+  const signature = oauth1Signature(signatureMethod, baseString, auth, environment);
   const headerParams = {
     ...params,
     oauth_signature: signature
   };
+  if (auth.addAuthDataTo === 'queryOrBody') {
+    appendOAuth1ParamsToRequest(target, headerParams);
+    return;
+  }
   const realm = resolveEnvironmentValue(auth.realm, environment);
   const parts = realm ? [`realm=${quoteAuthValue(realm)}`] : [];
   for (const key of Object.keys(headerParams).sort()) {
     parts.push(`${oauthPercentEncode(key)}=${quoteAuthValue(oauthPercentEncode(headerParams[key]))}`);
   }
   setHeader(target.headers, 'Authorization', `OAuth ${parts.join(', ')}`);
+}
+
+function appendOptionalOAuth1Param(params, key, value, includeEmpty) {
+  const resolved = String(value ?? '');
+  if (resolved || includeEmpty) {
+    params[key] = resolved;
+  }
+}
+
+function oauth1Signature(signatureMethod, baseString, auth, environment) {
+  const consumerSecret = resolveEnvironmentValue(auth.consumerSecret, environment);
+  const tokenSecret = resolveEnvironmentValue(auth.tokenSecret, environment);
+  const signingKey = `${oauthPercentEncode(consumerSecret)}&${oauthPercentEncode(tokenSecret)}`;
+  if (signatureMethod === 'PLAINTEXT') {
+    return signingKey;
+  }
+  if (signatureMethod.startsWith('RSA-')) {
+    return crypto
+      .createSign(oauth1RsaSignatureAlgorithm(signatureMethod))
+      .update(baseString, 'utf8')
+      .sign(resolveEnvironmentValue(auth.privateKey, environment) || consumerSecret, 'base64');
+  }
+  return crypto
+    .createHmac(oauth1HmacHashAlgorithm(signatureMethod), signingKey)
+    .update(baseString, 'utf8')
+    .digest('base64');
+}
+
+function oauth1HmacHashAlgorithm(signatureMethod) {
+  if (signatureMethod === 'HMAC-SHA512') {
+    return 'sha512';
+  }
+  if (signatureMethod === 'HMAC-SHA256') {
+    return 'sha256';
+  }
+  return 'sha1';
+}
+
+function oauth1RsaSignatureAlgorithm(signatureMethod) {
+  if (signatureMethod === 'RSA-SHA512') {
+    return 'RSA-SHA512';
+  }
+  if (signatureMethod === 'RSA-SHA256') {
+    return 'RSA-SHA256';
+  }
+  return 'RSA-SHA1';
+}
+
+function oauth1SignatureBaseParams(target, oauthParams, includeEmpty) {
+  const params = [];
+  appendOAuth1SearchParams(params, target.url.searchParams, includeEmpty, { excludeOAuthSignature: false });
+  if (oauth1BodyContributesToSignature(target)) {
+    appendOAuth1SearchParams(params, new URLSearchParams(oauth1BodyText(target.body)), includeEmpty, { excludeOAuthSignature: false });
+  }
+  for (const [key, value] of Object.entries(oauthParams)) {
+    if (key !== 'oauth_signature' && (includeEmpty || String(value) !== '')) {
+      params.push([key, value]);
+    }
+  }
+  return params;
+}
+
+function appendOAuth1ParamsToRequest(target, params) {
+  if (oauth1ShouldPlaceParamsInBody(target)) {
+    const bodyParams = new URLSearchParams(oauth1BodyText(target.body));
+    for (const [key, value] of Object.entries(params)) {
+      bodyParams.append(key, value);
+    }
+    target.body = bodyParams.toString();
+    return;
+  }
+  for (const [key, value] of Object.entries(params)) {
+    target.url.searchParams.append(key, value);
+  }
+}
+
+function oauth1ShouldPlaceParamsInBody(target) {
+  return String(target.method || 'GET').toUpperCase() !== 'GET' && oauth1BodyContributesToSignature(target);
+}
+
+function oauth1BodyContributesToSignature(target) {
+  return target.body != null
+    && (
+      target.bodyType === 'URLENCODED'
+      || String(headerValue(target.headers, 'Content-Type') || '').toLowerCase().split(';')[0].trim() === 'application/x-www-form-urlencoded'
+    );
+}
+
+function appendOAuth1SearchParams(target, source, includeEmpty, options = {}) {
+  for (const [key, value] of source.entries()) {
+    if (options.excludeOAuthSignature && key === 'oauth_signature') {
+      continue;
+    }
+    if (includeEmpty || String(value) !== '') {
+      target.push([key, value]);
+    }
+  }
+}
+
+function oauth1BodyText(body) {
+  if (Buffer.isBuffer(body)) {
+    return body.toString('utf8');
+  }
+  return String(body ?? '');
+}
+
+function oauth1BodyHash(body) {
+  const hash = crypto.createHash('sha1');
+  if (Buffer.isBuffer(body)) {
+    return hash.update(body).digest('base64');
+  }
+  return hash.update(String(body ?? ''), 'utf8').digest('base64');
 }
 
 function buildNtlmType1AuthorizationHeader(auth, environment) {
@@ -1316,6 +1437,18 @@ function normalizeOAuth1SignatureMethod(value) {
   }
   if (method === 'HMACSHA256') {
     return 'HMAC-SHA256';
+  }
+  if (method === 'HMACSHA512') {
+    return 'HMAC-SHA512';
+  }
+  if (method === 'RSASHA1') {
+    return 'RSA-SHA1';
+  }
+  if (method === 'RSASHA256') {
+    return 'RSA-SHA256';
+  }
+  if (method === 'RSASHA512') {
+    return 'RSA-SHA512';
   }
   return method;
 }

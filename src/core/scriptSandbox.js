@@ -1661,10 +1661,18 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       token: authField(source, 'token') || source.token || '',
       tokenSecret: authField(source, 'tokenSecret') || source.tokenSecret || '',
       signatureMethod: authField(source, 'signatureMethod') || source.signatureMethod || 'HMAC-SHA1',
+      privateKey: authField(source, 'privateKey') || source.privateKey || source.consumerPrivateKey || '',
+      addAuthDataTo: authField(source, 'addAuthDataTo') || source.addAuthDataTo || oauth1AddAuthDataToFromScriptAuth(source),
+      callback: authField(source, 'callback') || authField(source, 'callbackUrl') || source.callback || source.callbackUrl || '',
+      verifier: authField(source, 'verifier') || source.verifier || '',
       timestamp: authField(source, 'timestamp') || source.timestamp || '',
       nonce: authField(source, 'nonce') || source.nonce || '',
       version: authField(source, 'version') || source.version || '1.0',
-      realm: authField(source, 'realm') || source.realm || ''
+      realm: authField(source, 'realm') || source.realm || '',
+      includeBodyHash: boolAuthField(source, 'includeBodyHash') || source.includeBodyHash === true,
+      addEmptyParamsToSign: boolAuthField(source, 'addEmptyParamsToSign')
+        || boolAuthField(source, 'addEmptyParametersToSignature')
+        || source.addEmptyParamsToSign === true
     };
   }
   if (type === 'ntlm') {
@@ -1786,6 +1794,20 @@ function authField(auth, key) {
 function boolAuthField(auth, key) {
   const value = authField(auth, key);
   return value === true || String(value).toLowerCase() === 'true';
+}
+
+function oauth1AddAuthDataToFromScriptAuth(auth) {
+  const fieldValue = authField(auth, 'addParamsToHeader');
+  if (fieldValue !== '') {
+    return String(fieldValue).trim().toLowerCase() === 'false' ? 'queryOrBody' : 'header';
+  }
+  if (auth?.addParamsToHeader === false) {
+    return 'queryOrBody';
+  }
+  if (auth?.addParamsToHeader === true) {
+    return 'header';
+  }
+  return '';
 }
 
 function postmanOauthGrantType(value) {

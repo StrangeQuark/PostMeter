@@ -390,6 +390,33 @@ test('imports and exports advanced Postman auth helper shapes', () => {
         }
       },
       {
+        name: 'OAuth 1.0',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/oauth1',
+          auth: {
+            type: 'oauth1',
+            oauth1: [
+              { key: 'consumerKey', value: 'consumer' },
+              { key: 'consumerSecret', value: 'consumer-secret' },
+              { key: 'token', value: 'token' },
+              { key: 'tokenSecret', value: 'token-secret' },
+              { key: 'signatureMethod', value: 'HMAC-SHA256' },
+              { key: 'privateKey', value: 'private-key' },
+              { key: 'addParamsToHeader', value: false, type: 'boolean' },
+              { key: 'callback', value: 'https://client.example.test/callback' },
+              { key: 'verifier', value: 'verifier' },
+              { key: 'timestamp', value: '1777291200' },
+              { key: 'nonce', value: 'nonce' },
+              { key: 'version', value: '1.0' },
+              { key: 'realm', value: 'postmeter' },
+              { key: 'includeBodyHash', value: true, type: 'boolean' },
+              { key: 'addEmptyParamsToSign', value: true, type: 'boolean' }
+            ]
+          }
+        }
+      },
+      {
         name: 'AWS',
         request: {
           method: 'GET',
@@ -480,16 +507,23 @@ test('imports and exports advanced Postman auth helper shapes', () => {
   assert.equal(collection.requests[0].auth.nonceCount, '00000005');
   assert.equal(collection.requests[0].auth.clientNonce, '0a4f113b');
   assert.equal(collection.requests[0].auth.opaque, 'opaque-token');
-  assert.equal(collection.requests[1].auth.type, 'aws');
-  assert.equal(collection.requests[1].auth.service, 'execute-api');
-  assert.equal(collection.requests[2].auth.type, 'ntlm');
-  assert.equal(collection.requests[2].auth.domain, 'EXAMPLE');
-  assert.equal(collection.requests[3].auth.type, 'akamaiEdgeGrid');
-  assert.equal(collection.requests[3].auth.headersToSign, 'host;x-test');
-  assert.equal(collection.requests[4].auth.type, 'jwtBearer');
-  assert.equal(collection.requests[4].auth.issuer, 'issuer');
-  assert.equal(collection.requests[5].auth.type, 'asap');
-  assert.equal(collection.requests[5].auth.keyId, 'kid-1');
+  assert.equal(collection.requests[1].auth.type, 'oauth1');
+  assert.equal(collection.requests[1].auth.signatureMethod, 'HMAC-SHA256');
+  assert.equal(collection.requests[1].auth.privateKey, 'private-key');
+  assert.equal(collection.requests[1].auth.addAuthDataTo, 'queryOrBody');
+  assert.equal(collection.requests[1].auth.callback, 'https://client.example.test/callback');
+  assert.equal(collection.requests[1].auth.includeBodyHash, true);
+  assert.equal(collection.requests[1].auth.addEmptyParamsToSign, true);
+  assert.equal(collection.requests[2].auth.type, 'aws');
+  assert.equal(collection.requests[2].auth.service, 'execute-api');
+  assert.equal(collection.requests[3].auth.type, 'ntlm');
+  assert.equal(collection.requests[3].auth.domain, 'EXAMPLE');
+  assert.equal(collection.requests[4].auth.type, 'akamaiEdgeGrid');
+  assert.equal(collection.requests[4].auth.headersToSign, 'host;x-test');
+  assert.equal(collection.requests[5].auth.type, 'jwtBearer');
+  assert.equal(collection.requests[5].auth.issuer, 'issuer');
+  assert.equal(collection.requests[6].auth.type, 'asap');
+  assert.equal(collection.requests[6].auth.keyId, 'kid-1');
 
   const exported = exportPostmanCollection(collection);
   assert.equal(exported.item[0].request.auth.type, 'digest');
@@ -508,11 +542,32 @@ test('imports and exports advanced Postman auth helper shapes', () => {
       opaque: 'opaque-token'
     }
   );
-  assert.equal(exported.item[1].request.auth.type, 'awsv4');
-  assert.equal(exported.item[2].request.auth.type, 'ntlm');
-  assert.equal(exported.item[3].request.auth.type, 'akamaiEdgeGrid');
-  assert.equal(exported.item[4].request.auth.type, 'jwt-bearer');
-  assert.equal(exported.item[5].request.auth.type, 'asap');
+  assert.equal(exported.item[1].request.auth.type, 'oauth1');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[1].request.auth.oauth1.map((item) => [item.key, item.value])),
+    {
+      consumerKey: 'consumer',
+      consumerSecret: 'consumer-secret',
+      token: 'token',
+      tokenSecret: 'token-secret',
+      signatureMethod: 'HMAC-SHA256',
+      privateKey: 'private-key',
+      addParamsToHeader: false,
+      callback: 'https://client.example.test/callback',
+      verifier: 'verifier',
+      timestamp: '1777291200',
+      nonce: 'nonce',
+      version: '1.0',
+      realm: 'postmeter',
+      includeBodyHash: true,
+      addEmptyParamsToSign: true
+    }
+  );
+  assert.equal(exported.item[2].request.auth.type, 'awsv4');
+  assert.equal(exported.item[3].request.auth.type, 'ntlm');
+  assert.equal(exported.item[4].request.auth.type, 'akamaiEdgeGrid');
+  assert.equal(exported.item[5].request.auth.type, 'jwt-bearer');
+  assert.equal(exported.item[6].request.auth.type, 'asap');
 });
 
 test('imports Postman collection certificates without request examples', () => {

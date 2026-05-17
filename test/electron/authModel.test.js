@@ -67,6 +67,40 @@ test('shared auth model normalizes runtime auth values by type', () => {
     clientNonce: '0a4f113b',
     nonceCount: '00000005'
   });
+  assert.deepEqual(normalizeAuth({
+    type: 'oauth1',
+    signatureMethod: 'rsasha512',
+    addParamsToHeader: false,
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    callbackUrl: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    realm: 'postmeter',
+    includeBodyHash: 'true',
+    addEmptyParametersToSignature: 'true'
+  }), {
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    signatureMethod: 'RSA-SHA512',
+    addAuthDataTo: 'queryOrBody',
+    callback: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    version: '1.0',
+    realm: 'postmeter',
+    includeBodyHash: true,
+    addEmptyParamsToSign: true
+  });
 });
 
 test('shared auth model keeps persisted auth shallow for workspace compatibility', () => {
@@ -111,6 +145,21 @@ test('shared auth model maps runtime auth to renderer editor fields', () => {
     oauthScopes: '',
     oauthUserCode: 'ABCD-EFGH',
     oauthVerificationUri: 'https://example.test/device?code=ABCD-EFGH',
+    oauth1SignatureMethod: 'HMAC-SHA1',
+    oauth1ConsumerKey: '',
+    oauth1ConsumerSecret: '',
+    oauth1Token: '',
+    oauth1TokenSecret: '',
+    oauth1PrivateKey: '',
+    oauth1AddAuthDataTo: 'header',
+    oauth1Callback: '',
+    oauth1Verifier: '',
+    oauth1Timestamp: '',
+    oauth1Nonce: '',
+    oauth1Version: '1.0',
+    oauth1Realm: '',
+    oauth1IncludeBodyHash: false,
+    oauth1AddEmptyParamsToSign: false,
     digestUsername: '',
     digestPassword: '',
     digestDisableRetryingRequest: false,
@@ -164,6 +213,21 @@ test('shared auth model maps Digest auth to and from renderer editor fields', ()
     oauthScopes: '',
     oauthUserCode: '',
     oauthVerificationUri: '',
+    oauth1SignatureMethod: 'HMAC-SHA1',
+    oauth1ConsumerKey: '',
+    oauth1ConsumerSecret: '',
+    oauth1Token: '',
+    oauth1TokenSecret: '',
+    oauth1PrivateKey: '',
+    oauth1AddAuthDataTo: 'header',
+    oauth1Callback: '',
+    oauth1Verifier: '',
+    oauth1Timestamp: '',
+    oauth1Nonce: '',
+    oauth1Version: '1.0',
+    oauth1Realm: '',
+    oauth1IncludeBodyHash: false,
+    oauth1AddEmptyParamsToSign: false,
     digestUsername: 'ada',
     digestPassword: 'secret',
     digestDisableRetryingRequest: true,
@@ -205,6 +269,63 @@ test('shared auth model maps Digest auth to and from renderer editor fields', ()
     opaque: 'opaque-token',
     clientNonce: '0a4f113b',
     nonceCount: '00000005'
+  });
+});
+
+test('shared auth model maps OAuth 1.0 auth to and from renderer editor fields', () => {
+  assert.deepEqual(authEditorState({
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    signatureMethod: 'PLAINTEXT',
+    addAuthDataTo: 'queryOrBody',
+    callback: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    version: '1.0',
+    realm: 'postmeter',
+    includeBodyHash: true,
+    addEmptyParamsToSign: true
+  }).oauth1ConsumerKey, 'consumer');
+
+  assert.deepEqual(authFromEditorState({
+    type: 'oauth1',
+    oauth1SignatureMethod: 'PLAINTEXT',
+    oauth1ConsumerKey: 'consumer',
+    oauth1ConsumerSecret: 'consumer-secret',
+    oauth1Token: 'token',
+    oauth1TokenSecret: 'token-secret',
+    oauth1PrivateKey: 'private-key',
+    oauth1AddAuthDataTo: 'queryOrBody',
+    oauth1Callback: 'https://client.example.test/callback',
+    oauth1Verifier: 'verifier',
+    oauth1Timestamp: '1777291200',
+    oauth1Nonce: 'nonce',
+    oauth1Version: '1.0',
+    oauth1Realm: 'postmeter',
+    oauth1IncludeBodyHash: true,
+    oauth1AddEmptyParamsToSign: true
+  }), {
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    signatureMethod: 'PLAINTEXT',
+    addAuthDataTo: 'queryOrBody',
+    callback: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    version: '1.0',
+    realm: 'postmeter',
+    includeBodyHash: true,
+    addEmptyParamsToSign: true
   });
 });
 
