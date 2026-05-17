@@ -267,9 +267,13 @@ function validateAuth(auth = {}, environment) {
       requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
       requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
       requireResolved(normalized.clientSecret, environment, 'OAuth 2.0 client secret', errors);
+    } else if (normalized.grantType === 'passwordCredentials') {
+      requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
+      requireResolved(normalized.username, environment, 'OAuth 2.0 username', errors);
+      requireResolved(normalized.password, environment, 'OAuth 2.0 password', errors);
     } else if (normalized.grantType === 'deviceCode') {
       if (resolveEnvironmentValue(normalized.deviceCode, environment).trim()) {
-        requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
+        requireResolved(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
         requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
       } else {
         requireResolved(normalized.deviceAuthorizationUrl, environment, 'OAuth 2.0 device authorization URL', errors);
@@ -277,10 +281,14 @@ function validateAuth(auth = {}, environment) {
         requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
         errors.push('Start and complete the OAuth 2.0 device-code flow before sending this request.');
       }
+    } else if (normalized.grantType === 'implicit') {
+      requireResolved(normalized.authorizationUrl, environment, 'OAuth 2.0 authorization URL', errors);
+      requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
+      errors.push('Start and complete the OAuth 2.0 implicit flow before sending this request.');
     } else {
       const refreshToken = resolveEnvironmentValue(normalized.refreshToken, environment).trim();
       if (refreshToken) {
-        requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
+        requireResolved(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
       } else {
         requireResolved(normalized.authorizationUrl, environment, 'OAuth 2.0 authorization URL', errors);
         requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
@@ -373,12 +381,24 @@ async function maybeRefreshOAuthToken(auth = {}, environment, options = {}) {
   if (normalized.type !== 'oauth2') {
     return { auth: normalized, refreshed: false };
   }
+  if (normalized.autoRefreshToken === false) {
+    return { auth: normalized, refreshed: false };
+  }
   if (normalized.grantType === 'clientCredentials') {
     if (!shouldRequestClientCredentialsToken(normalized, environment, options.now)) {
       return { auth: normalized, refreshed: false };
     }
     return {
       auth: await requestOAuthClientCredentialsToken(normalized, environment, options),
+      refreshed: true
+    };
+  }
+  if (normalized.grantType === 'passwordCredentials') {
+    if (!shouldRequestPasswordCredentialsToken(normalized, environment, options.now)) {
+      return { auth: normalized, refreshed: false };
+    }
+    return {
+      auth: await requestOAuthPasswordCredentialsToken(normalized, environment, options),
       refreshed: true
     };
   }
@@ -412,32 +432,28 @@ async function refreshOAuthToken(auth = {}, environment, options = {}) {
     throw new Error('OAuth 2.0 auth is required for token refresh.');
   }
 
-  const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
+  const tokenUrl = requireResolvedValue(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const refreshToken = requireResolvedValue(normalized.refreshToken, environment, 'OAuth 2.0 refresh token');
   const url = parseTokenUrl(tokenUrl);
   const body = new URLSearchParams();
+  const headers = {};
   body.set('grant_type', 'refresh_token');
   body.set('refresh_token', refreshToken);
 
-  const clientId = resolveEnvironmentValue(normalized.clientId, environment).trim();
-  const clientSecret = resolveEnvironmentValue(normalized.clientSecret, environment);
   const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
-  if (clientId) {
-    body.set('client_id', clientId);
-  }
-  if (clientSecret) {
-    body.set('client_secret', clientSecret);
-  }
+  applyOAuth2ClientAuthentication(normalized, environment, body, headers);
   if (scopes) {
     body.set('scope', scopes);
   }
+  applyOAuth2RequestParams(normalized.refreshRequestParams, environment, body, headers);
 
-  const payload = await postOAuthTokenRequest(url, body, options, 'OAuth 2.0 token refresh');
+  const payload = await postOAuthTokenRequest(url, body, options, 'OAuth 2.0 token refresh', { headers });
 
   const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
   return normalizeAuth({
     ...normalized,
     tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
     accessToken: String(payload.access_token),
     refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
     expiresAt: expiresAtFromPayload(payload, options.now)
@@ -455,21 +471,59 @@ async function requestOAuthClientCredentialsToken(auth = {}, environment, option
 
   const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const clientId = requireResolvedValue(normalized.clientId, environment, 'OAuth 2.0 client ID');
-  const clientSecret = requireResolvedValue(normalized.clientSecret, environment, 'OAuth 2.0 client secret');
+  requireResolvedValue(normalized.clientSecret, environment, 'OAuth 2.0 client secret');
   const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
   const body = new URLSearchParams();
+  const headers = {};
   body.set('grant_type', 'client_credentials');
-  body.set('client_id', clientId);
-  body.set('client_secret', clientSecret);
+  applyOAuth2ClientAuthentication({ ...normalized, clientId }, environment, body, headers);
   if (scopes) {
     body.set('scope', scopes);
   }
+  applyOAuth2RequestParams(normalized.tokenRequestParams, environment, body, headers);
 
-  const payload = await postOAuthTokenRequest(parseTokenUrl(tokenUrl), body, options, 'OAuth 2.0 client credentials token request');
+  const payload = await postOAuthTokenRequest(parseTokenUrl(tokenUrl), body, options, 'OAuth 2.0 client credentials token request', { headers });
   const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
   return normalizeAuth({
     ...normalized,
     tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
+    accessToken: String(payload.access_token),
+    refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
+    expiresAt: expiresAtFromPayload(payload, options.now)
+  });
+}
+
+async function requestOAuthPasswordCredentialsToken(auth = {}, environment, options = {}) {
+  const normalized = normalizeAuth(auth);
+  if (normalized.type !== 'oauth2') {
+    throw new Error('OAuth 2.0 auth is required for password credentials token requests.');
+  }
+  if (normalized.grantType !== 'passwordCredentials') {
+    throw new Error('OAuth 2.0 password credentials grant is required for password credentials token requests.');
+  }
+
+  const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
+  const username = requireResolvedValue(normalized.username, environment, 'OAuth 2.0 username');
+  const password = requireResolvedValue(normalized.password, environment, 'OAuth 2.0 password');
+  const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
+  const body = new URLSearchParams();
+  const headers = {};
+  body.set('grant_type', 'password');
+  body.set('username', username);
+  body.set('password', password);
+  applyOAuth2ClientAuthentication(normalized, environment, body, headers);
+  if (scopes) {
+    body.set('scope', scopes);
+  }
+  applyOAuth2RequestParams(normalized.tokenRequestParams, environment, body, headers);
+
+  const payload = await postOAuthTokenRequest(parseTokenUrl(tokenUrl), body, options, 'OAuth 2.0 password credentials token request', { headers });
+  const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
+  return normalizeAuth({
+    ...normalized,
+    tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
     accessToken: String(payload.access_token),
     refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
     expiresAt: expiresAtFromPayload(payload, options.now)
@@ -481,7 +535,7 @@ function createOAuthPkceSession(auth = {}, environment, options = {}) {
   if (normalized.type !== 'oauth2') {
     throw new Error('OAuth 2.0 auth is required for authorization-code PKCE.');
   }
-  if (normalized.grantType !== 'authorizationCode') {
+  if (!isAuthorizationCodeGrant(normalized.grantType)) {
     throw new Error('OAuth 2.0 authorization-code grant is required for PKCE.');
   }
 
@@ -490,21 +544,32 @@ function createOAuthPkceSession(auth = {}, environment, options = {}) {
   const clientId = requireResolvedValue(normalized.clientId, environment, 'OAuth 2.0 client ID');
   const redirectUri = requireResolvedValue(options.redirectUri || normalized.redirectUri, environment, 'OAuth 2.0 redirect URI');
   const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
-  const state = options.state || randomBase64Url(OAUTH_PKCE_STATE_BYTES);
-  const codeVerifier = options.codeVerifier || randomBase64Url(OAUTH_PKCE_CODE_VERIFIER_BYTES);
-  validatePkceCodeVerifier(codeVerifier);
-  const codeChallenge = pkceChallengeForVerifier(codeVerifier);
+  const state = options.state || resolveEnvironmentValue(normalized.state, environment).trim() || randomBase64Url(OAUTH_PKCE_STATE_BYTES);
+  const usesPkce = normalized.grantType === 'authorizationCodePkce';
+  const codeVerifier = usesPkce
+    ? (options.codeVerifier || resolveEnvironmentValue(normalized.codeVerifier, environment).trim() || randomBase64Url(OAUTH_PKCE_CODE_VERIFIER_BYTES))
+    : '';
+  const codeChallengeMethod = usesPkce && normalized.codeChallengeMethod === 'plain' ? 'plain' : 'S256';
+  const codeChallenge = usesPkce
+    ? (codeChallengeMethod === 'plain' ? codeVerifier : pkceChallengeForVerifier(codeVerifier))
+    : '';
+  if (usesPkce) {
+    validatePkceCodeVerifier(codeVerifier);
+  }
 
   const url = parseTokenUrl(authorizationUrl, 'OAuth 2.0 authorization URL');
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('code_challenge', codeChallenge);
-  url.searchParams.set('code_challenge_method', 'S256');
   url.searchParams.set('state', state);
+  if (usesPkce) {
+    url.searchParams.set('code_challenge', codeChallenge);
+    url.searchParams.set('code_challenge_method', codeChallengeMethod);
+  }
   if (scopes) {
     url.searchParams.set('scope', scopes);
   }
+  applyOAuth2AuthRequestParams(normalized.authRequestParams, environment, url);
 
   return {
     authorizationUrl: url.toString(),
@@ -513,8 +578,11 @@ function createOAuthPkceSession(auth = {}, environment, options = {}) {
     clientId,
     clientSecret: resolveEnvironmentValue(normalized.clientSecret, environment),
     scopes,
+    clientAuthentication: normalized.clientAuthentication,
+    tokenRequestParams: normalized.tokenRequestParams,
     state,
     codeVerifier,
+    codeChallengeMethod: usesPkce ? codeChallengeMethod : '',
     codeChallenge
   };
 }
@@ -546,29 +614,38 @@ async function exchangeOAuthAuthorizationCode(auth = {}, session, callbackUrl, e
   const tokenUrl = requireResolvedValue(session.tokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const clientId = requireResolvedValue(session.clientId || normalized.clientId, environment, 'OAuth 2.0 client ID');
   const redirectUri = requireResolvedValue(session.redirectUri || normalized.redirectUri, environment, 'OAuth 2.0 redirect URI');
-  const codeVerifier = requireResolvedValue(session.codeVerifier, environment, 'OAuth 2.0 PKCE code verifier');
-  validatePkceCodeVerifier(codeVerifier);
+  const codeVerifier = resolveEnvironmentValue(session.codeVerifier, environment).trim();
+  if (codeVerifier) {
+    validatePkceCodeVerifier(codeVerifier);
+  }
   const body = new URLSearchParams();
+  const headers = {};
   body.set('grant_type', 'authorization_code');
   body.set('code', code);
   body.set('redirect_uri', redirectUri);
-  body.set('client_id', clientId);
-  body.set('code_verifier', codeVerifier);
-  const clientSecret = resolveEnvironmentValue(session.clientSecret || normalized.clientSecret, environment);
-  if (clientSecret) {
-    body.set('client_secret', clientSecret);
+  if (codeVerifier) {
+    body.set('code_verifier', codeVerifier);
   }
+  applyOAuth2ClientAuthentication({
+    ...normalized,
+    clientAuthentication: session.clientAuthentication || normalized.clientAuthentication,
+    clientId,
+    clientSecret: session.clientSecret || normalized.clientSecret
+  }, environment, body, headers);
+  applyOAuth2RequestParams(session.tokenRequestParams || normalized.tokenRequestParams, environment, body, headers);
 
   const payload = await postOAuthTokenRequest(
     parseTokenUrl(tokenUrl),
     body,
     options,
-    'OAuth 2.0 authorization-code token request'
+    'OAuth 2.0 authorization-code token request',
+    { headers }
   );
   const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
   return normalizeAuth({
     ...normalized,
     tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
     accessToken: String(payload.access_token),
     refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
     expiresAt: expiresAtFromPayload(payload, options.now),
@@ -593,6 +670,7 @@ async function requestOAuthDeviceAuthorization(auth = {}, environment, options =
   if (scopes) {
     body.set('scope', scopes);
   }
+  applyOAuth2RequestParams(normalized.authRequestParams, environment, body, {});
 
   const payload = await postOAuthTokenRequest(
     parseTokenUrl(deviceAuthorizationUrl, 'OAuth 2.0 device authorization URL'),
@@ -628,10 +706,9 @@ async function pollOAuthDeviceToken(auth = {}, environment, options = {}) {
     throw new Error('OAuth 2.0 device-code auth is required for device token polling.');
   }
 
-  const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
+  const tokenUrl = requireResolvedValue(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const deviceCode = requireResolvedValue(normalized.deviceCode, environment, 'OAuth 2.0 device code');
   const clientId = requireResolvedValue(normalized.clientId, environment, 'OAuth 2.0 client ID');
-  const clientSecret = resolveEnvironmentValue(normalized.clientSecret, environment);
   let intervalMillis = positiveNumberOrDefault(normalized.devicePollIntervalSeconds, OAUTH_DEVICE_DEFAULT_INTERVAL_SECONDS) * 1000;
   const now = Number(options.now || Date.now());
   const deadline = deviceCodeDeadlineMillis(normalized, now);
@@ -644,24 +721,25 @@ async function pollOAuthDeviceToken(auth = {}, environment, options = {}) {
       nextAttemptAt: new Date(Date.now() + intervalMillis).toISOString()
     });
     const body = new URLSearchParams();
+    const headers = {};
     body.set('grant_type', OAUTH_DEVICE_GRANT_TYPE);
     body.set('device_code', deviceCode);
-    body.set('client_id', clientId);
-    if (clientSecret) {
-      body.set('client_secret', clientSecret);
-    }
+    applyOAuth2ClientAuthentication({ ...normalized, clientId }, environment, body, headers);
+    applyOAuth2RequestParams(normalized.tokenRequestParams, environment, body, headers);
 
     try {
       const payload = await postOAuthTokenRequest(
         parseTokenUrl(tokenUrl),
         body,
         fetchOptions,
-        'OAuth 2.0 device token request'
+        'OAuth 2.0 device token request',
+        { headers }
       );
       const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
       return normalizeAuth({
         ...normalized,
         tokenType,
+        headerPrefix: normalized.headerPrefix || tokenType,
         accessToken: String(payload.access_token),
         refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
         expiresAt: expiresAtFromPayload(payload, Date.now()),
@@ -696,7 +774,11 @@ async function pollOAuthDeviceToken(auth = {}, environment, options = {}) {
 }
 
 function shouldRefreshOAuthToken(auth, environment, now = Date.now()) {
-  if (!resolveEnvironmentValue(auth.refreshToken, environment).trim() || !resolveEnvironmentValue(auth.tokenUrl, environment).trim()) {
+  if (auth.autoRefreshToken === false) {
+    return false;
+  }
+  if (!resolveEnvironmentValue(auth.refreshToken, environment).trim()
+    || !resolveEnvironmentValue(auth.refreshTokenUrl || auth.tokenUrl, environment).trim()) {
     return false;
   }
   if (!resolveEnvironmentValue(auth.accessToken, environment).trim()) {
@@ -709,8 +791,28 @@ function shouldRefreshOAuthToken(auth, environment, now = Date.now()) {
   return Number.isFinite(expiresAtMillis) && expiresAtMillis <= Number(now) + OAUTH_REFRESH_WINDOW_MILLIS;
 }
 
-function shouldPollOAuthDeviceToken(auth, environment, now = Date.now()) {
+function shouldRequestPasswordCredentialsToken(auth, environment, now = Date.now()) {
   if (!resolveEnvironmentValue(auth.tokenUrl, environment).trim()
+    || !resolveEnvironmentValue(auth.username, environment).trim()
+    || !resolveEnvironmentValue(auth.password, environment).trim()) {
+    return false;
+  }
+  if (!resolveEnvironmentValue(auth.accessToken, environment).trim()) {
+    return true;
+  }
+  return tokenExpiresSoon(auth.expiresAt, now);
+}
+
+function tokenExpiresSoon(expiresAt, now = Date.now()) {
+  if (!expiresAt) {
+    return false;
+  }
+  const expiresAtMillis = Date.parse(expiresAt);
+  return Number.isFinite(expiresAtMillis) && expiresAtMillis <= Number(now) + OAUTH_REFRESH_WINDOW_MILLIS;
+}
+
+function shouldPollOAuthDeviceToken(auth, environment, now = Date.now()) {
+  if (!resolveEnvironmentValue(auth.refreshTokenUrl || auth.tokenUrl, environment).trim()
     || !resolveEnvironmentValue(auth.clientId, environment).trim()
     || !resolveEnvironmentValue(auth.deviceCode, environment).trim()) {
     return false;
@@ -720,6 +822,10 @@ function shouldPollOAuthDeviceToken(auth, environment, now = Date.now()) {
   }
   const deadline = deviceCodeDeadlineMillis(auth, Number(now));
   return deadline > Number(now);
+}
+
+function isAuthorizationCodeGrant(grantType) {
+  return grantType === 'authorizationCode' || grantType === 'authorizationCodePkce';
 }
 
 function shouldRequestClientCredentialsToken(auth, environment, now = Date.now()) {
@@ -734,8 +840,7 @@ function shouldRequestClientCredentialsToken(auth, environment, now = Date.now()
   if (!auth.expiresAt) {
     return false;
   }
-  const expiresAtMillis = Date.parse(auth.expiresAt);
-  return Number.isFinite(expiresAtMillis) && expiresAtMillis <= Number(now) + OAUTH_REFRESH_WINDOW_MILLIS;
+  return tokenExpiresSoon(auth.expiresAt, now);
 }
 
 function applyAuth(request, environment, target) {
@@ -761,7 +866,12 @@ function applyAuth(request, environment, target) {
     target.headers.Cookie = resolveEnvironmentValue(auth.value, environment);
   } else if (auth.type === 'oauth2') {
     const accessToken = resolveEnvironmentValue(auth.accessToken, environment);
-    target.headers.Authorization = `${auth.tokenType} ${accessToken}`;
+    if (auth.addAuthDataTo === 'query') {
+      target.url.searchParams.set('access_token', accessToken);
+    } else {
+      const headerPrefix = resolveEnvironmentValue(auth.headerPrefix || auth.tokenType, environment).trim();
+      target.headers.Authorization = headerPrefix ? `${headerPrefix} ${accessToken}` : accessToken;
+    }
   } else if (auth.type === 'digest') {
     if (auth.realm && auth.nonce) {
       setHeader(target.headers, 'Authorization', buildDigestAuthorizationHeader(auth, environment, target));
@@ -1638,6 +1748,49 @@ function parseCallbackUrl(value) {
   }
 }
 
+function applyOAuth2ClientAuthentication(auth, environment, body, headers) {
+  const clientId = resolveEnvironmentValue(auth.clientId, environment).trim();
+  const clientSecret = resolveEnvironmentValue(auth.clientSecret, environment);
+  if (!clientId) {
+    return;
+  }
+  if (auth.clientAuthentication === 'basic' && clientSecret) {
+    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`, 'utf8').toString('base64')}`;
+    return;
+  }
+  body.set('client_id', clientId);
+  if (clientSecret) {
+    body.set('client_secret', clientSecret);
+  }
+}
+
+function applyOAuth2AuthRequestParams(params, environment, url) {
+  for (const param of oauth2RequestParams(params, environment)) {
+    url.searchParams.set(param.key, param.value);
+  }
+}
+
+function applyOAuth2RequestParams(params, environment, body, headers) {
+  for (const param of oauth2RequestParams(params, environment)) {
+    if (param.sendIn === 'header') {
+      headers[param.key] = param.value;
+    } else {
+      body.set(param.key, param.value);
+    }
+  }
+}
+
+function oauth2RequestParams(params, environment) {
+  return (Array.isArray(params) ? params : [])
+    .filter((param) => param && param.enabled !== false)
+    .map((param) => ({
+      key: resolveEnvironmentValue(param.key, environment).trim(),
+      value: resolveEnvironmentValue(param.value, environment),
+      sendIn: String(param.sendIn || 'body').toLowerCase() === 'header' ? 'header' : 'body'
+    }))
+    .filter((param) => param.key);
+}
+
 async function postOAuthTokenRequest(url, body, options, label, requestOptions = {}) {
   const fetchImpl = options.fetchImpl || fetch;
   const response = await fetchImpl(url, {
@@ -1645,7 +1798,8 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
     redirect: 'manual',
     headers: {
       Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...(requestOptions.headers || {})
     },
     body,
     signal: options.signal
@@ -2017,8 +2171,10 @@ module.exports = {
   refreshOAuthToken,
   requestOAuthClientCredentialsToken,
   requestOAuthDeviceAuthorization,
+  requestOAuthPasswordCredentialsToken,
   shouldPollOAuthDeviceToken,
   shouldRequestClientCredentialsToken,
+  shouldRequestPasswordCredentialsToken,
   shouldRefreshOAuthToken,
   validateAuth
 };

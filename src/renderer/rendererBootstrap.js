@@ -10,15 +10,37 @@
     'authCookieValueInput',
     'authOauthGrantTypeSelect',
     'authOauthTokenTypeSelect',
+    'authOauthHeaderPrefixInput',
+    'authOauthTokenNameInput',
+    'authOauthAddAuthDataToSelect',
     'authOauthAccessTokenInput',
     'authOauthRefreshTokenInput',
+    'authOauthAutoRefreshTokenInput',
+    'authOauthShareTokenInput',
     'authOauthAuthorizationUrlInput',
+    'authOauthCallbackUrlInput',
+    'authOauthAuthorizeUsingBrowserInput',
     'authOauthRedirectStrategySelect',
     'authOauthDeviceAuthorizationUrlInput',
     'authOauthTokenUrlInput',
+    'authOauthRefreshTokenUrlInput',
     'authOauthClientIdInput',
     'authOauthClientSecretInput',
+    'authOauthUsernameInput',
+    'authOauthPasswordInput',
     'authOauthScopesInput',
+    'authOauthStateInput',
+    'authOauthCodeChallengeMethodSelect',
+    'authOauthCodeVerifierInput',
+    'authOauthClientAuthenticationSelect',
+    'authOauthAuthRequestParamKeyInput',
+    'authOauthAuthRequestParamValueInput',
+    'authOauthTokenRequestParamKeyInput',
+    'authOauthTokenRequestParamValueInput',
+    'authOauthTokenRequestParamSendInSelect',
+    'authOauthRefreshRequestParamKeyInput',
+    'authOauthRefreshRequestParamValueInput',
+    'authOauthRefreshRequestParamSendInSelect',
     'authOauthUserCodeInput',
     'authOauthVerificationUriInput',
     'authOauth1SignatureMethodSelect',
@@ -567,12 +589,18 @@
     if (id === 'authTypeSelect') {
       options.onAuthTypeChange?.(input.value);
     }
+    if (id === 'authOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
+    }
     options.onAuthInput?.();
   }
 
   function handlePerformanceAuthEditorInput(id, input, options) {
     if (id === 'performanceAuthTypeSelect') {
       options.onPerformanceAuthTypeChange?.(input.value);
+    }
+    if (id === 'performanceAuthOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
     }
     options.onPerformanceAuthInput?.();
   }
@@ -581,6 +609,9 @@
     if (id === 'collectionAuthTypeSelect') {
       options.onCollectionAuthTypeChange?.(input.value);
     }
+    if (id === 'collectionAuthOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
+    }
     options.onCollectionAuthInput?.();
   }
 
@@ -588,7 +619,17 @@
     if (id === 'folderAuthTypeSelect') {
       options.onFolderAuthTypeChange?.(input.value);
     }
+    if (id === 'folderAuthOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
+    }
     options.onFolderAuthInput?.();
+  }
+
+  function syncOauth2GrantDataset(input) {
+    const section = input?.closest?.('[data-auth-section="oauth2"]');
+    if (section) {
+      section.dataset.oauth2GrantType = input.value || 'authorizationCode';
+    }
   }
 
   function bindToolbarMenus(doc = document, options = {}) {

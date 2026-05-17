@@ -65,6 +65,37 @@ function assertOauth1AdvancedMarkup(source, ids) {
   assert.match(advancedSource, /Add empty parameters to signature/);
 }
 
+function assertOauth2AdvancedMarkup(source, ids) {
+  const startId = ids.start || ids.grantType;
+  const grantIndex = source.indexOf(`id="${startId}"`);
+  assert.notEqual(grantIndex, -1, `Expected ${startId} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', grantIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.grantType} OAuth 2.0 advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.grantType} OAuth 2.0 advanced disclosure to close.`);
+
+  const visibleSource = source.slice(grantIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the OAuth 2.0 advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /Refresh Token URL/);
+  assert.match(advancedSource, /Auth Request/);
+  assert.match(advancedSource, /Token Request/);
+  assert.match(advancedSource, /Refresh Request/);
+  if (ids.advanced.includes('clearOauthCookiesButton')) {
+    assert.match(advancedSource, /Clear cookies/);
+  }
+}
+
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
   const windowListeners = new Map();
@@ -184,7 +215,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerAuthRefreshTokenManageRequestButton"[^>]*>Manage<\/button>/);
   assert.match(indexSource, /id="runnerAuthRefreshTokenAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
   assert.match(indexSource, /id="runnerAuthRefreshTokenRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
-  assert.match(indexSource, /class="auth-refresh-refresh-token" data-auth-refresh-types="bearer oauth2 cookie"/);
+  assert.match(indexSource, /class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie"/);
   assert.match(indexSource, /id="performanceAuthRefreshManageRequestButton"[^>]*>Manage<\/button>/);
   assert.match(indexSource, /id="performanceAuthRefreshAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
   assert.match(indexSource, /id="performanceAuthRefreshRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
@@ -213,6 +244,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /buildAuthRefreshAutoDetectCandidates\(response\)/);
   assert.match(rendererSource, /function confirmAuthRefreshAutoDetectModal\(\)/);
   assert.match(rendererSource, /apiKey:\s*\{\s*label:\s*'API key',\s*controlName:\s*'ApiKey'\s*\}/);
+  assert.doesNotMatch(rendererSource, /oauth2:\s*\{\s*label:\s*'OAuth access token'/);
   assert.match(rendererSource, /aws:\s*\{\s*label:\s*'AWS access key ID',\s*controlName:\s*'AwsAccessKey'\s*\}/);
   assert.match(rendererSource, /custom:\s*\{\s*label:\s*'custom header value',\s*controlName:\s*'Custom'\s*\}/);
   assert.match(rendererSource, /REFRESHING_AUTH_API_KEY_LABEL = 'Use Refreshing API Key'/);
@@ -222,10 +254,42 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /Refresh token request/);
   assert.match(indexSource, /id="runnerAuthRefreshTypeSelect"[\s\S]*Bearer \/ JWT[\s\S]*AWS Temporary Credentials/);
   assert.match(indexSource, /id="performanceAuthRefreshTypeSelect"[\s\S]*API Key[\s\S]*Custom Header/);
+  assert.doesNotMatch(indexSource, /OAuth 2\.0 Request Auth/);
   assert.equal(selectOptionValues(indexSource, 'authTypeSelect').includes('cookie'), false);
   assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('cookie'), false);
+  assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshTypeSelect'), ['bearer', 'apiKey', 'cookie', 'aws', 'custom']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshTypeSelect'), ['bearer', 'apiKey', 'cookie', 'aws', 'custom']);
+  assert.doesNotMatch(indexSource, /<option value="oauth2">OAuth 2<\/option>/);
   assert.equal(selectOptionValues(indexSource, 'runnerAuthRefreshTypeSelect').includes('cookie'), true);
   assert.equal(selectOptionValues(indexSource, 'performanceAuthRefreshTypeSelect').includes('cookie'), true);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthGrantTypeSelect'), [
+    'authorizationCode',
+    'authorizationCodePkce',
+    'implicit',
+    'passwordCredentials',
+    'clientCredentials'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthGrantTypeSelect'), [
+    'authorizationCode',
+    'authorizationCodePkce',
+    'implicit',
+    'passwordCredentials',
+    'clientCredentials'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthClientAuthenticationSelect'), ['basic', 'body']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthClientAuthenticationSelect'), ['basic', 'body']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthCodeChallengeMethodSelect'), ['S256', 'plain']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthCodeChallengeMethodSelect'), ['S256', 'plain']);
+  assert.doesNotMatch(indexSource, />Device Authorization URL</);
+  assert.doesNotMatch(indexSource, />Redirect Strategy</);
+  assert.doesNotMatch(indexSource, />User Code</);
+  assert.doesNotMatch(indexSource, />Verification URL</);
+  assert.doesNotMatch(indexSource, />Start Device Flow</);
+  assert.doesNotMatch(indexSource, />Cancel OAuth</);
+  assert.doesNotMatch(indexSource, /id="startDeviceFlowButton"/);
+  assert.doesNotMatch(indexSource, /id="cancelOauthFlowButton"/);
   assert.deepEqual(selectOptionValues(indexSource, 'authDigestAlgorithmSelect'), [
     'MD5',
     'MD5-sess',
@@ -262,6 +326,82 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   ]);
   assert.deepEqual(selectOptionValues(indexSource, 'authOauth1AddAuthDataToSelect'), ['header', 'queryOrBody']);
   assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauth1AddAuthDataToSelect'), ['header', 'queryOrBody']);
+  assertOauth2AdvancedMarkup(indexSource, {
+    start: 'authOauthTokenNameInput',
+    grantType: 'authOauthGrantTypeSelect',
+    main: [
+      'authOauthTokenNameInput',
+      'authOauthGrantTypeSelect',
+      'authOauthCallbackUrlInput',
+      'authOauthAuthorizeUsingBrowserInput',
+      'authOauthAuthorizationUrlInput',
+      'authOauthTokenUrlInput',
+      'authOauthClientIdInput',
+      'authOauthClientSecretInput',
+      'authOauthUsernameInput',
+      'authOauthPasswordInput',
+      'authOauthScopesInput',
+      'authOauthStateInput',
+      'authOauthCodeChallengeMethodSelect',
+      'authOauthCodeVerifierInput',
+      'authOauthClientAuthenticationSelect'
+    ],
+    advanced: [
+      'authOauthRefreshTokenUrlInput',
+      'authOauthAuthRequestParamKeyInput',
+      'authOauthAuthRequestParamValueInput',
+      'authOauthTokenRequestParamKeyInput',
+      'authOauthTokenRequestParamValueInput',
+      'authOauthTokenRequestParamSendInSelect',
+      'authOauthRefreshRequestParamKeyInput',
+      'authOauthRefreshRequestParamValueInput',
+      'authOauthRefreshRequestParamSendInSelect',
+      'clearOauthCookiesButton'
+    ]
+  });
+  assert.match(indexSource, /id="authOauthRefreshTokenInput" type="hidden"/);
+  assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="authOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="authOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
+  assert.match(indexSource, /id="authOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);
+  assertOauth2AdvancedMarkup(indexSource, {
+    start: 'performanceAuthOauthTokenNameInput',
+    grantType: 'performanceAuthOauthGrantTypeSelect',
+    main: [
+      'performanceAuthOauthTokenNameInput',
+      'performanceAuthOauthGrantTypeSelect',
+      'performanceAuthOauthCallbackUrlInput',
+      'performanceAuthOauthAuthorizeUsingBrowserInput',
+      'performanceAuthOauthAuthorizationUrlInput',
+      'performanceAuthOauthTokenUrlInput',
+      'performanceAuthOauthClientIdInput',
+      'performanceAuthOauthClientSecretInput',
+      'performanceAuthOauthUsernameInput',
+      'performanceAuthOauthPasswordInput',
+      'performanceAuthOauthScopesInput',
+      'performanceAuthOauthStateInput',
+      'performanceAuthOauthCodeChallengeMethodSelect',
+      'performanceAuthOauthCodeVerifierInput',
+      'performanceAuthOauthClientAuthenticationSelect'
+    ],
+    advanced: [
+      'performanceAuthOauthRefreshTokenUrlInput',
+      'performanceAuthOauthAuthRequestParamKeyInput',
+      'performanceAuthOauthAuthRequestParamValueInput',
+      'performanceAuthOauthTokenRequestParamKeyInput',
+      'performanceAuthOauthTokenRequestParamValueInput',
+      'performanceAuthOauthTokenRequestParamSendInSelect',
+      'performanceAuthOauthRefreshRequestParamKeyInput',
+      'performanceAuthOauthRefreshRequestParamValueInput',
+      'performanceAuthOauthRefreshRequestParamSendInSelect'
+    ]
+  });
+  assert.match(indexSource, /id="performanceAuthOauthRefreshTokenInput" type="hidden"/);
+  assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="performanceAuthOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="performanceAuthOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
+  assert.match(indexSource, /id="performanceAuthOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);
+  assert.match(editorPanelsSource, /\[data-oauth2-grant-field\]\s*\{/);
+  assert.match(editorPanelsSource, /data-oauth2-grant-type="passwordCredentials"/);
+  assert.match(editorPanelsSource, /data-oauth2-grant-type="authorizationCodePkce"/);
   assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="oauth1"\]:not\(\[data-oauth1-signature-kind="rsa"\]\) \[data-oauth1-mode="rsa"\]/);
   assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="oauth1"\]\[data-oauth1-signature-kind="rsa"\] \[data-oauth1-mode="shared"\]/);
   assert.match(indexSource, /data-oauth1-mode="shared"[\s\S]*id="authOauth1ConsumerSecretInput"/);

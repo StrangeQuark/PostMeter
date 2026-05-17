@@ -37,7 +37,7 @@ const API_KEY_LOCATIONS = ['header', 'query'];
 const AUTH_REFRESH_MODES = ['auto', 'lifetime', 'interval'];
 const AUTH_REFRESH_SCOPES = ['environment', 'collection', 'globals'];
 const AUTH_REFRESH_FAILURE_POLICIES = ['abort', 'continue'];
-const AUTH_REFRESH_TYPES = ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'];
+const AUTH_REFRESH_TYPES = ['bearer', 'apiKey', 'cookie', 'aws', 'custom'];
 const AUTH_REFRESH_OUTPUT_SOURCES = ['body', 'rawBody', 'header', 'cookie'];
 const AUTH_REFRESH_OUTPUT_SLOTS = [
   'accessToken',
@@ -50,8 +50,18 @@ const AUTH_REFRESH_OUTPUT_SLOTS = [
   'custom'
 ];
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
-const OAUTH2_GRANT_TYPES = ['authorizationCode', 'clientCredentials', 'deviceCode'];
+const OAUTH2_GRANT_TYPES = [
+  'authorizationCode',
+  'authorizationCodePkce',
+  'implicit',
+  'passwordCredentials',
+  'clientCredentials',
+  'deviceCode'
+];
 const OAUTH2_REDIRECT_STRATEGIES = ['loopback', 'customScheme'];
+const OAUTH2_CODE_CHALLENGE_METHODS = ['S256', 'plain'];
+const OAUTH2_ADD_AUTH_DATA_TO = ['header', 'query'];
+const OAUTH2_CLIENT_AUTHENTICATION = ['basic', 'body'];
 const OAUTH1_SIGNATURE_METHODS = [
   'HMAC-SHA1',
   'HMAC-SHA256',
@@ -62,6 +72,7 @@ const OAUTH1_SIGNATURE_METHODS = [
   'PLAINTEXT'
 ];
 const OAUTH1_ADD_AUTH_DATA_TO = ['header', 'queryOrBody'];
+const AUTH_ADD_AUTH_DATA_TO = ['header', 'query', 'queryOrBody'];
 const OAUTH_PROGRESS_TYPES = ['pkce', 'device'];
 const OAUTH_PROGRESS_STATUSES = [
   'starting',
@@ -145,9 +156,13 @@ const SCHEMA_ENUMS = {
   httpMethods: HTTP_METHODS,
   interfaceFontValues: INTERFACE_FONT_VALUES,
   oauth2GrantTypes: OAUTH2_GRANT_TYPES,
+  oauth2CodeChallengeMethods: OAUTH2_CODE_CHALLENGE_METHODS,
   oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
+  oauth2AddAuthDataTo: OAUTH2_ADD_AUTH_DATA_TO,
+  oauth2ClientAuthentication: OAUTH2_CLIENT_AUTHENTICATION,
   oauth1AddAuthDataTo: OAUTH1_ADD_AUTH_DATA_TO,
+  authAddAuthDataTo: AUTH_ADD_AUTH_DATA_TO,
   oauth1SignatureMethods: OAUTH1_SIGNATURE_METHODS,
   oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
   oauthProgressTypes: OAUTH_PROGRESS_TYPES,
@@ -493,13 +508,23 @@ const FIELD_SCHEMAS = {
     location: { type: 'string', limit: 'tiny', enum: 'apiKeyLocations', optional: true },
     accessToken: { type: 'string', limit: 'value', optional: true },
     refreshToken: { type: 'string', limit: 'value', optional: true },
+    autoRefreshToken: { type: 'boolean', optional: true },
+    shareToken: { type: 'boolean', optional: true },
+    tokenName: { type: 'string', limit: 'name', optional: true },
+    headerPrefix: { type: 'string', limit: 'short', optional: true },
     tokenType: { type: 'string', limit: 'tiny', enum: 'oauth2TokenTypes', optional: true },
     tokenUrl: { type: 'string', limit: 'value', optional: true },
+    refreshTokenUrl: { type: 'string', limit: 'value', optional: true },
     authorizationUrl: { type: 'string', limit: 'value', optional: true },
     deviceAuthorizationUrl: { type: 'string', limit: 'value', optional: true },
     clientId: { type: 'string', limit: 'value', optional: true },
     clientSecret: { type: 'string', limit: 'value', optional: true },
     scopes: { type: 'string', limit: 'value', optional: true },
+    state: { type: 'string', limit: 'value', optional: true },
+    codeChallengeMethod: { type: 'string', limit: 'short', enum: 'oauth2CodeChallengeMethods', optional: true },
+    codeVerifier: { type: 'string', limit: 'value', optional: true },
+    authorizeUsingBrowser: { type: 'boolean', optional: true },
+    clientAuthentication: { type: 'string', limit: 'short', enum: 'oauth2ClientAuthentication', optional: true },
     grantType: { type: 'string', limit: 'short', enum: 'oauth2GrantTypes', optional: true },
     redirectStrategy: { type: 'string', limit: 'short', enum: 'oauth2RedirectStrategies', optional: true },
     redirectUri: { type: 'string', limit: 'value', optional: true },
@@ -536,7 +561,7 @@ const FIELD_SCHEMAS = {
     service: { type: 'string', limit: 'value', optional: true },
     sessionToken: { type: 'string', limit: 'value', optional: true },
     addAuthDataToQuery: { type: 'boolean', optional: true },
-    addAuthDataTo: { type: 'string', limit: 'short', enum: 'oauth1AddAuthDataTo', optional: true },
+    addAuthDataTo: { type: 'string', limit: 'short', enum: 'authAddAuthDataTo', optional: true },
     consumerKey: { type: 'string', limit: 'value', optional: true },
     consumerSecret: { type: 'string', limit: 'value', optional: true },
     tokenSecret: { type: 'string', limit: 'value', optional: true },
@@ -560,7 +585,6 @@ const FIELD_SCHEMAS = {
     keyId: { type: 'string', limit: 'value', optional: true },
     expiresIn: { type: 'string', limit: 'short', optional: true },
     claims: { type: 'string', limit: 'value', optional: true },
-    headerPrefix: { type: 'string', limit: 'short', optional: true },
     addTokenTo: { type: 'string', limit: 'short', optional: true },
     queryParamName: { type: 'string', limit: 'short', optional: true }
   }
@@ -587,8 +611,12 @@ const payloadSchemas = {
     apiKeyLocations: API_KEY_LOCATIONS,
     oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
     oauth2GrantTypes: OAUTH2_GRANT_TYPES,
+    oauth2CodeChallengeMethods: OAUTH2_CODE_CHALLENGE_METHODS,
     oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
+    oauth2AddAuthDataTo: OAUTH2_ADD_AUTH_DATA_TO,
+    oauth2ClientAuthentication: OAUTH2_CLIENT_AUTHENTICATION,
     oauth1AddAuthDataTo: OAUTH1_ADD_AUTH_DATA_TO,
+    authAddAuthDataTo: AUTH_ADD_AUTH_DATA_TO,
     oauth1SignatureMethods: OAUTH1_SIGNATURE_METHODS,
     oauthProgressTypes: OAUTH_PROGRESS_TYPES,
     oauthProgressStatuses: OAUTH_PROGRESS_STATUSES
@@ -688,9 +716,13 @@ const exported = {
   INTERFACE_FONT_VALUES,
   LIMITS,
   OAUTH2_GRANT_TYPES,
+  OAUTH2_CODE_CHALLENGE_METHODS,
+  OAUTH2_ADD_AUTH_DATA_TO,
+  OAUTH2_CLIENT_AUTHENTICATION,
   OAUTH2_REDIRECT_STRATEGIES,
   OAUTH2_TOKEN_TYPES,
   OAUTH1_ADD_AUTH_DATA_TO,
+  AUTH_ADD_AUTH_DATA_TO,
   OAUTH1_SIGNATURE_METHODS,
   OAUTH_PROGRESS_STATUSES,
   OAUTH_PROGRESS_TYPES,

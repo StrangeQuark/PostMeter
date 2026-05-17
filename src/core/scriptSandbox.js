@@ -1598,13 +1598,32 @@ function normalizePmSendRequestAuth(auth, options = {}) {
     return {
       type: 'oauth2',
       tokenType: authField(source, 'tokenType') || source.tokenType || 'Bearer',
+      headerPrefix: authField(source, 'headerPrefix') || source.headerPrefix || source.tokenType || 'Bearer',
+      tokenName: authField(source, 'tokenName') || source.tokenName || '',
+      addAuthDataTo: authField(source, 'addTokenTo') || source.addAuthDataTo || source.addTokenTo || 'header',
       accessToken: authField(source, 'accessToken') || source.accessToken || source.token || '',
       refreshToken: authField(source, 'refreshToken') || source.refreshToken || '',
+      autoRefreshToken: authField(source, 'autoRefreshToken')
+        ? boolAuthField(source, 'autoRefreshToken')
+        : (source.autoRefreshToken == null ? true : source.autoRefreshToken === true || String(source.autoRefreshToken).trim().toLowerCase() === 'true'),
+      shareToken: boolAuthField(source, 'shareToken') || source.shareToken === true,
       authorizationUrl: authField(source, 'authUrl') || source.authorizationUrl || '',
       tokenUrl: authField(source, 'accessTokenUrl') || source.tokenUrl || '',
+      refreshTokenUrl: authField(source, 'refreshTokenUrl') || source.refreshTokenUrl || '',
+      redirectUri: authField(source, 'callbackUrl') || source.redirectUri || '',
       clientId: authField(source, 'clientId') || source.clientId || '',
       clientSecret: authField(source, 'clientSecret') || source.clientSecret || '',
+      username: authField(source, 'username') || source.username || '',
+      password: authField(source, 'password') || source.password || '',
       scopes: authField(source, 'scope') || source.scopes || '',
+      state: authField(source, 'state') || source.state || '',
+      codeChallengeMethod: authField(source, 'codeChallengeMethod') || source.codeChallengeMethod || '',
+      codeVerifier: authField(source, 'codeVerifier') || source.codeVerifier || '',
+      authorizeUsingBrowser: source.authorizeUsingBrowser === true,
+      clientAuthentication: authField(source, 'clientAuthentication') || source.clientAuthentication || '',
+      authRequestParams: Array.isArray(source.authRequestParams) ? source.authRequestParams : [],
+      tokenRequestParams: Array.isArray(source.tokenRequestParams) ? source.tokenRequestParams : [],
+      refreshRequestParams: Array.isArray(source.refreshRequestParams) ? source.refreshRequestParams : [],
       grantType: postmanOauthGrantType(authField(source, 'grant_type') || source.grantType)
     };
   }
@@ -1811,11 +1830,20 @@ function oauth1AddAuthDataToFromScriptAuth(auth) {
 }
 
 function postmanOauthGrantType(value) {
-  const grantType = String(value || '').toLowerCase();
-  if (grantType === 'client_credentials' || grantType === 'clientcredentials') {
+  const grantType = String(value || '').toLowerCase().replace(/[\s_/-]+/g, '');
+  if (grantType === 'clientcredentials') {
     return 'clientCredentials';
   }
-  if (grantType === 'device_code' || grantType === 'devicecode') {
+  if (grantType === 'passwordcredentials' || grantType === 'password') {
+    return 'passwordCredentials';
+  }
+  if (grantType === 'authorizationcodewithpkce' || grantType === 'authorizationcodepkce') {
+    return 'authorizationCodePkce';
+  }
+  if (grantType === 'implicit') {
+    return 'implicit';
+  }
+  if (grantType === 'devicecode') {
     return 'deviceCode';
   }
   return 'authorizationCode';

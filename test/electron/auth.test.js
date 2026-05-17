@@ -12,7 +12,9 @@ const {
   refreshOAuthToken,
   requestOAuthClientCredentialsToken,
   requestOAuthDeviceAuthorization,
+  requestOAuthPasswordCredentialsToken,
   shouldRequestClientCredentialsToken,
+  shouldRequestPasswordCredentialsToken,
   validateAuth
 } = require('../../src/core/auth');
 const { sendRequest } = require('../../src/core/httpClient');
@@ -52,6 +54,19 @@ test('validates auth helper required fields', () => {
     clientId: 'client-id',
     clientSecret: 'client-secret'
   }, null), []);
+  assert.deepEqual(validateAuth({
+    type: 'oauth2',
+    grantType: 'passwordCredentials',
+    tokenUrl: 'https://auth.example.test/token',
+    username: 'owner',
+    password: 'secret'
+  }, null), []);
+  assert.deepEqual(validateAuth({
+    type: 'oauth2',
+    grantType: 'implicit',
+    authorizationUrl: 'https://auth.example.test/authorize',
+    clientId: 'client-id'
+  }, null), ['Start and complete the OAuth 2.0 implicit flow before sending this request.']);
   assert.deepEqual(validateAuth({
     type: 'oauth2',
     grantType: 'deviceCode',
@@ -784,6 +799,7 @@ test('refreshes OAuth 2.0 tokens before request execution when expired', async (
         tokenUrl: `${server.baseUrl}/token`,
         clientId: 'client-id',
         clientSecret: 'client-secret',
+        clientAuthentication: 'body',
         expiresAt: '2000-01-01T00:00:00.000Z'
       }
     }, null, { now: Date.parse('2026-04-21T00:00:00.000Z') });
@@ -797,6 +813,55 @@ test('refreshes OAuth 2.0 tokens before request execution when expired', async (
     assert.equal(new URLSearchParams(tokenRequestBody).get('refresh_token'), 'refresh-token');
     assert.equal(new URLSearchParams(tokenRequestBody).get('client_id'), 'client-id');
     assert.equal(new URLSearchParams(tokenRequestBody).get('client_secret'), 'client-secret');
+  } finally {
+    await server.close();
+  }
+});
+
+test('skips OAuth 2.0 token refresh when auto-refresh is disabled', async () => {
+  let tokenRequests = 0;
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequests += 1;
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'fresh-access-token',
+        token_type: 'Bearer',
+        expires_in: 3600
+      }));
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || ''
+    }));
+  });
+
+  try {
+    const result = await sendRequest({
+      id: 'r1-auto-refresh-off',
+      method: 'GET',
+      url: `${server.baseUrl}/resource`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth2',
+        accessToken: 'stale-access-token',
+        refreshToken: 'refresh-token',
+        tokenUrl: `${server.baseUrl}/token`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        autoRefreshToken: false,
+        expiresAt: '2000-01-01T00:00:00.000Z'
+      }
+    }, null, { now: Date.parse('2026-04-21T00:00:00.000Z') });
+
+    const body = JSON.parse(result.body);
+    assert.equal(body.authorization, 'Bearer stale-access-token');
+    assert.equal(result.updatedAuth, undefined);
+    assert.equal(tokenRequests, 0);
   } finally {
     await server.close();
   }
@@ -840,6 +905,7 @@ test('requests OAuth 2.0 client credentials token before request execution', asy
         tokenUrl: `${server.baseUrl}/token`,
         clientId: 'client-id',
         clientSecret: 'client-secret',
+        clientAuthentication: 'body',
         scopes: 'read write'
       }
     }, null, { now: Date.parse('2026-04-21T00:00:00.000Z') });
@@ -853,6 +919,255 @@ test('requests OAuth 2.0 client credentials token before request execution', asy
     assert.equal(params.get('client_id'), 'client-id');
     assert.equal(params.get('client_secret'), 'client-secret');
     assert.equal(params.get('scope'), 'read write');
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes OAuth 2.0 client credentials with Postman controls against a localhost server', async () => {
+  let tokenRequestBody = '';
+  let tokenRequestAuthorization = '';
+  let tokenRequestTrace = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequestAuthorization = request.headers.authorization || '';
+      tokenRequestTrace = request.headers['x-oauth-trace'] || '';
+      tokenRequestBody = await readRequestBody(request);
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'machine-token',
+        token_type: 'Bearer',
+        expires_in: 900
+      }));
+      return;
+    }
+
+    const url = new URL(request.url, 'http://127.0.0.1');
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || '',
+      accessToken: url.searchParams.get('access_token') || ''
+    }));
+  });
+
+  try {
+    const result = await sendRequest({
+      id: 'r2-postman',
+      method: 'GET',
+      url: `${server.baseUrl}/machine`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth2',
+        grantType: 'clientCredentials',
+        tokenUrl: `${server.baseUrl}/token`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        headerPrefix: 'Token',
+        addAuthDataTo: 'query',
+        clientAuthentication: 'basic',
+        tokenRequestParams: [
+          { key: 'audience', value: 'postmeter-api', sendIn: 'body' },
+          { key: 'X-OAuth-Trace', value: 'trace-token', sendIn: 'header' }
+        ]
+      }
+    }, null, { now: Date.parse('2026-04-21T00:00:00.000Z') });
+
+    const body = JSON.parse(result.body);
+    const params = new URLSearchParams(tokenRequestBody);
+    assert.equal(tokenRequestAuthorization, `Basic ${Buffer.from('client-id:client-secret').toString('base64')}`);
+    assert.equal(tokenRequestTrace, 'trace-token');
+    assert.equal(params.get('grant_type'), 'client_credentials');
+    assert.equal(params.get('client_id'), null);
+    assert.equal(params.get('client_secret'), null);
+    assert.equal(params.get('audience'), 'postmeter-api');
+    assert.equal(body.authorization, '');
+    assert.equal(body.accessToken, 'machine-token');
+    assert.equal(result.updatedAuth.accessToken, 'machine-token');
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes OAuth 2.0 password credentials with Postman controls against a localhost server', async () => {
+  let tokenRequestBody = '';
+  let tokenRequestAuthorization = '';
+  let tokenRequestTrace = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequestAuthorization = request.headers.authorization || '';
+      tokenRequestTrace = request.headers['x-oauth-trace'] || '';
+      tokenRequestBody = await readRequestBody(request);
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'password-grant-token',
+        refresh_token: 'password-refresh-token',
+        token_type: 'Bearer',
+        expires_in: 1800
+      }));
+      return;
+    }
+
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || ''
+    }));
+  });
+
+  try {
+    const result = await sendRequest({
+      id: 'r2-password-postman',
+      method: 'GET',
+      url: `${server.baseUrl}/resource`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth2',
+        grantType: 'passwordCredentials',
+        tokenUrl: `${server.baseUrl}/token`,
+        username: 'resource-owner',
+        password: 'owner-password',
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        clientAuthentication: 'basic',
+        scopes: 'read write',
+        tokenRequestParams: [
+          { key: 'audience', value: 'postmeter-api', sendIn: 'body' },
+          { key: 'X-OAuth-Trace', value: 'password-trace', sendIn: 'header' }
+        ]
+      }
+    }, null, { now: Date.parse('2026-04-21T00:00:00.000Z') });
+
+    const body = JSON.parse(result.body);
+    const params = new URLSearchParams(tokenRequestBody);
+    assert.equal(tokenRequestAuthorization, `Basic ${Buffer.from('client-id:client-secret').toString('base64')}`);
+    assert.equal(tokenRequestTrace, 'password-trace');
+    assert.equal(params.get('grant_type'), 'password');
+    assert.equal(params.get('username'), 'resource-owner');
+    assert.equal(params.get('password'), 'owner-password');
+    assert.equal(params.get('client_id'), null);
+    assert.equal(params.get('client_secret'), null);
+    assert.equal(params.get('scope'), 'read write');
+    assert.equal(params.get('audience'), 'postmeter-api');
+    assert.equal(body.authorization, 'Bearer password-grant-token');
+    assert.equal(result.updatedAuth.accessToken, 'password-grant-token');
+    assert.equal(result.updatedAuth.refreshToken, 'password-refresh-token');
+    assert.match(result.updatedAuth.expiresAt, /^2026-04-21T00:30:00\.000Z$/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('requests OAuth 2.0 password credentials tokens with client credentials in the body', async () => {
+  let tokenRequestBody = '';
+  const server = await createServer(async (request, response) => {
+    tokenRequestBody = await readRequestBody(request);
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      access_token: 'password-helper-token',
+      token_type: 'Bearer'
+    }));
+  });
+
+  try {
+    const updatedAuth = await requestOAuthPasswordCredentialsToken({
+      type: 'oauth2',
+      grantType: 'passwordCredentials',
+      tokenUrl: `${server.baseUrl}/token`,
+      username: 'resource-owner',
+      password: 'owner-password',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      clientAuthentication: 'body'
+    }, null);
+
+    const params = new URLSearchParams(tokenRequestBody);
+    assert.equal(updatedAuth.accessToken, 'password-helper-token');
+    assert.equal(params.get('grant_type'), 'password');
+    assert.equal(params.get('username'), 'resource-owner');
+    assert.equal(params.get('password'), 'owner-password');
+    assert.equal(params.get('client_id'), 'client-id');
+    assert.equal(params.get('client_secret'), 'client-secret');
+  } finally {
+    await server.close();
+  }
+});
+
+test('refreshes OAuth 2.0 tokens through the configured refresh endpoint and advanced params', async () => {
+  let tokenEndpointHit = false;
+  let refreshRequestBody = '';
+  let refreshRequestAuthorization = '';
+  let refreshRequestTrace = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenEndpointHit = true;
+      response.statusCode = 500;
+      response.end('unexpected token endpoint');
+      return;
+    }
+    if (request.url === '/refresh-token') {
+      refreshRequestAuthorization = request.headers.authorization || '';
+      refreshRequestTrace = request.headers['x-refresh-trace'] || '';
+      refreshRequestBody = await readRequestBody(request);
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'fresh-access-token',
+        refresh_token: 'rotated-refresh-token',
+        token_type: 'Bearer',
+        expires_in: 120
+      }));
+      return;
+    }
+
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || ''
+    }));
+  });
+
+  try {
+    const result = await sendRequest({
+      id: 'r2-refresh-postman',
+      method: 'GET',
+      url: `${server.baseUrl}/resource`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth2',
+        accessToken: 'stale-token',
+        refreshToken: 'refresh-token',
+        tokenUrl: `${server.baseUrl}/token`,
+        refreshTokenUrl: `${server.baseUrl}/refresh-token`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        clientAuthentication: 'basic',
+        headerPrefix: 'Token',
+        expiresAt: '2000-01-01T00:00:00.000Z',
+        refreshRequestParams: [
+          { key: 'resource', value: 'postmeter-api', sendIn: 'body' },
+          { key: 'X-Refresh-Trace', value: 'refresh-trace', sendIn: 'header' }
+        ]
+      }
+    }, null, { now: Date.parse('2026-04-21T00:00:00.000Z') });
+
+    const body = JSON.parse(result.body);
+    const params = new URLSearchParams(refreshRequestBody);
+    assert.equal(tokenEndpointHit, false);
+    assert.equal(refreshRequestAuthorization, `Basic ${Buffer.from('client-id:client-secret').toString('base64')}`);
+    assert.equal(refreshRequestTrace, 'refresh-trace');
+    assert.equal(params.get('grant_type'), 'refresh_token');
+    assert.equal(params.get('refresh_token'), 'refresh-token');
+    assert.equal(params.get('client_id'), null);
+    assert.equal(params.get('client_secret'), null);
+    assert.equal(params.get('resource'), 'postmeter-api');
+    assert.equal(body.authorization, 'Token fresh-access-token');
+    assert.equal(result.updatedAuth.refreshToken, 'rotated-refresh-token');
   } finally {
     await server.close();
   }
@@ -876,32 +1191,103 @@ test('decides when OAuth 2.0 client credentials tokens need retrieval', () => {
   assert.equal(shouldRequestClientCredentialsToken({ ...auth, clientSecret: '' }, null), false);
 });
 
-test('creates OAuth 2.0 authorization-code PKCE sessions', () => {
+test('decides when OAuth 2.0 password credentials tokens need retrieval', () => {
+  const auth = {
+    type: 'oauth2',
+    grantType: 'passwordCredentials',
+    tokenUrl: 'https://auth.example.test/token',
+    username: 'resource-owner',
+    password: 'owner-password'
+  };
+
+  assert.equal(shouldRequestPasswordCredentialsToken(auth, null), true);
+  assert.equal(shouldRequestPasswordCredentialsToken({ ...auth, accessToken: 'token' }, null), false);
+  assert.equal(
+    shouldRequestPasswordCredentialsToken({ ...auth, accessToken: 'token', expiresAt: '2000-01-01T00:00:00.000Z' }, null),
+    true
+  );
+  assert.equal(shouldRequestPasswordCredentialsToken({ ...auth, password: '' }, null), false);
+});
+
+test('creates OAuth 2.0 authorization-code and PKCE sessions', () => {
   const codeVerifier = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
-  const session = createOAuthPkceSession({
+  const authorizationCodeSession = createOAuthPkceSession({
     type: 'oauth2',
     grantType: 'authorizationCode',
     authorizationUrl: 'https://auth.example.test/authorize?existing=1',
     tokenUrl: 'https://auth.example.test/token',
     clientId: 'client-id',
-    scopes: 'openid profile'
+    scopes: 'openid profile',
+    state: 'configured-state',
+    authRequestParams: [
+      { key: 'prompt', value: 'consent' }
+    ]
+  }, null, {
+    redirectUri: 'http://127.0.0.1:49152/oauth/callback'
+  });
+  const authorizationCodeUrl = new URL(authorizationCodeSession.authorizationUrl);
+
+  assert.equal(authorizationCodeUrl.origin, 'https://auth.example.test');
+  assert.equal(authorizationCodeUrl.pathname, '/authorize');
+  assert.equal(authorizationCodeUrl.searchParams.get('existing'), '1');
+  assert.equal(authorizationCodeUrl.searchParams.get('response_type'), 'code');
+  assert.equal(authorizationCodeUrl.searchParams.get('client_id'), 'client-id');
+  assert.equal(authorizationCodeUrl.searchParams.get('redirect_uri'), 'http://127.0.0.1:49152/oauth/callback');
+  assert.equal(authorizationCodeUrl.searchParams.get('code_challenge'), null);
+  assert.equal(authorizationCodeUrl.searchParams.get('code_challenge_method'), null);
+  assert.equal(authorizationCodeUrl.searchParams.get('state'), 'configured-state');
+  assert.equal(authorizationCodeUrl.searchParams.get('scope'), 'openid profile');
+  assert.equal(authorizationCodeUrl.searchParams.get('prompt'), 'consent');
+  assert.equal(authorizationCodeSession.codeVerifier, '');
+  assert.equal(authorizationCodeSession.codeChallenge, '');
+
+  const pkceSession = createOAuthPkceSession({
+    type: 'oauth2',
+    grantType: 'authorizationCodePkce',
+    authorizationUrl: 'https://auth.example.test/authorize?existing=1',
+    tokenUrl: 'https://auth.example.test/token',
+    clientId: 'client-id',
+    scopes: 'openid profile',
+    state: 'configured-state',
+    authRequestParams: [
+      { key: 'prompt', value: 'consent' }
+    ],
+    tokenRequestParams: [
+      { key: 'resource', value: 'postmeter-api', sendIn: 'body' }
+    ],
+    clientAuthentication: 'body'
   }, null, {
     redirectUri: 'http://127.0.0.1:49152/oauth/callback',
-    state: 'test-state',
     codeVerifier
   });
-  const authorizationUrl = new URL(session.authorizationUrl);
+  const pkceAuthorizationUrl = new URL(pkceSession.authorizationUrl);
 
-  assert.equal(authorizationUrl.origin, 'https://auth.example.test');
-  assert.equal(authorizationUrl.pathname, '/authorize');
-  assert.equal(authorizationUrl.searchParams.get('existing'), '1');
-  assert.equal(authorizationUrl.searchParams.get('response_type'), 'code');
-  assert.equal(authorizationUrl.searchParams.get('client_id'), 'client-id');
-  assert.equal(authorizationUrl.searchParams.get('redirect_uri'), 'http://127.0.0.1:49152/oauth/callback');
-  assert.equal(authorizationUrl.searchParams.get('code_challenge'), pkceChallengeForVerifier(codeVerifier));
-  assert.equal(authorizationUrl.searchParams.get('code_challenge_method'), 'S256');
-  assert.equal(authorizationUrl.searchParams.get('state'), 'test-state');
-  assert.equal(authorizationUrl.searchParams.get('scope'), 'openid profile');
+  assert.equal(pkceAuthorizationUrl.searchParams.get('code_challenge'), pkceChallengeForVerifier(codeVerifier));
+  assert.equal(pkceAuthorizationUrl.searchParams.get('code_challenge_method'), 'S256');
+  assert.equal(pkceAuthorizationUrl.searchParams.get('state'), 'configured-state');
+  assert.equal(pkceAuthorizationUrl.searchParams.get('scope'), 'openid profile');
+  assert.equal(pkceAuthorizationUrl.searchParams.get('prompt'), 'consent');
+  assert.equal(pkceSession.clientAuthentication, 'body');
+  assert.deepEqual(pkceSession.tokenRequestParams, [
+    { enabled: true, key: 'resource', value: 'postmeter-api', sendIn: 'body' }
+  ]);
+
+  const plainSession = createOAuthPkceSession({
+    type: 'oauth2',
+    grantType: 'authorizationCodePkce',
+    authorizationUrl: 'https://auth.example.test/authorize',
+    tokenUrl: 'https://auth.example.test/token',
+    clientId: 'client-id',
+    codeChallengeMethod: 'plain',
+    codeVerifier
+  }, null, {
+    redirectUri: 'http://127.0.0.1:49152/oauth/callback'
+  });
+  const plainAuthorizationUrl = new URL(plainSession.authorizationUrl);
+  assert.equal(plainAuthorizationUrl.searchParams.get('code_challenge'), codeVerifier);
+  assert.equal(plainAuthorizationUrl.searchParams.get('code_challenge_method'), 'plain');
+  assert.equal(plainSession.codeVerifier, codeVerifier);
+  assert.equal(plainSession.codeChallengeMethod, 'plain');
 
   const customSchemeSession = createOAuthPkceSession({
     type: 'oauth2',
@@ -919,7 +1305,7 @@ test('creates OAuth 2.0 authorization-code PKCE sessions', () => {
   assert.throws(
     () => createOAuthPkceSession({
       type: 'oauth2',
-      grantType: 'authorizationCode',
+      grantType: 'authorizationCodePkce',
       authorizationUrl: 'javascript:alert(1)',
       tokenUrl: 'https://auth.example.test/token',
       clientId: 'client-id'
@@ -960,12 +1346,13 @@ test('exchanges OAuth 2.0 authorization-code PKCE callback for tokens', async ()
       redirectUri: 'http://127.0.0.1:49152/oauth/callback',
       clientId: 'client-id',
       clientSecret: 'client-secret',
+      clientAuthentication: 'body',
       state: 'test-state',
       codeVerifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ'
     };
     const auth = await exchangeOAuthAuthorizationCode({
       type: 'oauth2',
-      grantType: 'authorizationCode',
+      grantType: 'authorizationCodePkce',
       tokenType: 'Bearer'
     }, session, 'http://127.0.0.1:49152/oauth/callback?code=auth-code&state=test-state', null, {
       now: Date.parse('2026-04-21T00:00:00.000Z')
@@ -981,6 +1368,102 @@ test('exchanges OAuth 2.0 authorization-code PKCE callback for tokens', async ()
     assert.equal(params.get('client_id'), 'client-id');
     assert.equal(params.get('client_secret'), 'client-secret');
     assert.equal(params.get('code_verifier'), 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ');
+  } finally {
+    await server.close();
+  }
+});
+
+test('exchanges OAuth 2.0 authorization-code callbacks without PKCE fields', async () => {
+  let tokenRequestBody = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequestBody = await readRequestBody(request);
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'authorization-code-token',
+        token_type: 'Bearer'
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    const auth = await exchangeOAuthAuthorizationCode({
+      type: 'oauth2',
+      grantType: 'authorizationCode'
+    }, {
+      tokenUrl: `${server.baseUrl}/token`,
+      redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+      clientId: 'client-id',
+      state: 'test-state'
+    }, 'http://127.0.0.1:49152/oauth/callback?code=auth-code&state=test-state', null);
+    const params = new URLSearchParams(tokenRequestBody);
+
+    assert.equal(auth.accessToken, 'authorization-code-token');
+    assert.equal(params.get('grant_type'), 'authorization_code');
+    assert.equal(params.get('code'), 'auth-code');
+    assert.equal(params.get('client_id'), 'client-id');
+    assert.equal(params.get('code_verifier'), null);
+  } finally {
+    await server.close();
+  }
+});
+
+test('exchanges OAuth 2.0 authorization-code PKCE with Basic client auth and token request params', async () => {
+  let tokenRequestBody = '';
+  let tokenRequestAuthorization = '';
+  let tokenRequestTrace = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequestAuthorization = request.headers.authorization || '';
+      tokenRequestTrace = request.headers['x-code-trace'] || '';
+      tokenRequestBody = await readRequestBody(request);
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'pkce-basic-access-token',
+        token_type: 'Bearer',
+        expires_in: 1200
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    const session = {
+      tokenUrl: `${server.baseUrl}/token`,
+      redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      clientAuthentication: 'basic',
+      tokenRequestParams: [
+        { key: 'resource', value: 'postmeter-api', sendIn: 'body' },
+        { key: 'X-Code-Trace', value: 'code-trace', sendIn: 'header' }
+      ],
+      state: 'test-state',
+      codeVerifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ'
+    };
+    const auth = await exchangeOAuthAuthorizationCode({
+      type: 'oauth2',
+      grantType: 'authorizationCodePkce',
+      tokenType: 'Bearer',
+      headerPrefix: 'Token'
+    }, session, 'http://127.0.0.1:49152/oauth/callback?code=auth-code&state=test-state', null, {
+      now: Date.parse('2026-04-21T00:00:00.000Z')
+    });
+    const params = new URLSearchParams(tokenRequestBody);
+
+    assert.equal(tokenRequestAuthorization, `Basic ${Buffer.from('client-id:client-secret').toString('base64')}`);
+    assert.equal(tokenRequestTrace, 'code-trace');
+    assert.equal(auth.accessToken, 'pkce-basic-access-token');
+    assert.equal(auth.headerPrefix, 'Token');
+    assert.equal(params.get('grant_type'), 'authorization_code');
+    assert.equal(params.get('client_id'), null);
+    assert.equal(params.get('client_secret'), null);
+    assert.equal(params.get('resource'), 'postmeter-api');
   } finally {
     await server.close();
   }
@@ -1042,7 +1525,7 @@ test('rejects OAuth 2.0 PKCE code verifier values outside RFC bounds', () => {
   assert.throws(
     () => createOAuthPkceSession({
       type: 'oauth2',
-      grantType: 'authorizationCode',
+      grantType: 'authorizationCodePkce',
       authorizationUrl: 'https://auth.example.test/authorize',
       tokenUrl: 'https://auth.example.test/token',
       clientId: 'client-id'

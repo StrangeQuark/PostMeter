@@ -1196,9 +1196,34 @@ textarea.code-editor-input.has-openable-variable-hover {
   grid-column: 1 / -1;
 }
 
+.auth-subsection-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
 .auth-section[data-auth-section="oauth1"]:not([data-oauth1-signature-kind="rsa"]) [data-oauth1-mode="rsa"],
 .auth-section[data-auth-section="oauth1"][data-oauth1-signature-kind="rsa"] [data-oauth1-mode="shared"] {
   display: none;
+}
+
+.auth-section[data-auth-section="oauth2"] [data-oauth2-grant-field] {
+  display: none;
+}
+
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="authorizationCode"] [data-oauth2-grant-field~="authorizationCode"],
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="authorizationCodePkce"] [data-oauth2-grant-field~="authorizationCodePkce"],
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="implicit"] [data-oauth2-grant-field~="implicit"],
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="passwordCredentials"] [data-oauth2-grant-field~="passwordCredentials"],
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="clientCredentials"] [data-oauth2-grant-field~="clientCredentials"] {
+  display: grid;
+}
+
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="authorizationCode"] .checkbox-line[data-oauth2-grant-field~="authorizationCode"],
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="authorizationCodePkce"] .checkbox-line[data-oauth2-grant-field~="authorizationCodePkce"],
+.auth-section[data-auth-section="oauth2"][data-oauth2-grant-type="implicit"] .checkbox-line[data-oauth2-grant-field~="implicit"] {
+  display: flex;
 }
 
 .auth-advanced {
@@ -1218,6 +1243,39 @@ textarea.code-editor-input.has-openable-variable-hover {
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 10px;
   margin-top: 10px;
+}
+
+.auth-param-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.auth-param-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr);
+  min-width: 0;
+}
+
+.auth-param-row-send-in {
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) minmax(100px, 0.7fr);
+}
+
+.auth-param-row > * {
+  border-radius: 0;
+  margin-left: -1px;
+  margin-top: -1px;
+}
+
+.auth-param-head span {
+  min-height: 34px;
+  padding: 9px 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .oauth-actions {

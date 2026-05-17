@@ -46,6 +46,15 @@
     }
   }
 
+  function syncOauth2GrantFields(options = {}) {
+    const doc = options.doc || document;
+    const grantType = optionElementValue(doc, options, 'authOauthGrantTypeSelect') || 'authorizationCode';
+    const section = optionElement(doc, options, 'authOauthGrantTypeSelect')?.closest?.('[data-auth-section="oauth2"]');
+    if (section) {
+      section.dataset.oauth2GrantType = grantType;
+    }
+  }
+
   function bodyTypeCodeLanguage(bodyType) {
     return bodyType === 'RAW_JSON' ? 'json' : 'text';
   }
@@ -442,17 +451,40 @@
     setOptionElementValue(doc, options, 'authCookieValueInput', fields.cookieValue);
     setOptionElementValue(doc, options, 'authOauthGrantTypeSelect', fields.oauthGrantType);
     setOptionElementValue(doc, options, 'authOauthTokenTypeSelect', fields.oauthTokenType);
+    setOptionElementValue(doc, options, 'authOauthHeaderPrefixInput', fields.oauthHeaderPrefix);
+    setOptionElementValue(doc, options, 'authOauthTokenNameInput', fields.oauthTokenName);
+    setOptionElementValue(doc, options, 'authOauthAddAuthDataToSelect', fields.oauthAddAuthDataTo);
     setOptionElementValue(doc, options, 'authOauthAccessTokenInput', fields.oauthAccessToken);
     setOptionElementValue(doc, options, 'authOauthRefreshTokenInput', fields.oauthRefreshToken);
+    setOptionElementChecked(doc, options, 'authOauthAutoRefreshTokenInput', fields.oauthAutoRefreshToken);
+    setOptionElementChecked(doc, options, 'authOauthShareTokenInput', fields.oauthShareToken);
     setOptionElementValue(doc, options, 'authOauthAuthorizationUrlInput', fields.oauthAuthorizationUrl);
+    setOptionElementValue(doc, options, 'authOauthCallbackUrlInput', fields.oauthCallbackUrl);
+    setOptionElementChecked(doc, options, 'authOauthAuthorizeUsingBrowserInput', fields.oauthAuthorizeUsingBrowser);
     setOptionElementValue(doc, options, 'authOauthRedirectStrategySelect', fields.oauthRedirectStrategy);
     setOptionElementValue(doc, options, 'authOauthDeviceAuthorizationUrlInput', fields.oauthDeviceAuthorizationUrl);
     setOptionElementValue(doc, options, 'authOauthTokenUrlInput', fields.oauthTokenUrl);
+    setOptionElementValue(doc, options, 'authOauthRefreshTokenUrlInput', fields.oauthRefreshTokenUrl);
     setOptionElementValue(doc, options, 'authOauthClientIdInput', fields.oauthClientId);
     setOptionElementValue(doc, options, 'authOauthClientSecretInput', fields.oauthClientSecret);
+    setOptionElementValue(doc, options, 'authOauthUsernameInput', fields.oauthUsername);
+    setOptionElementValue(doc, options, 'authOauthPasswordInput', fields.oauthPassword);
     setOptionElementValue(doc, options, 'authOauthScopesInput', fields.oauthScopes);
+    setOptionElementValue(doc, options, 'authOauthStateInput', fields.oauthState);
+    setOptionElementValue(doc, options, 'authOauthCodeChallengeMethodSelect', fields.oauthCodeChallengeMethod);
+    setOptionElementValue(doc, options, 'authOauthCodeVerifierInput', fields.oauthCodeVerifier);
+    setOptionElementValue(doc, options, 'authOauthClientAuthenticationSelect', fields.oauthClientAuthentication);
+    setOptionElementValue(doc, options, 'authOauthAuthRequestParamKeyInput', fields.oauthAuthRequestParamKey);
+    setOptionElementValue(doc, options, 'authOauthAuthRequestParamValueInput', fields.oauthAuthRequestParamValue);
+    setOptionElementValue(doc, options, 'authOauthTokenRequestParamKeyInput', fields.oauthTokenRequestParamKey);
+    setOptionElementValue(doc, options, 'authOauthTokenRequestParamValueInput', fields.oauthTokenRequestParamValue);
+    setOptionElementValue(doc, options, 'authOauthTokenRequestParamSendInSelect', fields.oauthTokenRequestParamSendIn);
+    setOptionElementValue(doc, options, 'authOauthRefreshRequestParamKeyInput', fields.oauthRefreshRequestParamKey);
+    setOptionElementValue(doc, options, 'authOauthRefreshRequestParamValueInput', fields.oauthRefreshRequestParamValue);
+    setOptionElementValue(doc, options, 'authOauthRefreshRequestParamSendInSelect', fields.oauthRefreshRequestParamSendIn);
     setOptionElementValue(doc, options, 'authOauthUserCodeInput', fields.oauthUserCode);
     setOptionElementValue(doc, options, 'authOauthVerificationUriInput', fields.oauthVerificationUri);
+    syncOauth2GrantFields({ ...options, doc });
     setOptionElementValue(doc, options, 'authOauth1SignatureMethodSelect', fields.oauth1SignatureMethod);
     setOptionElementValue(doc, options, 'authOauth1ConsumerKeyInput', fields.oauth1ConsumerKey);
     setOptionElementValue(doc, options, 'authOauth1ConsumerSecretInput', fields.oauth1ConsumerSecret);
@@ -489,6 +521,7 @@
   function collectAuthFromEditor(options = {}) {
     const doc = options.doc || document;
     syncOauth1SignatureFields({ ...options, doc });
+    syncOauth2GrantFields({ ...options, doc });
     return authFromEditorState({
       type: optionElementValue(doc, options, 'authTypeSelect'),
       bearerToken: optionElementValue(doc, options, 'authBearerTokenInput'),
@@ -500,15 +533,37 @@
       cookieValue: optionElementValue(doc, options, 'authCookieValueInput'),
       oauthGrantType: optionElementValue(doc, options, 'authOauthGrantTypeSelect'),
       oauthTokenType: optionElementValue(doc, options, 'authOauthTokenTypeSelect'),
+      oauthHeaderPrefix: optionElementValue(doc, options, 'authOauthHeaderPrefixInput'),
+      oauthTokenName: optionElementValue(doc, options, 'authOauthTokenNameInput'),
+      oauthAddAuthDataTo: optionElementValue(doc, options, 'authOauthAddAuthDataToSelect'),
       oauthAccessToken: optionElementValue(doc, options, 'authOauthAccessTokenInput'),
       oauthRefreshToken: optionElementValue(doc, options, 'authOauthRefreshTokenInput'),
+      oauthAutoRefreshToken: optionElementChecked(doc, options, 'authOauthAutoRefreshTokenInput'),
+      oauthShareToken: optionElementChecked(doc, options, 'authOauthShareTokenInput'),
       oauthAuthorizationUrl: optionElementValue(doc, options, 'authOauthAuthorizationUrlInput'),
+      oauthCallbackUrl: optionElementValue(doc, options, 'authOauthCallbackUrlInput'),
+      oauthAuthorizeUsingBrowser: optionElementChecked(doc, options, 'authOauthAuthorizeUsingBrowserInput'),
       oauthRedirectStrategy: optionElementValue(doc, options, 'authOauthRedirectStrategySelect'),
       oauthDeviceAuthorizationUrl: optionElementValue(doc, options, 'authOauthDeviceAuthorizationUrlInput'),
       oauthTokenUrl: optionElementValue(doc, options, 'authOauthTokenUrlInput'),
+      oauthRefreshTokenUrl: optionElementValue(doc, options, 'authOauthRefreshTokenUrlInput'),
       oauthClientId: optionElementValue(doc, options, 'authOauthClientIdInput'),
       oauthClientSecret: optionElementValue(doc, options, 'authOauthClientSecretInput'),
+      oauthUsername: optionElementValue(doc, options, 'authOauthUsernameInput'),
+      oauthPassword: optionElementValue(doc, options, 'authOauthPasswordInput'),
       oauthScopes: optionElementValue(doc, options, 'authOauthScopesInput'),
+      oauthState: optionElementValue(doc, options, 'authOauthStateInput'),
+      oauthCodeChallengeMethod: optionElementValue(doc, options, 'authOauthCodeChallengeMethodSelect'),
+      oauthCodeVerifier: optionElementValue(doc, options, 'authOauthCodeVerifierInput'),
+      oauthClientAuthentication: optionElementValue(doc, options, 'authOauthClientAuthenticationSelect'),
+      oauthAuthRequestParamKey: optionElementValue(doc, options, 'authOauthAuthRequestParamKeyInput'),
+      oauthAuthRequestParamValue: optionElementValue(doc, options, 'authOauthAuthRequestParamValueInput'),
+      oauthTokenRequestParamKey: optionElementValue(doc, options, 'authOauthTokenRequestParamKeyInput'),
+      oauthTokenRequestParamValue: optionElementValue(doc, options, 'authOauthTokenRequestParamValueInput'),
+      oauthTokenRequestParamSendIn: optionElementValue(doc, options, 'authOauthTokenRequestParamSendInSelect'),
+      oauthRefreshRequestParamKey: optionElementValue(doc, options, 'authOauthRefreshRequestParamKeyInput'),
+      oauthRefreshRequestParamValue: optionElementValue(doc, options, 'authOauthRefreshRequestParamValueInput'),
+      oauthRefreshRequestParamSendIn: optionElementValue(doc, options, 'authOauthRefreshRequestParamSendInSelect'),
       oauthUserCode: optionElementValue(doc, options, 'authOauthUserCodeInput'),
       oauth1SignatureMethod: optionElementValue(doc, options, 'authOauth1SignatureMethodSelect'),
       oauth1ConsumerKey: optionElementValue(doc, options, 'authOauth1ConsumerKeyInput'),
@@ -987,6 +1042,7 @@
     renderCookieJarEditor,
     renderRequestPairs,
     syncOauth1SignatureFields,
+    syncOauth2GrantFields,
     syncRefreshingAuthSelectOptions,
     renderVariablePairs,
     renderVariablePreview

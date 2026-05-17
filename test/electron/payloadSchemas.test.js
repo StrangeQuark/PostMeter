@@ -42,6 +42,9 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.auth.type.enum, 'authTypes');
   assert.equal(payloadSchemas.fields.auth.location.enum, 'apiKeyLocations');
   assert.equal(payloadSchemas.fields.auth.grantType.enum, 'oauth2GrantTypes');
+  assert.equal(payloadSchemas.fields.auth.codeChallengeMethod.enum, 'oauth2CodeChallengeMethods');
+  assert.equal(payloadSchemas.fields.auth.autoRefreshToken.type, 'boolean');
+  assert.equal(payloadSchemas.fields.auth.shareToken.type, 'boolean');
   assert.equal(payloadSchemas.fields.scripts.tests.limit, 'body');
   assert.equal(payloadSchemas.fields.scriptRunResult.error.limit, 'value');
   assert.equal(payloadSchemas.fields.scriptTestResult.name.limit, 'name');
@@ -56,6 +59,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(schemaEnum('authRefreshOutputSources').includes('rawBody'));
   assert.ok(payloadSchemas.auth.refreshModes.includes('interval'));
   assert.ok(payloadSchemas.auth.refreshTypes.includes('aws'));
+  assert.equal(payloadSchemas.auth.refreshTypes.includes('oauth2'), false);
   assert.equal(payloadSchemas.fields.csvVariables.schema.limit, 'value');
   assert.equal(payloadSchemas.fields.csvVariables.values.limit, 'body');
   assert.equal(payloadSchemas.fields.csvVariables.filePath.limit, 'url');
@@ -69,6 +73,14 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.oauthProgress.type.enum, 'oauthProgressTypes');
   assert.ok(payloadSchemas.auth.oauthProgressStatuses.includes('polling'));
   assert.ok(payloadSchemas.auth.oauthProgressStatuses.includes('callbackRejected'));
+  assert.deepEqual(payloadSchemas.auth.oauth2GrantTypes.slice(0, 5), [
+    'authorizationCode',
+    'authorizationCodePkce',
+    'implicit',
+    'passwordCredentials',
+    'clientCredentials'
+  ]);
+  assert.deepEqual(schemaEnum('oauth2CodeChallengeMethods'), ['S256', 'plain']);
   assert.equal(payloadSchemas.fields.externalUrl.url.limit, 'url');
   assert.equal(payloadSchemas.fields.fileOperationResult.cancelled.type, 'boolean');
   assert.equal(payloadSchemas.fields.response.finalUrl.limit, 'url');

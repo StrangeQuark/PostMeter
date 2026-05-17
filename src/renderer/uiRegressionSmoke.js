@@ -3060,44 +3060,49 @@
 
   async function assertOauthFlowSmoke() {
     const originalStartPkce = window.__postmeterStartPkceFlow;
-    const originalStartDevice = window.__postmeterStartDeviceFlow;
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
     try {
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
       activateTab('request', 'auth');
       $('authTypeSelect').value = 'oauth2';
       dispatchChange($('authTypeSelect'));
-      $('authOauthGrantTypeSelect').value = 'authorizationCode';
+      $('authOauthGrantTypeSelect').value = 'authorizationCodePkce';
       dispatchChange($('authOauthGrantTypeSelect'));
       $('authOauthAuthorizationUrlInput').value = 'https://auth.example.test/authorize';
       dispatchInput($('authOauthAuthorizationUrlInput'));
       $('authOauthTokenUrlInput').value = 'https://auth.example.test/token';
       dispatchInput($('authOauthTokenUrlInput'));
+      $('authOauthCallbackUrlInput').value = 'postmeter://oauth/callback';
+      dispatchInput($('authOauthCallbackUrlInput'));
       $('authOauthClientIdInput').value = 'client-id';
       dispatchInput($('authOauthClientIdInput'));
+      $('authOauthCodeChallengeMethodSelect').value = 'plain';
+      dispatchChange($('authOauthCodeChallengeMethodSelect'));
+      $('authOauthCodeVerifierInput').value = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
+      dispatchInput($('authOauthCodeVerifierInput'));
       window.__postmeterStartPkceFlow = async (id, auth, _environment, strategy) => {
         assertUiSmoke(Boolean(id), 'PKCE flow did not create an active flow ID.');
-        assertUiSmoke(auth.grantType === 'authorizationCode', 'PKCE flow did not pass authorization-code auth.');
-        assertUiSmoke(strategy === $('authOauthRedirectStrategySelect').value, 'PKCE flow did not pass redirect strategy.');
+        assertUiSmoke(auth.grantType === 'authorizationCodePkce', 'PKCE flow did not pass authorization-code-with-PKCE auth.');
+        assertUiSmoke(auth.codeChallengeMethod === 'plain', 'PKCE flow did not pass the selected code challenge method.');
+        assertUiSmoke(auth.codeVerifier === 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ', 'PKCE flow did not pass the configured code verifier.');
+        assertUiSmoke(strategy === 'customScheme', 'PKCE flow did not infer custom-scheme redirect strategy.');
         return { auth: { ...auth, accessToken: 'pkce-token', expiresAt: new Date(Date.now() + 60_000).toISOString() } };
       };
       await startPkceFlow();
       assertUiSmoke($('authOauthAccessTokenInput').value === 'pkce-token', 'PKCE completion did not render the returned access token.');
       assertStatusIncludes('OAuth authorization completed', 'PKCE completion did not complete cleanly.');
 
-      $('authOauthGrantTypeSelect').value = 'deviceCode';
+      $('authOauthGrantTypeSelect').value = 'passwordCredentials';
       dispatchChange($('authOauthGrantTypeSelect'));
-      $('authOauthDeviceAuthorizationUrlInput').value = 'https://auth.example.test/device';
-      dispatchInput($('authOauthDeviceAuthorizationUrlInput'));
-      window.__postmeterStartDeviceFlow = async () => {
-        throw new Error('mocked device failure');
-      };
-      await startDeviceFlow();
-      assertStatusIncludes('OAuth device authorization failed', 'Device-code failure did not fail cleanly.');
-      assertUiSmoke($('validationLabel').textContent.includes('mocked device failure'), 'Device-code failure did not render error details.');
+      $('authOauthUsernameInput').value = 'resource-owner';
+      dispatchInput($('authOauthUsernameInput'));
+      $('authOauthPasswordInput').value = 'owner-password';
+      dispatchInput($('authOauthPasswordInput'));
+      assertUiSmoke(activeRequest().auth.grantType === 'passwordCredentials', 'Password credentials grant was not collected.');
+      assertUiSmoke(activeRequest().auth.username === 'resource-owner', 'Password credentials username was not collected.');
+      assertUiSmoke(activeRequest().auth.password === 'owner-password', 'Password credentials password was not collected.');
     } finally {
       window.__postmeterStartPkceFlow = originalStartPkce;
-      window.__postmeterStartDeviceFlow = originalStartDevice;
       window.__postmeterSaveWorkspace = originalSaveWorkspace;
     }
   }

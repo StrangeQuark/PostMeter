@@ -8761,12 +8761,12 @@ function collectAuthRefreshFromControls(prefix, fallback = {}) {
     apiKeyLocation: $(`${prefix}AuthRefreshApiKeyLocationSelect`)?.value || existing.apiKeyLocation || 'header',
     apiKeyName: $(`${prefix}AuthRefreshApiKeyNameInput`)?.value || existing.apiKeyName || 'X-API-Key',
     accessTokenVariable: primaryOutput?.variable || '',
-    refreshTokenVariable: authType === 'bearer' || authType === 'oauth2' || authType === 'cookie'
+    refreshTokenVariable: authType === 'bearer' || authType === 'cookie'
       ? ($(`${prefix}AuthRefreshRefreshTokenVariableInput`)?.value || '')
       : '',
     expiresAtVariable: '',
     accessTokenPath: primaryOutput?.path || '',
-    refreshTokenPath: authType === 'bearer' || authType === 'oauth2' || authType === 'cookie'
+    refreshTokenPath: authType === 'bearer' || authType === 'cookie'
       ? ($(`${prefix}AuthRefreshRefreshTokenPathInput`)?.value || '')
       : '',
     expiresInPath: '',
@@ -8791,7 +8791,7 @@ function collectAuthRefreshFromControls(prefix, fallback = {}) {
 
 function normalizeAuthRefreshUiType(value) {
   const text = String(value || '').trim();
-  return ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'].includes(text) ? text : 'bearer';
+  return ['bearer', 'apiKey', 'cookie', 'aws', 'custom'].includes(text) ? text : 'bearer';
 }
 
 function authRefreshDefaultOutput(slot) {
@@ -8863,15 +8863,6 @@ function syncAuthRefreshOutputSourceField(prefix, controlName, sourceOverride = 
 }
 
 function authRefreshOutputPathLabel(controlName, source, authType = '') {
-  if (controlName === 'AccessToken' && authType === 'oauth2') {
-    if (source === 'header') {
-      return 'OAuth Access Token Header Name';
-    }
-    if (source === 'cookie') {
-      return 'OAuth Access Token Cookie Name';
-    }
-    return 'OAuth Access Token Response Path';
-  }
   const labels = AUTH_REFRESH_OUTPUT_PATH_LABELS[controlName] || {};
   return labels[source] || labels.body || 'Response Path';
 }
@@ -8935,7 +8926,6 @@ function authRefreshOutputControlSource(prefix, controlName) {
 function authRefreshPrimaryOutput(authType, outputs = []) {
   const primarySlots = {
     bearer: 'accessToken',
-    oauth2: 'accessToken',
     apiKey: 'apiKey',
     cookie: 'cookie',
     aws: 'awsAccessKey',
@@ -8962,13 +8952,6 @@ function applyAuthRefreshTypeVisibility(prefix, authType) {
 }
 
 function authRefreshTypeLabels(authType) {
-  if (authType === 'oauth2') {
-    return {
-      variableLabel: 'Save OAuth Access Token To',
-      pathLabel: 'OAuth Access Token Response Path',
-      help: 'The auth request uses this run environment, saves the OAuth access token to a variable, and repeats on the interval below.'
-    };
-  }
   if (authType === 'apiKey') {
     return {
       variableLabel: '',
@@ -10314,7 +10297,6 @@ function authRefreshAutoDetectTarget(ownerType, requestKind = 'access', authRefr
   }
   const targets = {
     bearer: { label: 'access token', controlName: 'AccessToken' },
-    oauth2: { label: 'OAuth access token', controlName: 'AccessToken' },
     apiKey: { label: 'API key', controlName: 'ApiKey' },
     aws: { label: 'AWS access key ID', controlName: 'AwsAccessKey' },
     custom: { label: 'custom header value', controlName: 'Custom' }

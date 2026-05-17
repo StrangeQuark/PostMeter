@@ -720,13 +720,32 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
     return {
       type: 'oauth2',
       tokenType: authParam(authNode.oauth2, 'tokenType') || 'Bearer',
+      headerPrefix: authParam(authNode.oauth2, 'headerPrefix') || authParam(authNode.oauth2, 'tokenType') || 'Bearer',
+      tokenName: authParam(authNode.oauth2, 'tokenName'),
+      addAuthDataTo: postmanOauth2AddAuthDataTo(authParam(authNode.oauth2, 'addTokenTo') || authParam(authNode.oauth2, 'addAuthDataTo')),
       accessToken: authParam(authNode.oauth2, 'accessToken'),
       refreshToken: authParam(authNode.oauth2, 'refreshToken'),
+      autoRefreshToken: authRawParam(authNode.oauth2, 'autoRefreshToken') == null
+        ? true
+        : authBooleanParam(authNode.oauth2, 'autoRefreshToken'),
+      shareToken: authBooleanParam(authNode.oauth2, 'shareToken'),
       authorizationUrl: authParam(authNode.oauth2, 'authUrl'),
       tokenUrl: authParam(authNode.oauth2, 'accessTokenUrl'),
+      refreshTokenUrl: authParam(authNode.oauth2, 'refreshTokenUrl'),
+      redirectUri: authParam(authNode.oauth2, 'callbackUrl'),
       clientId: authParam(authNode.oauth2, 'clientId'),
       clientSecret: authParam(authNode.oauth2, 'clientSecret'),
+      username: authParam(authNode.oauth2, 'username'),
+      password: authParam(authNode.oauth2, 'password'),
       scopes: authParam(authNode.oauth2, 'scope'),
+      state: authParam(authNode.oauth2, 'state'),
+      codeChallengeMethod: postmanOauth2CodeChallengeMethod(authParam(authNode.oauth2, 'codeChallengeMethod')),
+      codeVerifier: authParam(authNode.oauth2, 'codeVerifier'),
+      authorizeUsingBrowser: authBooleanParam(authNode.oauth2, 'authorizeUsingBrowser'),
+      clientAuthentication: postmanOauth2ClientAuthentication(authParam(authNode.oauth2, 'clientAuthentication') || authParam(authNode.oauth2, 'client_authentication')),
+      authRequestParams: postmanOauth2ParamList(authNode.oauth2, 'authRequestParams'),
+      tokenRequestParams: postmanOauth2ParamList(authNode.oauth2, 'tokenRequestParams', true),
+      refreshRequestParams: postmanOauth2ParamList(authNode.oauth2, 'refreshRequestParams', true),
       grantType: postmanOauthGrantType(authParam(authNode.oauth2, 'grant_type'))
     };
   }
@@ -863,20 +882,97 @@ function authParam(values, key) {
   return '';
 }
 
+function authRawParam(values, key) {
+  if (!values) {
+    return undefined;
+  }
+  if (Array.isArray(values)) {
+    return values.find((candidate) => candidate?.key === key)?.value;
+  }
+  if (typeof values === 'object') {
+    return values[key];
+  }
+  return undefined;
+}
+
 function authBooleanParam(values, key) {
   const value = authParam(values, key);
   return value === true || String(value).trim().toLowerCase() === 'true';
 }
 
+function postmanOauth2AddAuthDataTo(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+  return normalized === 'requesturl' || normalized === 'url' || normalized === 'query' ? 'query' : 'header';
+}
+
+function postmanOauth2ClientAuthentication(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+  return normalized === 'body' || normalized === 'requestbody' || normalized === 'sendclientcredentialsinbody' ? 'body' : 'basic';
+}
+
+function postmanOauth2ParamList(values, key, includeSendIn = false) {
+  const raw = authRawParam(values, key);
+  const parsed = typeof raw === 'string' && looksLikeJson(raw) ? JSON.parse(raw) : raw;
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const param = {
+        enabled: item.enabled !== false,
+        key: item.key ?? '',
+        value: item.value ?? ''
+      };
+      if (includeSendIn) {
+        param.sendIn = String(item.sendIn || '').toLowerCase() === 'header' ? 'header' : 'body';
+      }
+      return param;
+    });
+}
+
 function postmanOauthGrantType(value) {
-  const grantType = String(value || '').toLowerCase();
-  if (grantType === 'client_credentials') {
+  const grantType = String(value || '').toLowerCase().replace(/[\s_/-]+/g, '');
+  if (grantType === 'clientcredentials') {
     return 'clientCredentials';
   }
-  if (grantType === 'device_code') {
+  if (grantType === 'passwordcredentials' || grantType === 'password') {
+    return 'passwordCredentials';
+  }
+  if (grantType === 'authorizationcodewithpkce' || grantType === 'authorizationcodepkce') {
+    return 'authorizationCodePkce';
+  }
+  if (grantType === 'implicit') {
+    return 'implicit';
+  }
+  if (grantType === 'devicecode') {
     return 'deviceCode';
   }
   return 'authorizationCode';
+}
+
+function postmanOauth2CodeChallengeMethod(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'plain' ? 'plain' : 'S256';
+}
+
+function postmanOauthGrantTypeValue(value) {
+  if (value === 'clientCredentials') {
+    return 'client_credentials';
+  }
+  if (value === 'passwordCredentials') {
+    return 'password_credentials';
+  }
+  if (value === 'authorizationCodePkce') {
+    return 'authorization_code_with_pkce';
+  }
+  if (value === 'implicit') {
+    return 'implicit';
+  }
+  if (value === 'deviceCode') {
+    return 'device_code';
+  }
+  return 'authorization_code';
 }
 
 function looksLikeJson(value) {
@@ -1386,14 +1482,31 @@ function exportPostmanAuthModel(auth) {
       type: 'oauth2',
       oauth2: [
         { key: 'tokenType', value: auth.tokenType || 'Bearer', type: 'string' },
+        { key: 'headerPrefix', value: auth.headerPrefix || auth.tokenType || 'Bearer', type: 'string' },
+        { key: 'tokenName', value: auth.tokenName || '', type: 'string' },
+        { key: 'addTokenTo', value: auth.addAuthDataTo === 'query' ? 'Request URL' : 'Request Headers', type: 'string' },
         { key: 'accessToken', value: auth.accessToken || '', type: 'string' },
         { key: 'refreshToken', value: auth.refreshToken || '', type: 'string' },
+        { key: 'autoRefreshToken', value: auth.autoRefreshToken !== false, type: 'boolean' },
+        { key: 'shareToken', value: auth.shareToken === true, type: 'boolean' },
         { key: 'authUrl', value: auth.authorizationUrl || '', type: 'string' },
         { key: 'accessTokenUrl', value: auth.tokenUrl || '', type: 'string' },
+        { key: 'refreshTokenUrl', value: auth.refreshTokenUrl || '', type: 'string' },
+        { key: 'callbackUrl', value: auth.redirectUri || '', type: 'string' },
         { key: 'clientId', value: auth.clientId || '', type: 'string' },
         { key: 'clientSecret', value: auth.clientSecret || '', type: 'string' },
+        { key: 'username', value: auth.username || '', type: 'string' },
+        { key: 'password', value: auth.password || '', type: 'string' },
         { key: 'scope', value: auth.scopes || '', type: 'string' },
-        { key: 'grant_type', value: auth.grantType === 'clientCredentials' ? 'client_credentials' : auth.grantType === 'deviceCode' ? 'device_code' : 'authorization_code', type: 'string' }
+        { key: 'state', value: auth.state || '', type: 'string' },
+        { key: 'codeChallengeMethod', value: auth.codeChallengeMethod || 'S256', type: 'string' },
+        { key: 'codeVerifier', value: auth.codeVerifier || '', type: 'string' },
+        { key: 'authorizeUsingBrowser', value: auth.authorizeUsingBrowser === true, type: 'boolean' },
+        { key: 'clientAuthentication', value: auth.clientAuthentication === 'body' ? 'Send client credentials in body' : 'Send as Basic Auth header', type: 'string' },
+        { key: 'authRequestParams', value: auth.authRequestParams || [], type: 'any' },
+        { key: 'tokenRequestParams', value: auth.tokenRequestParams || [], type: 'any' },
+        { key: 'refreshRequestParams', value: auth.refreshRequestParams || [], type: 'any' },
+        { key: 'grant_type', value: postmanOauthGrantTypeValue(auth.grantType), type: 'string' }
       ]
     };
   }

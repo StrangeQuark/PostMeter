@@ -135,6 +135,115 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(collection.requests[2].auth.tokenUrl, 'https://auth.example.test/token');
 });
 
+test('imports and exports OAuth 2.0 Postman controls', () => {
+  const authRequestParams = [
+    { key: 'prompt', value: 'consent', enabled: true }
+  ];
+  const tokenRequestParams = [
+    { key: 'resource', value: 'postmeter-api', sendIn: 'body', enabled: true },
+    { key: 'X-OAuth-Trace', value: 'trace-token', sendIn: 'header', enabled: true }
+  ];
+  const refreshRequestParams = [
+    { key: 'resource', value: 'postmeter-api', sendIn: 'body', enabled: true },
+    { key: 'X-Refresh-Trace', value: 'refresh-trace', sendIn: 'header', enabled: false }
+  ];
+  const collection = importPostmanCollection({
+    info: {
+      name: 'OAuth 2.0 Controls',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'OAuth 2.0',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/oauth2',
+        auth: {
+          type: 'oauth2',
+          oauth2: [
+            { key: 'tokenType', value: 'Bearer' },
+            { key: 'headerPrefix', value: 'Token' },
+            { key: 'tokenName', value: 'Production token' },
+            { key: 'addTokenTo', value: 'Request URL' },
+            { key: 'accessToken', value: '{{accessToken}}' },
+            { key: 'refreshToken', value: '{{refreshToken}}' },
+            { key: 'autoRefreshToken', value: false, type: 'boolean' },
+            { key: 'shareToken', value: true, type: 'boolean' },
+            { key: 'authUrl', value: 'https://auth.example.test/authorize' },
+            { key: 'accessTokenUrl', value: 'https://auth.example.test/token' },
+            { key: 'refreshTokenUrl', value: 'https://auth.example.test/refresh' },
+            { key: 'callbackUrl', value: 'postmeter://oauth/callback' },
+            { key: 'clientId', value: 'client-id' },
+            { key: 'clientSecret', value: '{{clientSecret}}' },
+            { key: 'username', value: 'resource-owner' },
+            { key: 'password', value: '{{ownerPassword}}' },
+            { key: 'scope', value: 'openid profile' },
+            { key: 'state', value: 'configured-state' },
+            { key: 'codeChallengeMethod', value: 'plain' },
+            { key: 'codeVerifier', value: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ' },
+            { key: 'authorizeUsingBrowser', value: true, type: 'boolean' },
+            { key: 'clientAuthentication', value: 'Send client credentials in body' },
+            { key: 'authRequestParams', value: authRequestParams, type: 'any' },
+            { key: 'tokenRequestParams', value: tokenRequestParams, type: 'any' },
+            { key: 'refreshRequestParams', value: refreshRequestParams, type: 'any' },
+            { key: 'grant_type', value: 'authorization_code_with_pkce' }
+          ]
+        }
+      }
+    }]
+  });
+
+  const auth = collection.requests[0].auth;
+  assert.equal(auth.type, 'oauth2');
+  assert.equal(auth.tokenType, 'Bearer');
+  assert.equal(auth.headerPrefix, 'Token');
+  assert.equal(auth.tokenName, 'Production token');
+  assert.equal(auth.addAuthDataTo, 'query');
+  assert.equal(auth.accessToken, '{{accessToken}}');
+  assert.equal(auth.refreshToken, '{{refreshToken}}');
+  assert.equal(auth.autoRefreshToken, false);
+  assert.equal(auth.shareToken, true);
+  assert.equal(auth.authorizationUrl, 'https://auth.example.test/authorize');
+  assert.equal(auth.tokenUrl, 'https://auth.example.test/token');
+  assert.equal(auth.refreshTokenUrl, 'https://auth.example.test/refresh');
+  assert.equal(auth.redirectUri, 'postmeter://oauth/callback');
+  assert.equal(auth.clientId, 'client-id');
+  assert.equal(auth.clientSecret, '{{clientSecret}}');
+  assert.equal(auth.username, 'resource-owner');
+  assert.equal(auth.password, '{{ownerPassword}}');
+  assert.equal(auth.scopes, 'openid profile');
+  assert.equal(auth.state, 'configured-state');
+  assert.equal(auth.codeChallengeMethod, 'plain');
+  assert.equal(auth.codeVerifier, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ');
+  assert.equal(auth.authorizeUsingBrowser, true);
+  assert.equal(auth.clientAuthentication, 'body');
+  assert.equal(auth.grantType, 'authorizationCodePkce');
+  assert.deepEqual(auth.authRequestParams, authRequestParams);
+  assert.deepEqual(auth.tokenRequestParams, tokenRequestParams);
+  assert.deepEqual(auth.refreshRequestParams, refreshRequestParams);
+
+  const exported = exportPostmanCollection(collection);
+  const exportedAuth = Object.fromEntries(exported.item[0].request.auth.oauth2.map((item) => [item.key, item.value]));
+  assert.equal(exported.item[0].request.auth.type, 'oauth2');
+  assert.equal(exportedAuth.headerPrefix, 'Token');
+  assert.equal(exportedAuth.tokenName, 'Production token');
+  assert.equal(exportedAuth.addTokenTo, 'Request URL');
+  assert.equal(exportedAuth.autoRefreshToken, false);
+  assert.equal(exportedAuth.shareToken, true);
+  assert.equal(exportedAuth.refreshTokenUrl, 'https://auth.example.test/refresh');
+  assert.equal(exportedAuth.callbackUrl, 'postmeter://oauth/callback');
+  assert.equal(exportedAuth.state, 'configured-state');
+  assert.equal(exportedAuth.username, 'resource-owner');
+  assert.equal(exportedAuth.password, '{{ownerPassword}}');
+  assert.equal(exportedAuth.codeChallengeMethod, 'plain');
+  assert.equal(exportedAuth.codeVerifier, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ');
+  assert.equal(exportedAuth.authorizeUsingBrowser, true);
+  assert.equal(exportedAuth.clientAuthentication, 'Send client credentials in body');
+  assert.equal(exportedAuth.grant_type, 'authorization_code_with_pkce');
+  assert.deepEqual(exportedAuth.authRequestParams, authRequestParams);
+  assert.deepEqual(exportedAuth.tokenRequestParams, tokenRequestParams);
+  assert.deepEqual(exportedAuth.refreshRequestParams, refreshRequestParams);
+});
+
 test('round-trips Postman request cookie source metadata without promoting disabled cookies', () => {
   const sourceCookies = [{
     name: 'expiresCookie',

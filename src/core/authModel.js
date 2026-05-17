@@ -4,6 +4,9 @@
     AUTH_TYPE_VALUES,
     OAUTH1_ADD_AUTH_DATA_TO: OAUTH1_ADD_AUTH_DATA_TO_VALUES,
     OAUTH1_SIGNATURE_METHODS: OAUTH1_SIGNATURE_METHOD_VALUES,
+    OAUTH2_ADD_AUTH_DATA_TO: OAUTH2_ADD_AUTH_DATA_TO_VALUES,
+    OAUTH2_CODE_CHALLENGE_METHODS: OAUTH2_CODE_CHALLENGE_METHOD_VALUES,
+    OAUTH2_CLIENT_AUTHENTICATION: OAUTH2_CLIENT_AUTHENTICATION_VALUES,
     OAUTH2_GRANT_TYPES: OAUTH2_GRANT_TYPE_VALUES,
     OAUTH2_REDIRECT_STRATEGIES: OAUTH2_REDIRECT_STRATEGY_VALUES,
     OAUTH2_TOKEN_TYPES: OAUTH2_TOKEN_TYPE_VALUES,
@@ -14,6 +17,9 @@
   const API_KEY_LOCATIONS = new Set(API_KEY_LOCATION_VALUES);
   const OAUTH1_ADD_AUTH_DATA_TO = new Set(OAUTH1_ADD_AUTH_DATA_TO_VALUES);
   const OAUTH1_SIGNATURE_METHODS = new Set(OAUTH1_SIGNATURE_METHOD_VALUES);
+  const OAUTH2_ADD_AUTH_DATA_TO = new Set(OAUTH2_ADD_AUTH_DATA_TO_VALUES);
+  const OAUTH2_CODE_CHALLENGE_METHODS = new Set(OAUTH2_CODE_CHALLENGE_METHOD_VALUES);
+  const OAUTH2_CLIENT_AUTHENTICATION = new Set(OAUTH2_CLIENT_AUTHENTICATION_VALUES);
   const OAUTH2_TOKEN_TYPES = new Set(OAUTH2_TOKEN_TYPE_VALUES);
   const OAUTH2_GRANT_TYPES = new Set(OAUTH2_GRANT_TYPE_VALUES);
   const OAUTH2_REDIRECT_STRATEGIES = new Set(OAUTH2_REDIRECT_STRATEGY_VALUES);
@@ -47,20 +53,38 @@
       return { type };
     }
     if (type === 'oauth2') {
+      const redirectUri = auth.redirectUri ?? auth.callbackUrl ?? auth.callbackURL ?? '';
+      const tokenType = normalizeSchemaEnumValue('oauth2TokenTypes', auth.tokenType, 'Bearer');
       return {
         type,
-        tokenType: normalizeSchemaEnumValue('oauth2TokenTypes', auth.tokenType, 'Bearer'),
+        tokenType,
+        headerPrefix: auth.headerPrefix ?? tokenType,
+        tokenName: auth.tokenName ?? '',
+        addAuthDataTo: normalizeOAuth2AddAuthDataTo(auth.addAuthDataTo ?? auth.addAuthorizationDataTo ?? auth.addTokenTo),
         accessToken: auth.accessToken ?? '',
         refreshToken: auth.refreshToken ?? '',
-        tokenUrl: auth.tokenUrl ?? '',
-        authorizationUrl: auth.authorizationUrl ?? '',
+        autoRefreshToken: auth.autoRefreshToken == null ? true : authBoolean(auth.autoRefreshToken),
+        shareToken: authBoolean(auth.shareToken),
+        tokenUrl: auth.tokenUrl ?? auth.accessTokenUrl ?? '',
+        refreshTokenUrl: auth.refreshTokenUrl ?? '',
+        authorizationUrl: auth.authorizationUrl ?? auth.authUrl ?? '',
         deviceAuthorizationUrl: auth.deviceAuthorizationUrl ?? '',
         clientId: auth.clientId ?? '',
         clientSecret: auth.clientSecret ?? '',
-        scopes: auth.scopes ?? '',
-        grantType: normalizeSchemaEnumValue('oauth2GrantTypes', auth.grantType, 'authorizationCode'),
+        username: auth.username ?? '',
+        password: auth.password ?? '',
+        scopes: auth.scopes ?? auth.scope ?? '',
+        state: auth.state ?? '',
+        codeChallengeMethod: normalizeOAuth2CodeChallengeMethod(auth.codeChallengeMethod),
+        codeVerifier: auth.codeVerifier ?? '',
+        authorizeUsingBrowser: authBoolean(auth.authorizeUsingBrowser ?? auth.useBrowser),
+        clientAuthentication: normalizeOAuth2ClientAuthentication(auth.clientAuthentication ?? auth.client_authentication),
+        authRequestParams: normalizeOAuth2ParamList(auth.authRequestParams),
+        tokenRequestParams: normalizeOAuth2ParamList(auth.tokenRequestParams, true),
+        refreshRequestParams: normalizeOAuth2ParamList(auth.refreshRequestParams, true),
+        grantType: normalizeOAuth2GrantType(auth.grantType),
         redirectStrategy: normalizeSchemaEnumValue('oauth2RedirectStrategies', auth.redirectStrategy, 'loopback'),
-        redirectUri: auth.redirectUri ?? '',
+        redirectUri,
         expiresAt: auth.expiresAt ?? '',
         deviceCode: auth.deviceCode ?? '',
         userCode: auth.userCode ?? '',
@@ -281,6 +305,75 @@
     return 'header';
   }
 
+  function normalizeOAuth2AddAuthDataTo(value) {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+    if (normalized === 'query' || normalized === 'url' || normalized === 'requesturl') {
+      return 'query';
+    }
+    return OAUTH2_ADD_AUTH_DATA_TO.has(value) ? value : 'header';
+  }
+
+  function normalizeOAuth2ClientAuthentication(value) {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+    if (normalized === 'basic' || normalized === 'basicauth' || normalized === 'sendasbasicauthheader') {
+      return 'basic';
+    }
+    if (normalized === 'body' || normalized === 'requestbody' || normalized === 'sendclientcredentialsinbody') {
+      return 'body';
+    }
+    return OAUTH2_CLIENT_AUTHENTICATION.has(value) ? value : 'basic';
+  }
+
+  function normalizeOAuth2GrantType(value) {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+    if (normalized === 'authorizationcodewithpkce' || normalized === 'authorizationcodepkce') {
+      return 'authorizationCodePkce';
+    }
+    if (normalized === 'clientcredentials' || normalized === 'clientcredential') {
+      return 'clientCredentials';
+    }
+    if (normalized === 'passwordcredentials' || normalized === 'passwordcredential' || normalized === 'password') {
+      return 'passwordCredentials';
+    }
+    if (normalized === 'devicecode') {
+      return 'deviceCode';
+    }
+    if (normalized === 'implicit') {
+      return 'implicit';
+    }
+    return normalizeSchemaEnumValue('oauth2GrantTypes', value, 'authorizationCode');
+  }
+
+  function normalizeOAuth2CodeChallengeMethod(value) {
+    if (value === 'plain') {
+      return 'plain';
+    }
+    return OAUTH2_CODE_CHALLENGE_METHODS.has(value) ? value : 'S256';
+  }
+
+  function normalizeOAuth2ParamList(value, includeSendIn = false) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => {
+        const normalized = {
+          enabled: item.enabled !== false,
+          key: item.key ?? '',
+          value: item.value ?? ''
+        };
+        if (includeSendIn) {
+          normalized.sendIn = normalizeOAuth2ParamSendIn(item.sendIn);
+        }
+        return normalized;
+      });
+  }
+
+  function normalizeOAuth2ParamSendIn(value) {
+    return String(value || '').trim().toLowerCase() === 'header' ? 'header' : 'body';
+  }
+
   function normalizeOAuth1AddAuthDataTo(value) {
     const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
     if (normalized === 'header' || normalized === 'headers' || normalized === 'requestheaders') {
@@ -323,15 +416,37 @@
       cookieValue: '',
       oauthGrantType: 'authorizationCode',
       oauthTokenType: 'Bearer',
+      oauthHeaderPrefix: 'Bearer',
+      oauthTokenName: '',
+      oauthAddAuthDataTo: 'header',
       oauthAccessToken: '',
       oauthRefreshToken: '',
+      oauthAutoRefreshToken: true,
+      oauthShareToken: false,
       oauthAuthorizationUrl: '',
+      oauthCallbackUrl: '',
+      oauthAuthorizeUsingBrowser: false,
       oauthRedirectStrategy: 'loopback',
       oauthDeviceAuthorizationUrl: '',
       oauthTokenUrl: '',
+      oauthRefreshTokenUrl: '',
       oauthClientId: '',
       oauthClientSecret: '',
+      oauthUsername: '',
+      oauthPassword: '',
       oauthScopes: '',
+      oauthState: '',
+      oauthCodeChallengeMethod: 'S256',
+      oauthCodeVerifier: '',
+      oauthClientAuthentication: 'basic',
+      oauthAuthRequestParamKey: '',
+      oauthAuthRequestParamValue: '',
+      oauthTokenRequestParamKey: '',
+      oauthTokenRequestParamValue: '',
+      oauthTokenRequestParamSendIn: 'body',
+      oauthRefreshRequestParamKey: '',
+      oauthRefreshRequestParamValue: '',
+      oauthRefreshRequestParamSendIn: 'body',
       oauthUserCode: '',
       oauthVerificationUri: '',
       oauth1SignatureMethod: 'HMAC-SHA1',
@@ -393,15 +508,40 @@
     if (normalized.type === 'oauth2') {
       state.oauthGrantType = normalized.grantType;
       state.oauthTokenType = normalized.tokenType;
+      state.oauthHeaderPrefix = normalized.headerPrefix;
+      state.oauthTokenName = normalized.tokenName;
+      state.oauthAddAuthDataTo = normalized.addAuthDataTo;
       state.oauthAccessToken = normalized.accessToken;
       state.oauthRefreshToken = normalized.refreshToken;
+      state.oauthAutoRefreshToken = normalized.autoRefreshToken;
+      state.oauthShareToken = normalized.shareToken;
       state.oauthAuthorizationUrl = normalized.authorizationUrl;
+      state.oauthCallbackUrl = normalized.redirectUri;
+      state.oauthAuthorizeUsingBrowser = normalized.authorizeUsingBrowser;
       state.oauthRedirectStrategy = normalized.redirectStrategy;
       state.oauthDeviceAuthorizationUrl = normalized.deviceAuthorizationUrl;
       state.oauthTokenUrl = normalized.tokenUrl;
+      state.oauthRefreshTokenUrl = normalized.refreshTokenUrl;
       state.oauthClientId = normalized.clientId;
       state.oauthClientSecret = normalized.clientSecret;
+      state.oauthUsername = normalized.username;
+      state.oauthPassword = normalized.password;
       state.oauthScopes = normalized.scopes;
+      state.oauthState = normalized.state;
+      state.oauthCodeChallengeMethod = normalized.codeChallengeMethod;
+      state.oauthCodeVerifier = normalized.codeVerifier;
+      state.oauthClientAuthentication = normalized.clientAuthentication;
+      const authRequestParam = normalized.authRequestParams[0] || {};
+      const tokenRequestParam = normalized.tokenRequestParams[0] || {};
+      const refreshRequestParam = normalized.refreshRequestParams[0] || {};
+      state.oauthAuthRequestParamKey = authRequestParam.key ?? '';
+      state.oauthAuthRequestParamValue = authRequestParam.value ?? '';
+      state.oauthTokenRequestParamKey = tokenRequestParam.key ?? '';
+      state.oauthTokenRequestParamValue = tokenRequestParam.value ?? '';
+      state.oauthTokenRequestParamSendIn = tokenRequestParam.sendIn || 'body';
+      state.oauthRefreshRequestParamKey = refreshRequestParam.key ?? '';
+      state.oauthRefreshRequestParamValue = refreshRequestParam.value ?? '';
+      state.oauthRefreshRequestParamSendIn = refreshRequestParam.sendIn || 'body';
       state.oauthUserCode = normalized.userCode;
       state.oauthVerificationUri = normalized.verificationUriComplete || normalized.verificationUri;
       return state;
@@ -491,17 +631,33 @@
       return normalizeAuth({
         type,
         tokenType: state.oauthTokenType,
+        headerPrefix: state.oauthHeaderPrefix ?? state.oauthTokenType ?? 'Bearer',
+        tokenName: state.oauthTokenName ?? '',
+        addAuthDataTo: state.oauthAddAuthDataTo ?? 'header',
         accessToken: state.oauthAccessToken ?? '',
         refreshToken: state.oauthRefreshToken ?? '',
+        autoRefreshToken: state.oauthAutoRefreshToken !== false,
+        shareToken: state.oauthShareToken === true,
         authorizationUrl: state.oauthAuthorizationUrl ?? '',
         deviceAuthorizationUrl: state.oauthDeviceAuthorizationUrl ?? '',
         tokenUrl: state.oauthTokenUrl ?? '',
+        refreshTokenUrl: state.oauthRefreshTokenUrl ?? '',
         clientId: state.oauthClientId ?? '',
         clientSecret: state.oauthClientSecret ?? '',
+        username: state.oauthUsername ?? '',
+        password: state.oauthPassword ?? '',
         scopes: state.oauthScopes ?? '',
+        state: state.oauthState ?? '',
+        codeChallengeMethod: state.oauthCodeChallengeMethod ?? 'S256',
+        codeVerifier: state.oauthCodeVerifier ?? '',
+        authorizeUsingBrowser: state.oauthAuthorizeUsingBrowser === true,
+        clientAuthentication: state.oauthClientAuthentication ?? 'basic',
+        authRequestParams: editorOAuth2Params(state.oauthAuthRequestParamKey, state.oauthAuthRequestParamValue),
+        tokenRequestParams: editorOAuth2Params(state.oauthTokenRequestParamKey, state.oauthTokenRequestParamValue, state.oauthTokenRequestParamSendIn),
+        refreshRequestParams: editorOAuth2Params(state.oauthRefreshRequestParamKey, state.oauthRefreshRequestParamValue, state.oauthRefreshRequestParamSendIn),
         grantType,
         redirectStrategy: state.oauthRedirectStrategy,
-        redirectUri: keepExistingOauthState ? normalizedExisting.redirectUri : '',
+        redirectUri: state.oauthCallbackUrl ?? (keepExistingOauthState ? normalizedExisting.redirectUri : ''),
         expiresAt: keepExistingOauthState ? normalizedExisting.expiresAt : '',
         deviceCode: keepDeviceState ? normalizedExisting.deviceCode : '',
         userCode: keepDeviceState ? (state.oauthUserCode ?? '') : '',
@@ -564,6 +720,21 @@
     return { type: 'none' };
   }
 
+  function editorOAuth2Params(key, value, sendIn = null) {
+    if (!key && !value) {
+      return [];
+    }
+    const param = {
+      enabled: true,
+      key: key ?? '',
+      value: value ?? ''
+    };
+    if (sendIn != null) {
+      param.sendIn = normalizeOAuth2ParamSendIn(sendIn);
+    }
+    return [param];
+  }
+
   function resolvePayloadSchemas(runtimeGlobal) {
     if (runtimeGlobal?.PostMeterPayloadSchemas) {
       return runtimeGlobal.PostMeterPayloadSchemas;
@@ -583,6 +754,12 @@
     OAUTH1_ADD_AUTH_DATA_TO_VALUES,
     OAUTH1_SIGNATURE_METHODS,
     OAUTH1_SIGNATURE_METHOD_VALUES,
+    OAUTH2_ADD_AUTH_DATA_TO,
+    OAUTH2_ADD_AUTH_DATA_TO_VALUES,
+    OAUTH2_CODE_CHALLENGE_METHODS,
+    OAUTH2_CODE_CHALLENGE_METHOD_VALUES,
+    OAUTH2_CLIENT_AUTHENTICATION,
+    OAUTH2_CLIENT_AUTHENTICATION_VALUES,
     OAUTH2_GRANT_TYPES,
     OAUTH2_GRANT_TYPE_VALUES,
     OAUTH2_REDIRECT_STRATEGIES,
