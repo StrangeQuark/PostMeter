@@ -506,6 +506,7 @@ const FIELD_SCHEMAS = {
     certificateId: { type: 'string', limit: 'name', optional: true },
     realm: { type: 'string', limit: 'value', optional: true },
     nonce: { type: 'string', limit: 'value', optional: true },
+    disableRetryingRequest: { type: 'boolean', optional: true },
     algorithm: { type: 'string', limit: 'short', optional: true },
     qop: { type: 'string', limit: 'short', optional: true },
     opaque: { type: 'string', limit: 'value', optional: true },

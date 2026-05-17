@@ -735,11 +735,16 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'digest',
       username: authParam(authNode.digest, 'username'),
       password: authParam(authNode.digest, 'password'),
+      disableRetryingRequest: authBooleanParam(authNode.digest, 'disableRetryingRequest')
+        || authBooleanParam(authNode.digest, 'disableRetryRequest')
+        || authBooleanParam(authNode.digest, 'disableRetrying'),
       realm: authParam(authNode.digest, 'realm'),
       nonce: authParam(authNode.digest, 'nonce'),
       algorithm: authParam(authNode.digest, 'algorithm') || 'MD5',
       qop: authParam(authNode.digest, 'qop') || 'auth',
-      opaque: authParam(authNode.digest, 'opaque')
+      opaque: authParam(authNode.digest, 'opaque'),
+      clientNonce: authParam(authNode.digest, 'clientNonce') || authParam(authNode.digest, 'cnonce'),
+      nonceCount: authParam(authNode.digest, 'nonceCount') || authParam(authNode.digest, 'nc')
     };
   }
   if (type === 'hawk') {
@@ -846,6 +851,11 @@ function authParam(values, key) {
     return value == null ? '' : String(value);
   }
   return '';
+}
+
+function authBooleanParam(values, key) {
+  const value = authParam(values, key);
+  return value === true || String(value).trim().toLowerCase() === 'true';
 }
 
 function postmanOauthGrantType(value) {
@@ -1383,10 +1393,13 @@ function exportPostmanAuthModel(auth) {
       digest: [
         { key: 'username', value: auth.username || '', type: 'string' },
         { key: 'password', value: auth.password || '', type: 'string' },
+        { key: 'disableRetryingRequest', value: auth.disableRetryingRequest === true, type: 'boolean' },
         { key: 'realm', value: auth.realm || '', type: 'string' },
         { key: 'nonce', value: auth.nonce || '', type: 'string' },
         { key: 'algorithm', value: auth.algorithm || 'MD5', type: 'string' },
         { key: 'qop', value: auth.qop || 'auth', type: 'string' },
+        { key: 'nonceCount', value: auth.nonceCount || '', type: 'string' },
+        { key: 'clientNonce', value: auth.clientNonce || '', type: 'string' },
         { key: 'opaque', value: auth.opaque || '', type: 'string' }
       ]
     };

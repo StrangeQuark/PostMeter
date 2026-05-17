@@ -116,6 +116,16 @@ test('request editor panels read auth editor inputs through the shared auth mode
     ['authOauthClientSecretInput', { value: 'client-secret' }],
     ['authOauthScopesInput', { value: 'openid profile' }],
     ['authOauthUserCodeInput', { value: 'NEXT-CODE' }],
+    ['authDigestUsernameInput', { value: '' }],
+    ['authDigestPasswordInput', { value: '' }],
+    ['authDigestDisableRetryingRequestInput', { checked: false }],
+    ['authDigestRealmInput', { value: '' }],
+    ['authDigestNonceInput', { value: '' }],
+    ['authDigestAlgorithmSelect', { value: 'MD5' }],
+    ['authDigestQopInput', { value: 'auth' }],
+    ['authDigestNonceCountInput', { value: '' }],
+    ['authDigestClientNonceInput', { value: '' }],
+    ['authDigestOpaqueInput', { value: '' }],
     ['authClientPfxPathInput', { value: '' }],
     ['authClientCertPathInput', { value: '' }],
     ['authClientKeyPathInput', { value: '' }],
@@ -166,6 +176,69 @@ test('request editor panels read auth editor inputs through the shared auth mode
     verificationUriComplete: 'https://auth.example.test/device?user_code=PREV',
     deviceCodeExpiresAt: '2030-01-01T00:10:00.000Z',
     devicePollIntervalSeconds: '5'
+  });
+});
+
+test('request editor panels read Digest auth editor inputs', () => {
+  const values = new Map([
+    ['authTypeSelect', { value: 'digest' }],
+    ['authBearerTokenInput', { value: '' }],
+    ['authBasicUsernameInput', { value: '' }],
+    ['authBasicPasswordInput', { value: '' }],
+    ['authApiKeyLocationSelect', { value: 'header' }],
+    ['authApiKeyNameInput', { value: '' }],
+    ['authApiKeyValueInput', { value: '' }],
+    ['authCookieValueInput', { value: '' }],
+    ['authOauthGrantTypeSelect', { value: 'authorizationCode' }],
+    ['authOauthTokenTypeSelect', { value: 'Bearer' }],
+    ['authOauthAccessTokenInput', { value: '' }],
+    ['authOauthRefreshTokenInput', { value: '' }],
+    ['authOauthAuthorizationUrlInput', { value: '' }],
+    ['authOauthRedirectStrategySelect', { value: 'loopback' }],
+    ['authOauthDeviceAuthorizationUrlInput', { value: '' }],
+    ['authOauthTokenUrlInput', { value: '' }],
+    ['authOauthClientIdInput', { value: '' }],
+    ['authOauthClientSecretInput', { value: '' }],
+    ['authOauthScopesInput', { value: '' }],
+    ['authOauthUserCodeInput', { value: '' }],
+    ['authDigestUsernameInput', { value: 'ada' }],
+    ['authDigestPasswordInput', { value: 'secret' }],
+    ['authDigestDisableRetryingRequestInput', { checked: true }],
+    ['authDigestRealmInput', { value: 'postmeter' }],
+    ['authDigestNonceInput', { value: 'abc123' }],
+    ['authDigestAlgorithmSelect', { value: 'SHA-256' }],
+    ['authDigestQopInput', { value: 'auth' }],
+    ['authDigestNonceCountInput', { value: '00000005' }],
+    ['authDigestClientNonceInput', { value: '0a4f113b' }],
+    ['authDigestOpaqueInput', { value: 'opaque-token' }],
+    ['authClientPfxPathInput', { value: '' }],
+    ['authClientCertPathInput', { value: '' }],
+    ['authClientKeyPathInput', { value: '' }],
+    ['authClientCaPathInput', { value: '' }],
+    ['authClientPassphraseInput', { value: '' }]
+  ]);
+  const fakeDoc = {
+    getElementById(id) {
+      const value = values.get(id);
+      if (!value) {
+        throw new Error(`Unexpected element lookup: ${id}`);
+      }
+      return value;
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc }), {
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'SHA-256',
+    qop: 'auth',
+    opaque: 'opaque-token',
+    clientNonce: '0a4f113b',
+    nonceCount: '00000005'
   });
 });
 
@@ -282,6 +355,16 @@ test('request editor panels can read prefixed auth editor inputs for performance
     ['performanceAuthOauthClientSecretInput', { value: '' }],
     ['performanceAuthOauthScopesInput', { value: '' }],
     ['performanceAuthOauthUserCodeInput', { value: '' }],
+    ['performanceAuthDigestUsernameInput', { value: '' }],
+    ['performanceAuthDigestPasswordInput', { value: '' }],
+    ['performanceAuthDigestDisableRetryingRequestInput', { checked: false }],
+    ['performanceAuthDigestRealmInput', { value: '' }],
+    ['performanceAuthDigestNonceInput', { value: '' }],
+    ['performanceAuthDigestAlgorithmSelect', { value: 'MD5' }],
+    ['performanceAuthDigestQopInput', { value: 'auth' }],
+    ['performanceAuthDigestNonceCountInput', { value: '' }],
+    ['performanceAuthDigestClientNonceInput', { value: '' }],
+    ['performanceAuthDigestOpaqueInput', { value: '' }],
     ['performanceAuthClientPfxPathInput', { value: '' }],
     ['performanceAuthClientCertPathInput', { value: '' }],
     ['performanceAuthClientKeyPathInput', { value: '' }],

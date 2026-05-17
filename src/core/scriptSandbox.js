@@ -1616,6 +1616,10 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       type: 'digest',
       username: authField(source, 'username') || source.username || '',
       password: authField(source, 'password') || source.password || '',
+      disableRetryingRequest: boolAuthField(source, 'disableRetryingRequest')
+        || boolAuthField(source, 'disableRetryRequest')
+        || boolAuthField(source, 'disableRetrying')
+        || source.disableRetryingRequest === true,
       realm: authField(source, 'realm') || source.realm || '',
       nonce: authField(source, 'nonce') || source.nonce || '',
       algorithm: authField(source, 'algorithm') || source.algorithm || 'MD5',

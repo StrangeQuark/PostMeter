@@ -22,8 +22,19 @@
     }
   }
 
+  function setOptionElementChecked(doc, options, id, value) {
+    const target = optionElement(doc, options, id);
+    if (target) {
+      target.checked = value === true;
+    }
+  }
+
   function optionElementValue(doc, options, id) {
     return optionElement(doc, options, id)?.value || '';
+  }
+
+  function optionElementChecked(doc, options, id) {
+    return optionElement(doc, options, id)?.checked === true;
   }
 
   function bodyTypeCodeLanguage(bodyType) {
@@ -433,6 +444,16 @@
     setOptionElementValue(doc, options, 'authOauthScopesInput', fields.oauthScopes);
     setOptionElementValue(doc, options, 'authOauthUserCodeInput', fields.oauthUserCode);
     setOptionElementValue(doc, options, 'authOauthVerificationUriInput', fields.oauthVerificationUri);
+    setOptionElementValue(doc, options, 'authDigestUsernameInput', fields.digestUsername);
+    setOptionElementValue(doc, options, 'authDigestPasswordInput', fields.digestPassword);
+    setOptionElementChecked(doc, options, 'authDigestDisableRetryingRequestInput', fields.digestDisableRetryingRequest);
+    setOptionElementValue(doc, options, 'authDigestRealmInput', fields.digestRealm);
+    setOptionElementValue(doc, options, 'authDigestNonceInput', fields.digestNonce);
+    setOptionElementValue(doc, options, 'authDigestAlgorithmSelect', fields.digestAlgorithm);
+    setOptionElementValue(doc, options, 'authDigestQopInput', fields.digestQop);
+    setOptionElementValue(doc, options, 'authDigestNonceCountInput', fields.digestNonceCount);
+    setOptionElementValue(doc, options, 'authDigestClientNonceInput', fields.digestClientNonce);
+    setOptionElementValue(doc, options, 'authDigestOpaqueInput', fields.digestOpaque);
     setOptionElementValue(doc, options, 'authClientPfxPathInput', fields.clientPfxPath);
     setOptionElementValue(doc, options, 'authClientCertPathInput', fields.clientCertPath);
     setOptionElementValue(doc, options, 'authClientKeyPathInput', fields.clientKeyPath);
@@ -463,6 +484,16 @@
       oauthClientSecret: optionElementValue(doc, options, 'authOauthClientSecretInput'),
       oauthScopes: optionElementValue(doc, options, 'authOauthScopesInput'),
       oauthUserCode: optionElementValue(doc, options, 'authOauthUserCodeInput'),
+      digestUsername: optionElementValue(doc, options, 'authDigestUsernameInput'),
+      digestPassword: optionElementValue(doc, options, 'authDigestPasswordInput'),
+      digestDisableRetryingRequest: optionElementChecked(doc, options, 'authDigestDisableRetryingRequestInput'),
+      digestRealm: optionElementValue(doc, options, 'authDigestRealmInput'),
+      digestNonce: optionElementValue(doc, options, 'authDigestNonceInput'),
+      digestAlgorithm: optionElementValue(doc, options, 'authDigestAlgorithmSelect'),
+      digestQop: optionElementValue(doc, options, 'authDigestQopInput'),
+      digestNonceCount: optionElementValue(doc, options, 'authDigestNonceCountInput'),
+      digestClientNonce: optionElementValue(doc, options, 'authDigestClientNonceInput'),
+      digestOpaque: optionElementValue(doc, options, 'authDigestOpaqueInput'),
       clientPfxPath: optionElementValue(doc, options, 'authClientPfxPathInput'),
       clientCertPath: optionElementValue(doc, options, 'authClientCertPathInput'),
       clientKeyPath: optionElementValue(doc, options, 'authClientKeyPathInput'),

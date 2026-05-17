@@ -82,13 +82,19 @@
         type,
         username: auth.username ?? '',
         password: auth.password ?? '',
+        disableRetryingRequest: authBoolean(
+          auth.disableRetryingRequest
+          ?? auth.disableRetryRequest
+          ?? auth.disableRetry
+          ?? auth.disableRetrying
+        ),
         realm: auth.realm ?? '',
         nonce: auth.nonce ?? '',
         algorithm: auth.algorithm ?? 'MD5',
         qop: auth.qop ?? 'auth',
         opaque: auth.opaque ?? '',
-        clientNonce: auth.clientNonce ?? '',
-        nonceCount: auth.nonceCount ?? ''
+        clientNonce: auth.clientNonce ?? auth.cnonce ?? '',
+        nonceCount: auth.nonceCount ?? auth.nc ?? ''
       };
     }
     if (type === 'hawk') {
@@ -223,6 +229,10 @@
     return AUTH_TYPES.has(text) ? text : normalizeSchemaEnumValue('authTypes', text, 'none');
   }
 
+  function authBoolean(value) {
+    return value === true || String(value).trim().toLowerCase() === 'true';
+  }
+
   function normalizePersistedAuth(auth) {
     if (!auth || typeof auth !== 'object') {
       return { type: 'none' };
@@ -257,6 +267,16 @@
       oauthScopes: '',
       oauthUserCode: '',
       oauthVerificationUri: '',
+      digestUsername: '',
+      digestPassword: '',
+      digestDisableRetryingRequest: false,
+      digestRealm: '',
+      digestNonce: '',
+      digestAlgorithm: 'MD5',
+      digestQop: 'auth',
+      digestNonceCount: '',
+      digestClientNonce: '',
+      digestOpaque: '',
       clientPfxPath: '',
       clientCertPath: '',
       clientKeyPath: '',
@@ -302,6 +322,19 @@
       state.oauthScopes = normalized.scopes;
       state.oauthUserCode = normalized.userCode;
       state.oauthVerificationUri = normalized.verificationUriComplete || normalized.verificationUri;
+      return state;
+    }
+    if (normalized.type === 'digest') {
+      state.digestUsername = normalized.username;
+      state.digestPassword = normalized.password;
+      state.digestDisableRetryingRequest = normalized.disableRetryingRequest;
+      state.digestRealm = normalized.realm;
+      state.digestNonce = normalized.nonce;
+      state.digestAlgorithm = normalized.algorithm;
+      state.digestQop = normalized.qop;
+      state.digestNonceCount = normalized.nonceCount;
+      state.digestClientNonce = normalized.clientNonce;
+      state.digestOpaque = normalized.opaque;
       return state;
     }
     if (normalized.type === 'clientCertificate') {
@@ -389,7 +422,22 @@
         passphrase: state.clientPassphrase ?? ''
       });
     }
-    if (['digest', 'hawk', 'aws', 'oauth1', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
+    if (type === 'digest') {
+      return normalizeAuth({
+        type,
+        username: state.digestUsername ?? '',
+        password: state.digestPassword ?? '',
+        disableRetryingRequest: state.digestDisableRetryingRequest === true,
+        realm: state.digestRealm ?? '',
+        nonce: state.digestNonce ?? '',
+        algorithm: state.digestAlgorithm ?? 'MD5',
+        qop: state.digestQop ?? '',
+        nonceCount: state.digestNonceCount ?? '',
+        clientNonce: state.digestClientNonce ?? '',
+        opaque: state.digestOpaque ?? ''
+      });
+    }
+    if (['hawk', 'aws', 'oauth1', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
       const existing = normalizeAuth(existingAuth);
       return normalizeAuth(existing.type === type ? existing : { type });
     }

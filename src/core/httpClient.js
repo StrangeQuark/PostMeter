@@ -241,6 +241,9 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
   if (auth.type !== 'digest') {
     return response;
   }
+  if (auth.disableRetryingRequest === true) {
+    return response;
+  }
   const challenge = parseDigestChallenge(headers['www-authenticate']);
   if (!challenge) {
     return response;

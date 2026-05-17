@@ -42,6 +42,31 @@ test('shared auth model normalizes runtime auth values by type', () => {
     deviceCodeExpiresAt: '',
     devicePollIntervalSeconds: ''
   });
+  assert.deepEqual(normalizeAuth({
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetry: 'true',
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'SHA-256',
+    qop: '',
+    opaque: 'opaque-token',
+    clientNonce: '0a4f113b',
+    nonceCount: '00000005'
+  }), {
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'SHA-256',
+    qop: '',
+    opaque: 'opaque-token',
+    clientNonce: '0a4f113b',
+    nonceCount: '00000005'
+  });
 });
 
 test('shared auth model keeps persisted auth shallow for workspace compatibility', () => {
@@ -86,11 +111,100 @@ test('shared auth model maps runtime auth to renderer editor fields', () => {
     oauthScopes: '',
     oauthUserCode: 'ABCD-EFGH',
     oauthVerificationUri: 'https://example.test/device?code=ABCD-EFGH',
+    digestUsername: '',
+    digestPassword: '',
+    digestDisableRetryingRequest: false,
+    digestRealm: '',
+    digestNonce: '',
+    digestAlgorithm: 'MD5',
+    digestQop: 'auth',
+    digestNonceCount: '',
+    digestClientNonce: '',
+    digestOpaque: '',
     clientPfxPath: '',
     clientCertPath: '',
     clientKeyPath: '',
     clientCaPath: '',
     clientPassphrase: ''
+  });
+});
+
+test('shared auth model maps Digest auth to and from renderer editor fields', () => {
+  assert.deepEqual(authEditorState({
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'MD5-sess',
+    qop: 'auth',
+    nonceCount: '00000005',
+    clientNonce: '0a4f113b',
+    opaque: 'opaque-token'
+  }), {
+    type: 'digest',
+    bearerToken: '',
+    basicUsername: '',
+    basicPassword: '',
+    apiKeyLocation: 'header',
+    apiKeyName: '',
+    apiKeyValue: '',
+    cookieValue: '',
+    oauthGrantType: 'authorizationCode',
+    oauthTokenType: 'Bearer',
+    oauthAccessToken: '',
+    oauthRefreshToken: '',
+    oauthAuthorizationUrl: '',
+    oauthRedirectStrategy: 'loopback',
+    oauthDeviceAuthorizationUrl: '',
+    oauthTokenUrl: '',
+    oauthClientId: '',
+    oauthClientSecret: '',
+    oauthScopes: '',
+    oauthUserCode: '',
+    oauthVerificationUri: '',
+    digestUsername: 'ada',
+    digestPassword: 'secret',
+    digestDisableRetryingRequest: true,
+    digestRealm: 'postmeter',
+    digestNonce: 'abc123',
+    digestAlgorithm: 'MD5-sess',
+    digestQop: 'auth',
+    digestNonceCount: '00000005',
+    digestClientNonce: '0a4f113b',
+    digestOpaque: 'opaque-token',
+    clientPfxPath: '',
+    clientCertPath: '',
+    clientKeyPath: '',
+    clientCaPath: '',
+    clientPassphrase: ''
+  });
+
+  assert.deepEqual(authFromEditorState({
+    type: 'digest',
+    digestUsername: 'ada',
+    digestPassword: 'secret',
+    digestDisableRetryingRequest: true,
+    digestRealm: 'postmeter',
+    digestNonce: 'abc123',
+    digestAlgorithm: 'MD5-sess',
+    digestQop: 'auth',
+    digestNonceCount: '00000005',
+    digestClientNonce: '0a4f113b',
+    digestOpaque: 'opaque-token'
+  }), {
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'MD5-sess',
+    qop: 'auth',
+    opaque: 'opaque-token',
+    clientNonce: '0a4f113b',
+    nonceCount: '00000005'
   });
 });
 

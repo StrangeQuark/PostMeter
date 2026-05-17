@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const http = require('node:http');
 const test = require('node:test');
 const {
@@ -15,6 +16,15 @@ const {
   validateAuth
 } = require('../../src/core/auth');
 const { sendRequest } = require('../../src/core/httpClient');
+
+const DIGEST_ALGORITHM_OPTIONS = [
+  'MD5',
+  'MD5-sess',
+  'SHA-256',
+  'SHA-256-sess',
+  'SHA-512-256',
+  'SHA-512-256-sess'
+];
 
 test('normalizes unsupported auth types to none', () => {
   assert.deepEqual(normalizeAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });
@@ -211,6 +221,230 @@ test('applies advanced Postman auth helpers through the brokered HTTP sender', a
       workstation: 'WORKSTATION'
     });
     assert.match(ntlm.authorization, /^NTLM TlRMTVNTUAAD/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes Digest auth challenge retry against a localhost server with advanced fields', async () => {
+  let attempts = 0;
+  const challenge = {
+    algorithm: 'MD5',
+    nonce: 'abc123',
+    opaque: 'opaque-token',
+    qop: 'auth',
+    realm: 'postmeter'
+  };
+  const server = await createServer(async (request, response) => {
+    attempts += 1;
+    const authorization = request.headers.authorization || '';
+    response.setHeader('Content-Type', 'application/json');
+    if (!authorization) {
+      response.writeHead(401, {
+        'WWW-Authenticate': digestChallengeHeader(challenge),
+        'Content-Type': 'application/json'
+      });
+      response.end(JSON.stringify({ challenge: true }));
+      return;
+    }
+    const fields = parseDigestAuthorization(authorization);
+    const verified = verifyDigestAuthorization(fields, {
+      ...challenge,
+      method: request.method,
+      password: 'secret',
+      uri: request.url
+    });
+    response.statusCode = verified ? 200 : 403;
+    response.end(JSON.stringify({ attempts, fields, verified }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/digest?via=challenge`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'digest',
+        username: 'ada',
+        password: 'secret',
+        clientNonce: '0a4f113b',
+        nonceCount: '00000005'
+      }
+    });
+    const body = JSON.parse(result.body);
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(body.verified, true);
+    assert.equal(body.attempts, 2);
+    assert.equal(body.fields.username, 'ada');
+    assert.equal(body.fields.realm, 'postmeter');
+    assert.equal(body.fields.nonce, 'abc123');
+    assert.equal(body.fields.uri, '/digest?via=challenge');
+    assert.equal(body.fields.qop, 'auth');
+    assert.equal(body.fields.nc, '00000005');
+    assert.equal(body.fields.cnonce, '0a4f113b');
+    assert.equal(body.fields.opaque, 'opaque-token');
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes Digest auth challenge retry for every Algorithm dropdown option', async () => {
+  let attempts = 0;
+  const server = await createServer(async (request, response) => {
+    attempts += 1;
+    const algorithm = decodeURIComponent(request.url.split('/').at(-1) || 'MD5');
+    const challenge = {
+      algorithm,
+      nonce: `nonce-${algorithm}`,
+      opaque: `opaque-${algorithm}`,
+      qop: 'auth',
+      realm: `realm-${algorithm}`
+    };
+    const authorization = request.headers.authorization || '';
+    response.setHeader('Content-Type', 'application/json');
+    if (!authorization) {
+      response.writeHead(401, {
+        'WWW-Authenticate': digestChallengeHeader(challenge),
+        'Content-Type': 'application/json'
+      });
+      response.end(JSON.stringify({ challenge: true }));
+      return;
+    }
+    const fields = parseDigestAuthorization(authorization);
+    const verified = verifyDigestAuthorization(fields, {
+      ...challenge,
+      method: request.method,
+      password: 'secret',
+      uri: request.url
+    });
+    response.statusCode = verified ? 200 : 403;
+    response.end(JSON.stringify({ algorithm, fields, verified }));
+  });
+
+  try {
+    for (const algorithm of DIGEST_ALGORITHM_OPTIONS) {
+      const result = await sendRequest({
+        method: 'GET',
+        url: `${server.baseUrl}/digest-algorithm/${encodeURIComponent(algorithm)}`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        auth: {
+          type: 'digest',
+          username: 'ada',
+          password: 'secret',
+          clientNonce: `cnonce-${algorithm}`,
+          nonceCount: '00000001'
+        }
+      });
+      const body = JSON.parse(result.body);
+      assert.equal(result.statusCode, 200, `${algorithm} should authenticate successfully`);
+      assert.equal(body.verified, true, `${algorithm} should verify against the localhost server`);
+      assert.equal(body.fields.algorithm, algorithm);
+    }
+    assert.equal(attempts, DIGEST_ALGORITHM_OPTIONS.length * 2);
+  } finally {
+    await server.close();
+  }
+});
+
+test('sends preemptive Digest auth when advanced fields are supplied and retry is disabled', async () => {
+  let attempts = 0;
+  const challenge = {
+    algorithm: 'MD5',
+    nonce: 'manual-nonce',
+    opaque: 'manual-opaque',
+    qop: 'auth',
+    realm: 'manual-realm'
+  };
+  const server = await createServer(async (request, response) => {
+    attempts += 1;
+    const fields = parseDigestAuthorization(request.headers.authorization || '');
+    const verified = verifyDigestAuthorization(fields, {
+      ...challenge,
+      method: request.method,
+      password: 'secret',
+      uri: request.url
+    });
+    response.statusCode = verified ? 200 : 401;
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('WWW-Authenticate', digestChallengeHeader(challenge));
+    response.end(JSON.stringify({ attempts, fields, verified }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/manual-digest`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'digest',
+        username: 'ada',
+        password: 'secret',
+        disableRetryingRequest: true,
+        realm: 'manual-realm',
+        nonce: 'manual-nonce',
+        algorithm: 'MD5',
+        qop: 'auth',
+        opaque: 'manual-opaque',
+        clientNonce: 'manual-cnonce',
+        nonceCount: '00000009'
+      }
+    });
+    const body = JSON.parse(result.body);
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(body.verified, true);
+    assert.equal(body.attempts, 1);
+    assert.equal(body.fields.nc, '00000009');
+    assert.equal(body.fields.cnonce, 'manual-cnonce');
+  } finally {
+    await server.close();
+  }
+});
+
+test('does not automatically retry Digest challenges when retrying is disabled', async () => {
+  let attempts = 0;
+  const server = await createServer(async (_request, response) => {
+    attempts += 1;
+    response.writeHead(401, {
+      'WWW-Authenticate': digestChallengeHeader({
+        algorithm: 'MD5',
+        nonce: 'retry-disabled-nonce',
+        qop: 'auth',
+        realm: 'postmeter'
+      }),
+      'Content-Type': 'application/json'
+    });
+    response.end(JSON.stringify({ challenge: true }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/no-retry`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'digest',
+        username: 'ada',
+        password: 'secret',
+        disableRetryingRequest: true
+      }
+    });
+
+    assert.equal(result.statusCode, 401);
+    assert.equal(attempts, 1);
   } finally {
     await server.close();
   }
@@ -1047,6 +1281,67 @@ async function readRequestBody(request) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+function digestChallengeHeader(challenge) {
+  const fields = [
+    `realm="${challenge.realm}"`,
+    `nonce="${challenge.nonce}"`,
+    `qop="${challenge.qop || 'auth'}"`,
+    `algorithm=${challenge.algorithm || 'MD5'}`
+  ];
+  if (challenge.opaque) {
+    fields.push(`opaque="${challenge.opaque}"`);
+  }
+  return `Digest ${fields.join(', ')}`;
+}
+
+function parseDigestAuthorization(header) {
+  const value = String(header || '').replace(/^Digest\s+/i, '');
+  const fields = {};
+  const pattern = /([A-Za-z0-9_-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^,]*))(?:,|$)/g;
+  let match;
+  while ((match = pattern.exec(value)) !== null) {
+    fields[match[1]] = match[2] != null ? match[2].replace(/\\"/g, '"') : String(match[3] || '').trim();
+  }
+  return fields;
+}
+
+function verifyDigestAuthorization(fields, expected) {
+  if (!fields || fields.username !== 'ada' || fields.realm !== expected.realm || fields.nonce !== expected.nonce) {
+    return false;
+  }
+  if (fields.uri !== expected.uri || fields.qop !== expected.qop || fields.opaque !== (expected.opaque || '')) {
+    return false;
+  }
+  const algorithm = digestAlgorithm(fields.algorithm || expected.algorithm);
+  if (!algorithm) {
+    return false;
+  }
+  let ha1 = digestHash(algorithm.hash, `${fields.username}:${expected.realm}:${expected.password}`);
+  if (algorithm.sess) {
+    ha1 = digestHash(algorithm.hash, `${ha1}:${expected.nonce}:${fields.cnonce}`);
+  }
+  const ha2 = digestHash(algorithm.hash, `${expected.method}:${expected.uri}`);
+  const digest = digestHash(algorithm.hash, `${ha1}:${expected.nonce}:${fields.nc}:${fields.cnonce}:${fields.qop}:${ha2}`);
+  return fields.response === digest;
+}
+
+function digestAlgorithm(value) {
+  const label = String(value || 'MD5').trim();
+  const hash = new Map([
+    ['md5', 'md5'],
+    ['md5-sess', 'md5'],
+    ['sha-256', 'sha256'],
+    ['sha-256-sess', 'sha256'],
+    ['sha-512-256', 'sha512-256'],
+    ['sha-512-256-sess', 'sha512-256']
+  ]).get(label.toLowerCase());
+  return hash ? { hash, sess: label.toLowerCase().endsWith('-sess') } : null;
+}
+
+function digestHash(algorithm, value) {
+  return crypto.createHash(algorithm).update(value, 'utf8').digest('hex');
 }
 
 function ntlmType2Challenge() {

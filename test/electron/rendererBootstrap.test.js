@@ -15,6 +15,31 @@ function selectOptionValues(source, id) {
   return [...match[1].matchAll(/<option value="([^"]+)"/g)].map((optionMatch) => optionMatch[1]);
 }
 
+function assertDigestAdvancedMarkup(source, ids) {
+  const usernameIndex = source.indexOf(`id="${ids.username}"`);
+  assert.notEqual(usernameIndex, -1, `Expected ${ids.username} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', usernameIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.username} Digest advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.username} Digest advanced disclosure to close.`);
+
+  const visibleSource = source.slice(usernameIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+  const retryTooltip = 'PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.';
+
+  assert.match(visibleSource, new RegExp(`id="${ids.password}"`));
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the Digest advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /class="checkbox-line auth-wide"/);
+  assert.match(advancedSource, /<span>Disable retry<\/span>/);
+  assert.ok(advancedSource.includes(`title="${retryTooltip}"`));
+}
+
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
   const windowListeners = new Map();
@@ -176,6 +201,52 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('cookie'), false);
   assert.equal(selectOptionValues(indexSource, 'runnerAuthRefreshTypeSelect').includes('cookie'), true);
   assert.equal(selectOptionValues(indexSource, 'performanceAuthRefreshTypeSelect').includes('cookie'), true);
+  assert.deepEqual(selectOptionValues(indexSource, 'authDigestAlgorithmSelect'), [
+    'MD5',
+    'MD5-sess',
+    'SHA-256',
+    'SHA-256-sess',
+    'SHA-512-256',
+    'SHA-512-256-sess'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthDigestAlgorithmSelect'), [
+    'MD5',
+    'MD5-sess',
+    'SHA-256',
+    'SHA-256-sess',
+    'SHA-512-256',
+    'SHA-512-256-sess'
+  ]);
+  assertDigestAdvancedMarkup(indexSource, {
+    username: 'authDigestUsernameInput',
+    password: 'authDigestPasswordInput',
+    advanced: [
+      'authDigestDisableRetryingRequestInput',
+      'authDigestRealmInput',
+      'authDigestNonceInput',
+      'authDigestAlgorithmSelect',
+      'authDigestQopInput',
+      'authDigestNonceCountInput',
+      'authDigestClientNonceInput',
+      'authDigestOpaqueInput'
+    ]
+  });
+  assertDigestAdvancedMarkup(indexSource, {
+    username: 'performanceAuthDigestUsernameInput',
+    password: 'performanceAuthDigestPasswordInput',
+    advanced: [
+      'performanceAuthDigestDisableRetryingRequestInput',
+      'performanceAuthDigestRealmInput',
+      'performanceAuthDigestNonceInput',
+      'performanceAuthDigestAlgorithmSelect',
+      'performanceAuthDigestQopInput',
+      'performanceAuthDigestNonceCountInput',
+      'performanceAuthDigestClientNonceInput',
+      'performanceAuthDigestOpaqueInput'
+    ]
+  });
+  assert.doesNotMatch(indexSource, /Yes, disable retrying the request/);
+  assert.match(editorPanelsSource, /\.auth-advanced-grid\s*\{/);
   assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
   assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
   for (const id of [
@@ -370,6 +441,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   };
   const elements = new Map([
     ['authTypeSelect', createElement({ tagName: 'SELECT', value: 'oauth2' })],
+    ['authDigestUsernameInput', createElement({ value: 'ada' })],
     ['performanceAuthTypeSelect', createElement({ tagName: 'SELECT', value: 'apiKey' })],
     ['performanceAuthApiKeyNameInput', createElement({ value: 'api_key' })],
     ['confirmSaveDraftButton', createElement()],
@@ -412,6 +484,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   });
 
   elements.get('authTypeSelect').dispatch('change');
+  elements.get('authDigestUsernameInput').dispatch('input');
   elements.get('performanceAuthTypeSelect').dispatch('change');
   elements.get('performanceAuthApiKeyNameInput').dispatch('input');
   elements.get('confirmSaveDraftButton').dispatch('click');
@@ -421,7 +494,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   elements.get('confirmRunnerImportButton').dispatch('click');
 
   assert.deepEqual(calls.authType, ['oauth2']);
-  assert.equal(calls.authInput, 1);
+  assert.equal(calls.authInput, 2);
   assert.deepEqual(calls.performanceAuthType, ['apiKey']);
   assert.equal(calls.performanceAuthInput, 2);
   assert.deepEqual(calls.resolveModal, [

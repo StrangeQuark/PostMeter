@@ -377,7 +377,14 @@ test('imports and exports advanced Postman auth helper shapes', () => {
             digest: [
               { key: 'username', value: 'ada' },
               { key: 'password', value: 'secret' },
-              { key: 'algorithm', value: 'MD5' }
+              { key: 'disableRetryingRequest', value: true, type: 'boolean' },
+              { key: 'realm', value: 'postmeter' },
+              { key: 'nonce', value: 'abc123' },
+              { key: 'algorithm', value: 'MD5' },
+              { key: 'qop', value: 'auth' },
+              { key: 'nonceCount', value: '00000005' },
+              { key: 'clientNonce', value: '0a4f113b' },
+              { key: 'opaque', value: 'opaque-token' }
             ]
           }
         }
@@ -468,6 +475,11 @@ test('imports and exports advanced Postman auth helper shapes', () => {
 
   assert.equal(collection.requests[0].auth.type, 'digest');
   assert.equal(collection.requests[0].auth.username, 'ada');
+  assert.equal(collection.requests[0].auth.disableRetryingRequest, true);
+  assert.equal(collection.requests[0].auth.realm, 'postmeter');
+  assert.equal(collection.requests[0].auth.nonceCount, '00000005');
+  assert.equal(collection.requests[0].auth.clientNonce, '0a4f113b');
+  assert.equal(collection.requests[0].auth.opaque, 'opaque-token');
   assert.equal(collection.requests[1].auth.type, 'aws');
   assert.equal(collection.requests[1].auth.service, 'execute-api');
   assert.equal(collection.requests[2].auth.type, 'ntlm');
@@ -481,6 +493,21 @@ test('imports and exports advanced Postman auth helper shapes', () => {
 
   const exported = exportPostmanCollection(collection);
   assert.equal(exported.item[0].request.auth.type, 'digest');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[0].request.auth.digest.map((item) => [item.key, item.value])),
+    {
+      username: 'ada',
+      password: 'secret',
+      disableRetryingRequest: true,
+      realm: 'postmeter',
+      nonce: 'abc123',
+      algorithm: 'MD5',
+      qop: 'auth',
+      nonceCount: '00000005',
+      clientNonce: '0a4f113b',
+      opaque: 'opaque-token'
+    }
+  );
   assert.equal(exported.item[1].request.auth.type, 'awsv4');
   assert.equal(exported.item[2].request.auth.type, 'ntlm');
   assert.equal(exported.item[3].request.auth.type, 'akamaiEdgeGrid');

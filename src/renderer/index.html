@@ -479,6 +479,61 @@
                 <input id="authClientPassphraseInput" type="text" autocomplete="off">
               </label>
             </div>
+
+            <div class="auth-section" data-auth-section="digest">
+              <label class="field">
+                <span>Username</span>
+                <input id="authDigestUsernameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input id="authDigestPasswordInput" type="text" autocomplete="off">
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="checkbox-line auth-wide" title="PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.">
+                    <input id="authDigestDisableRetryingRequestInput" type="checkbox" title="PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.">
+                    <span>Disable retry</span>
+                  </label>
+                  <label class="field">
+                    <span>Realm</span>
+                    <input id="authDigestRealmInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authDigestNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Algorithm</span>
+                    <select id="authDigestAlgorithmSelect">
+                      <option value="MD5">MD5</option>
+                      <option value="MD5-sess">MD5-sess</option>
+                      <option value="SHA-256">SHA-256</option>
+                      <option value="SHA-256-sess">SHA-256-sess</option>
+                      <option value="SHA-512-256">SHA-512-256</option>
+                      <option value="SHA-512-256-sess">SHA-512-256-sess</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>qop</span>
+                    <input id="authDigestQopInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce Count</span>
+                    <input id="authDigestNonceCountInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Client Nonce</span>
+                    <input id="authDigestClientNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Opaque</span>
+                    <input id="authDigestOpaqueInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
           </div>
         </div>
 
@@ -1236,6 +1291,61 @@
                     <span>Passphrase</span>
                     <input id="performanceAuthClientPassphraseInput" type="text" autocomplete="off">
                   </label>
+                </div>
+
+                <div class="auth-section" data-auth-section="digest">
+                  <label class="field">
+                    <span>Username</span>
+                    <input id="performanceAuthDigestUsernameInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Password</span>
+                    <input id="performanceAuthDigestPasswordInput" type="text" autocomplete="off">
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="checkbox-line auth-wide" title="PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.">
+                        <input id="performanceAuthDigestDisableRetryingRequestInput" type="checkbox" title="PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.">
+                        <span>Disable retry</span>
+                      </label>
+                      <label class="field">
+                        <span>Realm</span>
+                        <input id="performanceAuthDigestRealmInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Nonce</span>
+                        <input id="performanceAuthDigestNonceInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Algorithm</span>
+                        <select id="performanceAuthDigestAlgorithmSelect">
+                          <option value="MD5">MD5</option>
+                          <option value="MD5-sess">MD5-sess</option>
+                          <option value="SHA-256">SHA-256</option>
+                          <option value="SHA-256-sess">SHA-256-sess</option>
+                          <option value="SHA-512-256">SHA-512-256</option>
+                          <option value="SHA-512-256-sess">SHA-512-256-sess</option>
+                        </select>
+                      </label>
+                      <label class="field">
+                        <span>qop</span>
+                        <input id="performanceAuthDigestQopInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Nonce Count</span>
+                        <input id="performanceAuthDigestNonceCountInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Client Nonce</span>
+                        <input id="performanceAuthDigestClientNonceInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Opaque</span>
+                        <input id="performanceAuthDigestOpaqueInput" autocomplete="off">
+                      </label>
+                    </div>
+                  </details>
                 </div>
               </div>
             </div>
