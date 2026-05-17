@@ -125,9 +125,28 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerCsvVariablesButton"/);
   assert.match(indexSource, /id="runnerToggleCsvVariablesButton"/);
   assert.match(indexSource, /id="runnerEditCsvVariablesButton"/);
-  assert.match(indexSource, /id="runnerAuthRefreshOpenRequestButton"[^>]*>Open<\/button>/);
-  assert.match(indexSource, /id="runnerAuthRefreshTokenOpenRequestButton"[^>]*>Open<\/button>/);
-  assert.match(chromeSource, /\.capture-settings-menu-group > \.capture-settings-trigger\.auth-refresh-active[\s\S]*border-color:\s*var\(--green\)/);
+  assert.match(indexSource, /id="runnerAuthRefreshMenu"[\s\S]*id="runnerToggleAuthRefreshButton"[\s\S]*Turn On[\s\S]*id="runnerEditAuthRefreshButton"[\s\S]*Edit/);
+  assert.match(indexSource, /id="performanceAuthRefreshMenu"[\s\S]*id="performanceToggleAuthRefreshButton"[\s\S]*Turn On[\s\S]*id="performanceEditAuthRefreshButton"[\s\S]*Edit/);
+  assert.doesNotMatch(indexSource, /Refresh auth during run/);
+  assert.match(indexSource, /id="runnerAuthRefreshManageRequestButton"[^>]*>Manage<\/button>/);
+  assert.match(indexSource, /id="runnerAuthRefreshAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
+  assert.match(indexSource, /id="runnerAuthRefreshRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
+  assert.match(indexSource, /id="runnerAuthRefreshTokenManageRequestButton"[^>]*>Manage<\/button>/);
+  assert.match(indexSource, /id="runnerAuthRefreshTokenAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
+  assert.match(indexSource, /id="runnerAuthRefreshTokenRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
+  assert.match(indexSource, /id="performanceAuthRefreshManageRequestButton"[^>]*>Manage<\/button>/);
+  assert.match(indexSource, /id="performanceAuthRefreshAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
+  assert.match(indexSource, /id="performanceAuthRefreshRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
+  assert.match(indexSource, /id="performanceAuthRefreshTokenManageRequestButton"[^>]*>Manage<\/button>/);
+  assert.match(indexSource, /id="performanceAuthRefreshTokenAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
+  assert.match(indexSource, /id="performanceAuthRefreshTokenRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
+  assert.match(indexSource, /id="authRefreshAutoDetectModal"[^>]+auth-refresh-auto-detect-modal/);
+  assert.match(indexSource, /id="authRefreshAutoDetectList"[^>]+role="radiogroup"/);
+  assert.match(indexSource, /id="confirmAuthRefreshAutoDetectButton"[^>]+disabled/);
+  assert.match(indexSource, /src="authRefreshAutoDetectModel\.js"/);
+  assert.match(chromeSource, /\.auth-refresh-menu-group > \.auth-refresh-trigger\.auth-refresh-active[\s\S]*border-color:\s*var\(--green\)/);
+  assert.match(overlaysSource, /\.auth-refresh-auto-detect-modal\s*\{[\s\S]*width:\s*min\(720px/);
+  assert.match(chromeSource, /\.auth-refresh-manage-menu-group \.toolbar-menu[\s\S]*right:\s*0/);
   assert.match(chromeSource, /\.capture-settings-panel\.auth-refresh-panel[\s\S]*max-height:\s*calc\(100vh - 24px\)/);
   assert.doesNotMatch(chromeSource, /\.capture-settings-panel\.auth-refresh-panel[\s\S]{0,180}max-height:\s*min\(560px/);
   assert.match(rendererSource, /classList\.toggle\('auth-refresh-active', active\)/);
@@ -138,10 +157,40 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /refreshingAuthOriginalAuth/);
   assert.match(rendererSource, /autoSelectRefreshingAuthRefreshTokenForAccessRequest\(ownerType, owner\)/);
   assert.match(rendererSource, /requestKind === 'refreshToken' \|\| requestKind === 'access'/);
+  assert.match(rendererSource, /function removeAuthRefreshRequest\(ownerType, requestKind = 'access'\)/);
+  assert.match(rendererSource, /async function autoDetectAuthRefreshRequest\(ownerType, requestKind = 'access'\)/);
+  assert.match(rendererSource, /buildAuthRefreshAutoDetectCandidates\(response\)/);
+  assert.match(rendererSource, /function confirmAuthRefreshAutoDetectModal\(\)/);
+  assert.match(rendererSource, /apiKey:\s*\{\s*label:\s*'API key',\s*controlName:\s*'ApiKey'\s*\}/);
+  assert.match(rendererSource, /aws:\s*\{\s*label:\s*'AWS access key',\s*controlName:\s*'AwsAccessKey'\s*\}/);
+  assert.match(rendererSource, /custom:\s*\{\s*label:\s*'custom header value',\s*controlName:\s*'Custom'\s*\}/);
+  assert.match(rendererSource, /label:\s*'cookie'[\s\S]*allowedSources:\s*\['cookie'\]/);
+  assert.match(rendererSource, /removeOpenAuthRefreshRequestTab\(ownerType, owner\.id, requestId\)/);
   assert.match(rendererSource, /syncVisibleRefreshingAuthTypeOptionsForOwner\(prefix, next\)/);
   assert.match(indexSource, /Refresh token request/);
   assert.match(indexSource, /id="runnerAuthRefreshTypeSelect"[\s\S]*Bearer \/ JWT[\s\S]*AWS Temporary Credentials/);
   assert.match(indexSource, /id="performanceAuthRefreshTypeSelect"[\s\S]*API Key[\s\S]*Custom Header/);
+  assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
+  for (const id of [
+    'runnerAuthRefreshRefreshTokenSourceSelect',
+    'runnerAuthRefreshApiKeySourceSelect',
+    'runnerAuthRefreshAwsAccessKeySourceSelect',
+    'runnerAuthRefreshAwsSecretKeySourceSelect',
+    'runnerAuthRefreshAwsSessionTokenSourceSelect',
+    'runnerAuthRefreshCustomSourceSelect',
+    'performanceAuthRefreshRefreshTokenSourceSelect',
+    'performanceAuthRefreshApiKeySourceSelect',
+    'performanceAuthRefreshAwsAccessKeySourceSelect',
+    'performanceAuthRefreshAwsSecretKeySourceSelect',
+    'performanceAuthRefreshAwsSessionTokenSourceSelect',
+    'performanceAuthRefreshCustomSourceSelect'
+  ]) {
+    assert.deepEqual(selectOptionValues(indexSource, id), ['body', 'rawBody', 'header', 'cookie'], `${id} should expose the supported response sources`);
+  }
+  assert.doesNotMatch(indexSource, /AuthRefreshCookieSourceSelect/);
+  assert.match(rendererSource, /AUTH_REFRESH_OUTPUT_SOURCE_VALUES = new Set\(\['body', 'rawBody', 'header', 'cookie'\]\)/);
+  assert.match(rendererSource, /source === 'rawBody'/);
   assert.match(indexSource, /Save Access Token To/);
   assert.match(indexSource, /Save API Key To/);
   assert.match(indexSource, /Save Session Token To/);
@@ -415,6 +464,9 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
     ['cancelFolderDestinationButton', createElement()],
     ['confirmActionButton', createElement()],
     ['cancelConfirmActionButton', createElement()],
+    ['closeAuthRefreshAutoDetectModalButton', createElement()],
+    ['cancelAuthRefreshAutoDetectButton', createElement()],
+    ['confirmAuthRefreshAutoDetectButton', createElement()],
     ['closeNotificationModalButton', createElement()],
     ['cancelRunnerImportButton', createElement()],
     ['contextMenu', createElement()],
@@ -439,7 +491,8 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
       addEventListener() {}
     },
     windowObject: { addEventListener() {} },
-    onResolveActiveModal: (value) => resolved.push(value)
+    onResolveActiveModal: (value) => resolved.push(value),
+    onConfirmAuthRefreshAutoDetectModal: () => resolved.push('auth-auto-detect-confirm')
   });
 
   elements.get('confirmTextInputModalButton').dispatch('click');
@@ -448,10 +501,13 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('cancelFolderDestinationButton').dispatch('click');
   elements.get('confirmActionButton').dispatch('click');
   elements.get('cancelConfirmActionButton').dispatch('click');
+  elements.get('closeAuthRefreshAutoDetectModalButton').dispatch('click');
+  elements.get('cancelAuthRefreshAutoDetectButton').dispatch('click');
+  elements.get('confirmAuthRefreshAutoDetectButton').dispatch('click');
   elements.get('closeNotificationModalButton').dispatch('click');
   elements.get('cancelRunnerImportButton').dispatch('click');
 
-  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, true, null]);
+  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, null, null, 'auth-auto-detect-confirm', true, null]);
 });
 
 test('renderer bootstrap binds CSV variable edit buttons and modal controls', () => {
@@ -567,6 +623,181 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
     'row-mode:loop',
     'row-mode:continue'
   ]);
+});
+
+test('renderer bootstrap binds refreshing auth manage menus', () => {
+  const pairs = [
+    ['runnerAuthRefreshButton', 'runnerAuthRefreshMenu'],
+    ['performanceAuthRefreshButton', 'performanceAuthRefreshMenu'],
+    ['runnerAuthRefreshManageRequestButton', 'runnerAuthRefreshManageRequestMenu'],
+    ['runnerAuthRefreshTokenManageRequestButton', 'runnerAuthRefreshTokenManageRequestMenu'],
+    ['performanceAuthRefreshManageRequestButton', 'performanceAuthRefreshManageRequestMenu'],
+    ['performanceAuthRefreshTokenManageRequestButton', 'performanceAuthRefreshTokenManageRequestMenu']
+  ];
+  const elements = new Map(pairs.flatMap(([buttonId, menuId]) => [
+    [buttonId, createElement()],
+    [menuId, createElement()]
+  ]));
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return pairs.map(([, menuId]) => elements.get(menuId));
+        }
+        if (selector === '.menu-trigger') {
+          return pairs.map(([buttonId]) => elements.get(buttonId));
+        }
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  });
+
+  for (const [buttonId, menuId] of pairs) {
+    elements.get(buttonId).dispatch('click');
+    assert.equal(elements.get(menuId).hidden, false);
+    assert.equal(elements.get(buttonId).attributes['aria-expanded'], 'true');
+  }
+});
+
+test('renderer bootstrap binds refreshing auth auto-detect actions', () => {
+  const calls = [];
+  const controls = [
+    ['runnerAuthRefreshAutoDetectRequestButton', 'runner-access'],
+    ['runnerAuthRefreshTokenAutoDetectRequestButton', 'runner-refresh'],
+    ['performanceAuthRefreshAutoDetectRequestButton', 'performance-access'],
+    ['performanceAuthRefreshTokenAutoDetectRequestButton', 'performance-refresh']
+  ];
+  const elements = new Map([
+    ...controls.map(([id]) => [id, createElement()]),
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onAutoDetectRunnerAuthRefreshRequest: () => calls.push('runner-access'),
+    onAutoDetectRunnerAuthRefreshTokenRequest: () => calls.push('runner-refresh'),
+    onAutoDetectPerformanceAuthRefreshRequest: () => calls.push('performance-access'),
+    onAutoDetectPerformanceAuthRefreshTokenRequest: () => calls.push('performance-refresh')
+  });
+
+  for (const [id] of controls) {
+    elements.get(id).dispatch('click');
+  }
+
+  assert.deepEqual(calls, controls.map(([, call]) => call));
+});
+
+test('renderer bootstrap toolbar menus close capture settings panels unless nested inside one', () => {
+  const csvButton = createElement();
+  const csvMenu = createElement();
+  const manageButton = createElement();
+  const manageMenu = createElement();
+  manageMenu.closest = (selector) => (selector === '.capture-settings-panel' ? manageMenu : null);
+  const elements = new Map([
+    ['runnerCsvVariablesButton', csvButton],
+    ['runnerCsvVariablesMenu', csvMenu],
+    ['runnerAuthRefreshManageRequestButton', manageButton],
+    ['runnerAuthRefreshManageRequestMenu', manageMenu]
+  ]);
+  let closeCapturePanels = 0;
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [csvMenu, manageMenu];
+        }
+        if (selector === '.menu-trigger') {
+          return [csvButton, manageButton];
+        }
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onCloseCaptureSettingsPanels: () => { closeCapturePanels += 1; }
+  });
+
+  csvButton.dispatch('click');
+  assert.equal(closeCapturePanels, 1);
+  manageButton.dispatch('click');
+  assert.equal(closeCapturePanels, 1);
+});
+
+test('renderer bootstrap flips nested toolbar menus upward when lower panel space is constrained', () => {
+  const manageButton = createElement();
+  const manageMenu = createElement();
+  const panel = {
+    getBoundingClientRect: () => ({ top: 100, bottom: 560 })
+  };
+  const menuClasses = new Set();
+  manageButton.getBoundingClientRect = () => ({ top: 520, bottom: 550 });
+  manageMenu.getBoundingClientRect = () => ({ height: 150 });
+  manageMenu.closest = (selector) => (selector === '.capture-settings-panel' ? panel : null);
+  manageMenu.classList = {
+    add: (name) => menuClasses.add(name),
+    remove: (name) => menuClasses.delete(name),
+    contains: (name) => menuClasses.has(name)
+  };
+  const elements = new Map([
+    ['runnerAuthRefreshManageRequestButton', manageButton],
+    ['runnerAuthRefreshManageRequestMenu', manageMenu]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [manageMenu];
+        }
+        if (selector === '.menu-trigger') {
+          return [manageButton];
+        }
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {}, innerHeight: 900 }
+  });
+
+  manageButton.dispatch('click');
+  assert.equal(manageMenu.hidden, false);
+  assert.equal(manageMenu.classList.contains('toolbar-menu-open-up'), true);
+
+  closeToolbarMenus({
+    querySelectorAll(selector) {
+      if (selector === '.toolbar-menu') {
+        return [manageMenu];
+      }
+      if (selector === '.menu-trigger') {
+        return [manageButton];
+      }
+      return [];
+    }
+  });
+  assert.equal(manageMenu.classList.contains('toolbar-menu-open-up'), false);
 });
 
 test('renderer bootstrap binds settings menu, category, theme, and setting controls', () => {
@@ -939,6 +1170,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'exportPerformanceTestButton',
     'performanceCaptureSettingsButton',
     'performanceAuthRefreshButton',
+    'performanceAuthRefreshMenu',
+    'performanceToggleAuthRefreshButton',
+    'performanceEditAuthRefreshButton',
     'exportPerformanceResultsButton',
     'exportPerformanceResultsMenu',
     'exportPerformanceResultHtmlButton',
@@ -994,10 +1228,10 @@ test('renderer bootstrap binds performance creation import export run and config
           return performanceSafetyControls;
         }
         if (selector === '.toolbar-menu') {
-          return [elements.get('performanceCsvVariablesMenu'), elements.get('exportPerformanceResultsMenu')];
+          return [elements.get('performanceCsvVariablesMenu'), elements.get('performanceAuthRefreshMenu'), elements.get('exportPerformanceResultsMenu')];
         }
         if (selector === '.menu-trigger') {
-          return [elements.get('performanceCsvVariablesButton'), elements.get('exportPerformanceResultsButton')];
+          return [elements.get('performanceCsvVariablesButton'), elements.get('performanceAuthRefreshButton'), elements.get('exportPerformanceResultsButton')];
         }
         if (selector === '.tab' || selector === '.tab[data-tab-group="performance"]') {
           return [performanceTab];
@@ -1017,7 +1251,8 @@ test('renderer bootstrap binds performance creation import export run and config
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
     onTogglePerformanceCaptureSettings: () => calls.push('capture-settings'),
-    onTogglePerformanceAuthRefresh: () => calls.push('auth-refresh'),
+    onTogglePerformanceAuthRefresh: () => calls.push('auth-refresh-toggle'),
+    onEditPerformanceAuthRefresh: () => calls.push('auth-refresh-edit'),
     onExportPerformanceResultHtml: () => calls.push('export-result-html'),
     onExportPerformanceResultJson: () => calls.push('export-result-json'),
     onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
@@ -1053,6 +1288,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'exportPerformanceTestButton',
     'performanceCaptureSettingsButton',
     'performanceAuthRefreshButton',
+    'performanceToggleAuthRefreshButton',
+    'performanceEditAuthRefreshButton',
     'exportPerformanceResultsButton',
     'exportPerformanceResultHtmlButton',
     'exportPerformanceResultJsonButton',
@@ -1090,7 +1327,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 24), [
+  assert.deepEqual(calls.slice(0, 25), [
     'new',
     'new',
     'import-test',
@@ -1103,7 +1340,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancel',
     'export-test',
     'capture-settings',
-    'auth-refresh',
+    'auth-refresh-toggle',
+    'auth-refresh-edit',
     'export-result-html',
     'export-result-json',
     'export-result-csv',
@@ -1425,20 +1663,26 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
     ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv'],
     ['runnerCaptureSettingsButton', 'runner-capture-settings', 'onToggleRunnerCaptureSettings'],
-    ['runnerAuthRefreshButton', 'runner-auth-refresh', 'onToggleRunnerAuthRefresh'],
+    ['runnerToggleAuthRefreshButton', 'runner-auth-refresh-toggle', 'onToggleRunnerAuthRefresh'],
+    ['runnerEditAuthRefreshButton', 'runner-auth-refresh-edit', 'onEditRunnerAuthRefresh'],
     ['runnerAuthRefreshOpenRequestButton', 'runner-auth-open-request', 'onOpenRunnerAuthRefreshRequest'],
     ['runnerAuthRefreshNewRequestButton', 'runner-auth-new-request', 'onNewRunnerAuthRefreshRequest'],
     ['runnerAuthRefreshImportButton', 'runner-auth-import', 'onImportRunnerAuthRefreshRequest'],
+    ['runnerAuthRefreshRemoveRequestButton', 'runner-auth-remove-request', 'onRemoveRunnerAuthRefreshRequest'],
     ['runnerAuthRefreshTokenOpenRequestButton', 'runner-auth-refresh-token-open-request', 'onOpenRunnerAuthRefreshTokenRequest'],
     ['runnerAuthRefreshTokenNewRequestButton', 'runner-auth-refresh-token-new-request', 'onNewRunnerAuthRefreshTokenRequest'],
     ['runnerAuthRefreshTokenImportButton', 'runner-auth-refresh-token-import', 'onImportRunnerAuthRefreshTokenRequest'],
-    ['performanceAuthRefreshButton', 'performance-auth-refresh', 'onTogglePerformanceAuthRefresh'],
+    ['runnerAuthRefreshTokenRemoveRequestButton', 'runner-auth-refresh-token-remove-request', 'onRemoveRunnerAuthRefreshTokenRequest'],
+    ['performanceToggleAuthRefreshButton', 'performance-auth-refresh-toggle', 'onTogglePerformanceAuthRefresh'],
+    ['performanceEditAuthRefreshButton', 'performance-auth-refresh-edit', 'onEditPerformanceAuthRefresh'],
     ['performanceAuthRefreshOpenRequestButton', 'performance-auth-open-request', 'onOpenPerformanceAuthRefreshRequest'],
     ['performanceAuthRefreshNewRequestButton', 'performance-auth-new-request', 'onNewPerformanceAuthRefreshRequest'],
     ['performanceAuthRefreshImportButton', 'performance-auth-import', 'onImportPerformanceAuthRefreshRequest'],
+    ['performanceAuthRefreshRemoveRequestButton', 'performance-auth-remove-request', 'onRemovePerformanceAuthRefreshRequest'],
     ['performanceAuthRefreshTokenOpenRequestButton', 'performance-auth-refresh-token-open-request', 'onOpenPerformanceAuthRefreshTokenRequest'],
     ['performanceAuthRefreshTokenNewRequestButton', 'performance-auth-refresh-token-new-request', 'onNewPerformanceAuthRefreshTokenRequest'],
-    ['performanceAuthRefreshTokenImportButton', 'performance-auth-refresh-token-import', 'onImportPerformanceAuthRefreshTokenRequest']
+    ['performanceAuthRefreshTokenImportButton', 'performance-auth-refresh-token-import', 'onImportPerformanceAuthRefreshTokenRequest'],
+    ['performanceAuthRefreshTokenRemoveRequestButton', 'performance-auth-refresh-token-remove-request', 'onRemovePerformanceAuthRefreshTokenRequest']
   ];
   const elements = new Map(controls.map(([id]) => [id, createElement()]));
   const calls = [];

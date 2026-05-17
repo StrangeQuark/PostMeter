@@ -55,7 +55,7 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 - `requestIpc.js` owns single-request validation/send IPC and persistence of response-side workspace mutations.
 - `runtimeIpc.js` owns collection-run IPC channels, cancellation maps, progress events, and result exports.
 - `sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
-- `sessionStore.js` owns persisted UI session state in Electron `userData/session.json`.
+- `sessionStore.js` owns persisted UI session state in Electron `userData/profile/session.json`; default managed workspaces live under `userData/profile/workspace/`, and app settings live in `userData/profile/settings.json`.
 - `workspaceIpc.js` owns workspace import/export/duplicate, collection import/export, environment import/export, runner-definition import/export, standalone request import/export/preview, workspace save/load, and the refreshed managed-workspace payloads returned after workspace import or duplication.
 - `workspaceMutations.js` owns workspace updates after request sends and collection runs.
 - `vaultPrompt.js` owns metadata-only vault prompt IPC, renderer/dialog fallback decisions, prompt-response sender binding, and scoped vault-grant persistence helpers. `vaultPromptQueue.js` serializes renderer prompt UI so concurrent script vault calls cannot overwrite active prompt state. `requestIpc.js` and `runtimeIpc.js` pass the prompt broker into the shared scripted lifecycle so single-request sends, collection runs, and nested request executions all use the same request/collection/workspace-scoped prompt path.

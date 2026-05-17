@@ -62,6 +62,7 @@ if (process.env.POSTMETER_DATA_PATH) {
   require('node:fs').mkdirSync(smokeUserDataPath, { recursive: true });
   app.setPath('userData', smokeUserDataPath);
 }
+process.env.POSTMETER_USER_DATA_PATH = app.getPath('userData');
 
 const runtimeResultStorePath = path.join(app.getPath('userData'), 'runtime', 'postmeter-current-results.sqlite');
 

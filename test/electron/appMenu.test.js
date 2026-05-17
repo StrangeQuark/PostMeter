@@ -3,21 +3,20 @@ const test = require('node:test');
 const { createApplicationMenuTemplate } = require('../../electron/appMenu');
 
 const FILE_ACTIONS = new Map([
-  ['File > New > Workspace', 'new-workspace'],
   ['File > New > Request', 'new-request'],
   ['File > New > Collection', 'new-collection'],
   ['File > New > Folder', 'new-folder'],
   ['File > New > Environment', 'new-environment'],
   ['File > New > Runner', 'new-runner'],
   ['File > New > Performance Test', 'new-performance-test'],
+  ['File > New > Workspace', 'new-workspace'],
   ['File > Save', 'save-active-tab'],
-  ['File > Import > Workspace', 'import-workspace'],
   ['File > Import > Request', 'import-request'],
   ['File > Import > Collection', 'import-collection'],
   ['File > Import > Environment', 'import-environment'],
   ['File > Import > Runner', 'import-runner'],
   ['File > Import > Performance Test', 'import-performance-test'],
-  ['File > Export > Workspace', 'export-workspace'],
+  ['File > Import > Workspace', 'import-workspace'],
   ['File > Export > Request > PostMeter', 'export-request'],
   ['File > Export > Request > curl', 'export-request-curl'],
   ['File > Export > Collection > PostMeter', 'export-collection'],
@@ -28,6 +27,7 @@ const FILE_ACTIONS = new Map([
   ['File > Export > Environment > Postman', 'export-postman-environment'],
   ['File > Export > Runner', 'export-runner-definition'],
   ['File > Export > Performance Test', 'export-performance-test'],
+  ['File > Export > Workspace', 'export-workspace'],
   ['File > Settings', 'settings']
 ]);
 
@@ -72,6 +72,37 @@ test('application File and Help menu items dispatch every renderer action', () =
   assert.deepEqual(dispatched, [...FILE_ACTIONS.values(), ...HELP_ACTIONS.values()]);
 });
 
+test('application File New Import and Export menus place Workspace last', () => {
+  const template = createApplicationMenuTemplate({ platform: 'linux' });
+  const fileMenu = submenuWithLabel(template, 'File');
+
+  assert.deepEqual(submenuLabels(submenuWithLabel(fileMenu, 'New')), [
+    'Request',
+    'Collection',
+    'Folder',
+    'Environment',
+    'Runner',
+    'Performance Test',
+    'Workspace'
+  ]);
+  assert.deepEqual(submenuLabels(submenuWithLabel(fileMenu, 'Import')), [
+    'Request',
+    'Collection',
+    'Environment',
+    'Runner',
+    'Performance Test',
+    'Workspace'
+  ]);
+  assert.deepEqual(submenuLabels(submenuWithLabel(fileMenu, 'Export')), [
+    'Request',
+    'Collection',
+    'Environment',
+    'Runner',
+    'Performance Test',
+    'Workspace'
+  ]);
+});
+
 test('application menu accelerators stay bound to user-facing actions', () => {
   const template = createApplicationMenuTemplate({ platform: 'linux' });
   const leavesByPath = new Map(menuLeaves(template).map((leaf) => [leaf.path, leaf.item]));
@@ -111,6 +142,16 @@ test('every custom menu leaf is either actionable, a documented Electron role, o
 
 function menuLabels(template) {
   return template.map((item) => item.label || roleLabel(item.role));
+}
+
+function submenuWithLabel(items, label) {
+  const menu = (items || []).find((item) => item.label === label);
+  assert.ok(Array.isArray(menu?.submenu), `${label} should have a submenu`);
+  return menu.submenu;
+}
+
+function submenuLabels(items) {
+  return (items || []).filter((item) => item.type !== 'separator').map((item) => item.label);
 }
 
 function menuLeaves(items, options = {}, prefix = []) {

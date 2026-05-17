@@ -182,26 +182,36 @@
     bindClick(doc, 'runnerToggleCsvVariablesButton', options.onToggleRunnerCsvVariables);
     bindClick(doc, 'runnerEditCsvVariablesButton', options.onEditRunnerCsvVariables);
     bindClick(doc, 'runnerCaptureSettingsButton', options.onToggleRunnerCaptureSettings);
-    bindClick(doc, 'runnerAuthRefreshButton', options.onToggleRunnerAuthRefresh);
+    bindClick(doc, 'runnerToggleAuthRefreshButton', options.onToggleRunnerAuthRefresh);
+    bindClick(doc, 'runnerEditAuthRefreshButton', options.onEditRunnerAuthRefresh);
     bindClick(doc, 'runnerAuthRefreshOpenRequestButton', options.onOpenRunnerAuthRefreshRequest);
+    bindClick(doc, 'runnerAuthRefreshAutoDetectRequestButton', options.onAutoDetectRunnerAuthRefreshRequest);
     bindClick(doc, 'runnerAuthRefreshNewRequestButton', options.onNewRunnerAuthRefreshRequest);
     bindClick(doc, 'runnerAuthRefreshImportButton', options.onImportRunnerAuthRefreshRequest);
+    bindClick(doc, 'runnerAuthRefreshRemoveRequestButton', options.onRemoveRunnerAuthRefreshRequest);
     bindClick(doc, 'runnerAuthRefreshTokenOpenRequestButton', options.onOpenRunnerAuthRefreshTokenRequest);
+    bindClick(doc, 'runnerAuthRefreshTokenAutoDetectRequestButton', options.onAutoDetectRunnerAuthRefreshTokenRequest);
     bindClick(doc, 'runnerAuthRefreshTokenNewRequestButton', options.onNewRunnerAuthRefreshTokenRequest);
     bindClick(doc, 'runnerAuthRefreshTokenImportButton', options.onImportRunnerAuthRefreshTokenRequest);
+    bindClick(doc, 'runnerAuthRefreshTokenRemoveRequestButton', options.onRemoveRunnerAuthRefreshTokenRequest);
     bindClick(doc, 'saveRunnerButton', options.onSaveRunner);
     bindClick(doc, 'deleteRunnerButton', options.onDeleteRunner);
     bindClick(doc, 'addRunnerRequestButton', options.onAddRunnerRequest);
     bindClick(doc, 'performanceToggleCsvVariablesButton', options.onTogglePerformanceCsvVariables);
     bindClick(doc, 'performanceEditCsvVariablesButton', options.onEditPerformanceCsvVariables);
     bindClick(doc, 'performanceCaptureSettingsButton', options.onTogglePerformanceCaptureSettings);
-    bindClick(doc, 'performanceAuthRefreshButton', options.onTogglePerformanceAuthRefresh);
+    bindClick(doc, 'performanceToggleAuthRefreshButton', options.onTogglePerformanceAuthRefresh);
+    bindClick(doc, 'performanceEditAuthRefreshButton', options.onEditPerformanceAuthRefresh);
     bindClick(doc, 'performanceAuthRefreshOpenRequestButton', options.onOpenPerformanceAuthRefreshRequest);
+    bindClick(doc, 'performanceAuthRefreshAutoDetectRequestButton', options.onAutoDetectPerformanceAuthRefreshRequest);
     bindClick(doc, 'performanceAuthRefreshNewRequestButton', options.onNewPerformanceAuthRefreshRequest);
     bindClick(doc, 'performanceAuthRefreshImportButton', options.onImportPerformanceAuthRefreshRequest);
+    bindClick(doc, 'performanceAuthRefreshRemoveRequestButton', options.onRemovePerformanceAuthRefreshRequest);
     bindClick(doc, 'performanceAuthRefreshTokenOpenRequestButton', options.onOpenPerformanceAuthRefreshTokenRequest);
+    bindClick(doc, 'performanceAuthRefreshTokenAutoDetectRequestButton', options.onAutoDetectPerformanceAuthRefreshTokenRequest);
     bindClick(doc, 'performanceAuthRefreshTokenNewRequestButton', options.onNewPerformanceAuthRefreshTokenRequest);
     bindClick(doc, 'performanceAuthRefreshTokenImportButton', options.onImportPerformanceAuthRefreshTokenRequest);
+    bindClick(doc, 'performanceAuthRefreshTokenRemoveRequestButton', options.onRemovePerformanceAuthRefreshTokenRequest);
     bindClick(doc, 'savePerformanceTestButton', options.onSavePerformanceTest);
     bindClick(doc, 'deletePerformanceTestButton', options.onDeletePerformanceTest);
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
@@ -463,6 +473,9 @@
     bindChange(doc, 'csvVariablesContinueWithoutRowsInput', () => options.onCsvVariablesRowModeChange?.('continue'));
     bindClick(doc, 'cancelConfirmActionButton', () => options.onResolveActiveModal?.(false));
     bindClick(doc, 'confirmActionButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closeAuthRefreshAutoDetectModalButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'cancelAuthRefreshAutoDetectButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'confirmAuthRefreshAutoDetectButton', options.onConfirmAuthRefreshAutoDetectModal);
     bindClick(doc, 'closeNotificationModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalFooterButton', () => options.onResolveActiveModal?.(true));
@@ -561,6 +574,12 @@
       ['exportRequestPanelButton', 'exportRequestPanelMenu'],
       ['runnerCsvVariablesButton', 'runnerCsvVariablesMenu'],
       ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu'],
+      ['runnerAuthRefreshButton', 'runnerAuthRefreshMenu'],
+      ['performanceAuthRefreshButton', 'performanceAuthRefreshMenu'],
+      ['runnerAuthRefreshManageRequestButton', 'runnerAuthRefreshManageRequestMenu'],
+      ['runnerAuthRefreshTokenManageRequestButton', 'runnerAuthRefreshTokenManageRequestMenu'],
+      ['performanceAuthRefreshManageRequestButton', 'performanceAuthRefreshManageRequestMenu'],
+      ['performanceAuthRefreshTokenManageRequestButton', 'performanceAuthRefreshTokenManageRequestMenu'],
       ['exportRunnerResultsButton', 'exportRunnerResultsMenu'],
       ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu']
     ]) {
@@ -741,9 +760,35 @@
     }
     options.onCloseContextMenu?.();
     options.onCloseFileSourceMenu?.();
+    if (!menu.closest?.('.capture-settings-panel')) {
+      options.onCloseCaptureSettingsPanels?.();
+    }
     closeToolbarMenus(doc);
     menu.hidden = false;
+    positionToolbarMenu(button, menu, options);
     button.setAttribute('aria-expanded', 'true');
+  }
+
+  function positionToolbarMenu(button, menu, options = {}) {
+    menu.classList?.remove?.('toolbar-menu-open-up');
+    const buttonRect = typeof button.getBoundingClientRect === 'function' ? button.getBoundingClientRect() : null;
+    const menuRect = typeof menu.getBoundingClientRect === 'function' ? menu.getBoundingClientRect() : null;
+    if (!buttonRect || !menuRect) {
+      return;
+    }
+    const panel = menu.closest?.('.capture-settings-panel');
+    const boundaryRect = typeof panel?.getBoundingClientRect === 'function'
+      ? panel.getBoundingClientRect()
+      : {
+          top: 0,
+          bottom: Number(options.windowObject?.innerHeight || (typeof window !== 'undefined' ? window.innerHeight : 0) || 0)
+        };
+    const margin = 8;
+    const downwardSpace = boundaryRect.bottom - buttonRect.bottom - margin;
+    const upwardSpace = buttonRect.top - boundaryRect.top - margin;
+    if (menuRect.height > downwardSpace && upwardSpace > downwardSpace) {
+      menu.classList?.add?.('toolbar-menu-open-up');
+    }
   }
 
   function isModalBackdropOpen(doc) {
@@ -766,6 +811,7 @@
   function closeToolbarMenus(doc = document) {
     for (const menu of doc.querySelectorAll('.toolbar-menu')) {
       menu.hidden = true;
+      menu.classList?.remove?.('toolbar-menu-open-up');
     }
     for (const button of doc.querySelectorAll('.menu-trigger')) {
       button.setAttribute('aria-expanded', 'false');

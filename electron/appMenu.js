@@ -23,13 +23,13 @@ function createApplicationMenuTemplate(options = {}) {
         {
           label: 'New',
           submenu: [
-            actionItem('Workspace', 'new-workspace'),
             actionItem('Request', 'new-request', { accelerator: 'CmdOrCtrl+N' }),
             actionItem('Collection', 'new-collection', { accelerator: 'CmdOrCtrl+Shift+N' }),
             actionItem('Folder', 'new-folder', { accelerator: 'CmdOrCtrl+Alt+N' }),
             actionItem('Environment', 'new-environment'),
             actionItem('Runner', 'new-runner'),
-            actionItem('Performance Test', 'new-performance-test')
+            actionItem('Performance Test', 'new-performance-test'),
+            actionItem('Workspace', 'new-workspace')
           ]
         },
         { type: 'separator' },
@@ -38,18 +38,17 @@ function createApplicationMenuTemplate(options = {}) {
         {
           label: 'Import',
           submenu: [
-            actionItem('Workspace', 'import-workspace'),
             actionItem('Request', 'import-request'),
             actionItem('Collection', 'import-collection'),
             actionItem('Environment', 'import-environment'),
             actionItem('Runner', 'import-runner'),
-            actionItem('Performance Test', 'import-performance-test')
+            actionItem('Performance Test', 'import-performance-test'),
+            actionItem('Workspace', 'import-workspace')
           ]
         },
         {
           label: 'Export',
           submenu: [
-            actionItem('Workspace', 'export-workspace'),
             {
               label: 'Request',
               submenu: [
@@ -74,7 +73,8 @@ function createApplicationMenuTemplate(options = {}) {
               ]
             },
             actionItem('Runner', 'export-runner-definition'),
-            actionItem('Performance Test', 'export-performance-test')
+            actionItem('Performance Test', 'export-performance-test'),
+            actionItem('Workspace', 'export-workspace')
           ]
         },
         { type: 'separator' },

@@ -24,6 +24,7 @@ async function runPackagedStartupSmokeNode(options = {}) {
   }
   const userDataPath = expectedPackagedUserDataPath(env, process.platform);
   await fs.mkdir(userDataPath, { recursive: true });
+  process.env.POSTMETER_USER_DATA_PATH = userDataPath;
   log(`userData=${userDataPath}`);
 
   const sessionStore = sessionStoreFactory(userDataPath);

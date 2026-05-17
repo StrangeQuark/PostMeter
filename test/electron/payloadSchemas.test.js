@@ -53,6 +53,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.authRefresh.authType.enum, 'authRefreshTypes');
   assert.equal(payloadSchemas.fields.authRefresh.targetScope.enum, 'authRefreshScopes');
   assert.equal(payloadSchemas.fields.authRefreshOutput.source.enum, 'authRefreshOutputSources');
+  assert.ok(schemaEnum('authRefreshOutputSources').includes('rawBody'));
   assert.ok(payloadSchemas.auth.refreshModes.includes('interval'));
   assert.ok(payloadSchemas.auth.refreshTypes.includes('aws'));
   assert.equal(payloadSchemas.fields.csvVariables.schema.limit, 'value');

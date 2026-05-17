@@ -38,7 +38,7 @@ const AUTH_REFRESH_MODES = ['auto', 'lifetime', 'interval'];
 const AUTH_REFRESH_SCOPES = ['environment', 'collection', 'globals'];
 const AUTH_REFRESH_FAILURE_POLICIES = ['abort', 'continue'];
 const AUTH_REFRESH_TYPES = ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'];
-const AUTH_REFRESH_OUTPUT_SOURCES = ['body', 'header', 'cookie'];
+const AUTH_REFRESH_OUTPUT_SOURCES = ['body', 'rawBody', 'header', 'cookie'];
 const AUTH_REFRESH_OUTPUT_SLOTS = [
   'accessToken',
   'refreshToken',

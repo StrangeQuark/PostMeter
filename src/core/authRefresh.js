@@ -255,7 +255,7 @@ class AuthRefreshManager {
   applyRefreshOutputs(outputs = [], step = {}, scope = {}, variables = [], options = {}) {
     let tokenForExpiry = options.tokenForExpiry || '';
     for (const output of outputs || []) {
-      if (!output?.path) {
+      if (!output?.path && output?.source !== 'rawBody') {
         continue;
       }
       const value = extractRefreshOutput(output, step.payload, step.response, scope);
@@ -363,6 +363,13 @@ function parseRefreshPayload(body) {
 function extractRefreshOutput(output, payload, response, scope) {
   const source = output?.source || 'body';
   const path = String(output?.path || '').trim();
+  if (source === 'rawBody') {
+    const body = response?.body;
+    if (body == null || String(body).trim() === '') {
+      return undefined;
+    }
+    return String(body);
+  }
   if (!path) {
     return undefined;
   }
@@ -400,6 +407,9 @@ function extractCookie(cookies = [], name = '') {
 }
 
 function missingRefreshPathMessage(path, response = {}, payload = {}, source = 'body') {
+  if (source === 'rawBody') {
+    return 'Auth refresh response body was empty.';
+  }
   const keys = payload && typeof payload === 'object' && !Array.isArray(payload)
     ? Object.keys(payload).filter(Boolean).slice(0, 8)
     : [];

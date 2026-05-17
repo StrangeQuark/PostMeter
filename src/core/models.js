@@ -350,10 +350,12 @@ function normalizeAuthRefreshOutputs(outputs, fallbackConfig = DEFAULT_AUTH_REFR
 
 function normalizeAuthRefreshOutput(output = {}) {
   const input = output && typeof output === 'object' && !Array.isArray(output) ? output : {};
+  const source = normalizeSchemaEnumValue('authRefreshOutputSources', input.source, 'body');
+  const path = normalizeAuthRefreshPath(input.path, '');
   return {
     slot: normalizeSchemaEnumValue('authRefreshOutputSlots', input.slot, 'custom'),
-    source: normalizeSchemaEnumValue('authRefreshOutputSources', input.source, 'body'),
-    path: normalizeAuthRefreshPath(input.path, ''),
+    source,
+    path: path || (source === 'rawBody' ? '$body' : ''),
     variable: normalizeAuthRefreshKey(input.variable, '')
   };
 }

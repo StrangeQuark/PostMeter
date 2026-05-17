@@ -17,7 +17,39 @@ function defaultWorkspacePath() {
   if (process.env.POSTMETER_DATA_PATH && process.env.POSTMETER_DATA_PATH.trim()) {
     return process.env.POSTMETER_DATA_PATH;
   }
-  return path.join(os.homedir(), '.postmeter', 'workspace.json');
+  return path.join(defaultPostMeterWorkspaceDirectory(), 'workspace.json');
+}
+
+function defaultPostMeterDataDirectory() {
+  if (process.env.POSTMETER_USER_DATA_PATH && process.env.POSTMETER_USER_DATA_PATH.trim()) {
+    return path.resolve(process.env.POSTMETER_USER_DATA_PATH);
+  }
+  if (process.env.POSTMETER_DATA_PATH && process.env.POSTMETER_DATA_PATH.trim()) {
+    return path.join(path.dirname(path.resolve(process.env.POSTMETER_DATA_PATH)), 'userData');
+  }
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'PostMeter');
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'PostMeter');
+  }
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'postmeter');
+}
+
+function postMeterProfileDirectory(userDataPath) {
+  return path.join(path.resolve(userDataPath), 'profile');
+}
+
+function defaultPostMeterProfileDirectory() {
+  return postMeterProfileDirectory(defaultPostMeterDataDirectory());
+}
+
+function postMeterWorkspaceDirectory(userDataPath) {
+  return path.join(postMeterProfileDirectory(userDataPath), 'workspace');
+}
+
+function defaultPostMeterWorkspaceDirectory() {
+  return path.join(defaultPostMeterProfileDirectory(), 'workspace');
 }
 
 function parseStructuredCollectionContent(content) {
@@ -325,6 +357,9 @@ function fsyncDirectorySync(directoryPath) {
 
 module.exports = {
   defaultWorkspacePath,
+  defaultPostMeterDataDirectory,
+  defaultPostMeterProfileDirectory,
+  defaultPostMeterWorkspaceDirectory,
   fsyncDirectory,
   fsyncDirectorySync,
   looksLikeNativeWorkspace,
@@ -332,6 +367,8 @@ module.exports = {
   normalizeWorkspace,
   parseStructuredCollectionContent,
   pathExists,
+  postMeterProfileDirectory,
+  postMeterWorkspaceDirectory,
   siblingPath,
   temporaryJsonPath,
   workspaceForPersistence,

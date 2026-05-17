@@ -144,6 +144,39 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(rendererSource, /function useManualPathFromFilePicker\(\)/);
   assert.match(indexSource, /id="fileSourceMenu"/);
   assert.match(indexSource, /Choose File\.\.\./);
+  assertSourceOrder(indexSource, [
+    'id="newRequestButton"',
+    'id="newCollectionButton"',
+    'id="newFolderButton"',
+    'id="newEnvironmentMenuButton"',
+    'id="newRunnerMenuButton"',
+    'id="newPerformanceTestMenuButton"',
+    'id="newWorkspaceMenuButton"'
+  ], 'toolbar New menu');
+  assertSourceOrder(indexSource, [
+    'id="importRequestButton"',
+    'id="importCollectionButton"',
+    'id="importEnvironmentButton"',
+    'id="importRunnerButton"',
+    'id="importPerformanceTestButton"',
+    'id="importWorkspaceButton"'
+  ], 'toolbar Import menu');
+  assertSourceOrder(indexSource, [
+    'id="exportRequestParentButton"',
+    'id="exportCollectionParentButton"',
+    'id="exportEnvironmentParentButton"',
+    'id="exportRunnerDefinitionButton"',
+    'id="exportPerformanceTestMenuButton"',
+    'id="exportWorkspaceButton"'
+  ], 'toolbar Export menu');
+  assertSourceOrder(indexSource, [
+    'id="collectionsPanelTab"',
+    'id="environmentsPanelTab"',
+    'id="runnersPanelTab"',
+    'id="performancePanelTab"',
+    'id="workspacesPanelTab"',
+    'id="historyPanelTab"'
+  ], 'sidebar tabs');
   assert.match(mainSource, /app\.whenReady\(\)\.then\(startApplication\)\.catch\(\(error\) => failStartup\(error\)\)/);
   assert.match(mainSource, /async function failStartup/);
   assert.match(mainSource, /writeStartupSmokeFailureArtifacts\(mainWindow,\s*process\.env,\s*error\)/);
@@ -396,4 +429,14 @@ test('Electron security matrix enumerates every IPC channel exposed by source', 
 
 function matches(source, regex) {
   return [...source.matchAll(regex)].map((match) => match[1]);
+}
+
+function assertSourceOrder(source, needles, label) {
+  let previous = -1;
+  for (const needle of needles) {
+    const index = source.indexOf(needle);
+    assert.ok(index >= 0, `${label} should include ${needle}`);
+    assert.ok(index > previous, `${needle} should appear after the previous ${label} item`);
+    previous = index;
+  }
 }

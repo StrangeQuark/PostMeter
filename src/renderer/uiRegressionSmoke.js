@@ -13,9 +13,9 @@
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
     assertUiSmoke(!$('fileMenuButton'), 'Renderer toolbar should not duplicate the native File menu.');
     await assertSettingsMenuClickSmoke();
-    assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner', 'Performance Test']);
-    assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test']);
-    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test'], {
+    assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Request', 'Collection', 'Folder', 'Environment', 'Runner', 'Performance Test', 'Workspace']);
+    assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Collection', 'Environment', 'Runner', 'Performance Test', 'Workspace']);
+    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Collection', 'Environment', 'Runner', 'Performance Test', 'Workspace'], {
       submenuLabels: ['PostMeter', 'Postman', 'OpenAPI', 'curl']
     });
     assertToolbarMenuKeyboardActivationSmoke();
@@ -2920,13 +2920,13 @@
       assertUiSmoke(exportedFormat === 'openapi', 'Collection export did not pass the selected format.');
       assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled collection export should leave the current status unchanged.');
 
-      const collectionCount = workspace.collections.length;
+      const initialCollectionCount = workspace.collections.length;
       window.__postmeterImportWorkspace = async () => {
         throw new Error('mocked workspace import failure');
       };
       await importWorkspace();
       assertStatusIncludes('Workspace import failed: mocked workspace import failure', 'Failed workspace import did not update status with an actionable error.');
-      assertUiSmoke(workspace.collections.length === collectionCount, 'Failed workspace import should not clobber the active workspace.');
+      assertUiSmoke(workspace.collections.length === initialCollectionCount, 'Failed workspace import should not clobber the active workspace.');
 
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
       window.__postmeterExportWorkspace = async () => {
@@ -2935,12 +2935,71 @@
       await exportWorkspace();
       assertStatusIncludes('Workspace export failed: mocked workspace export failure', 'Failed workspace export did not update status with an actionable error.');
 
+      const importedCollectionId = crypto.randomUUID();
+      const collectionCountBeforeSuccessfulImport = workspace.collections.length;
+      window.__postmeterImportCollection = async () => ({
+        cancelled: false,
+        collection: {
+          id: importedCollectionId,
+          name: 'Imported Focus Collection',
+          description: 'Imported collection overview should open after import.',
+          auth: { type: 'none' },
+          scripts: { preRequest: '', tests: '' },
+          variables: [],
+          requests: [{ id: crypto.randomUUID(), name: 'Imported Child Request', method: 'GET', url: 'https://import.example.test' }],
+          folders: []
+        }
+      });
+      const previousImportFocusState = {
+        activeSidebarPanel,
+        activeMainPanel,
+        activeCollectionId,
+        activeFolderId,
+        activeRequestId,
+        activeRunnerRequestRunnerId,
+        activeAuthRefreshRequestOwnerType,
+        activeAuthRefreshRequestOwnerId,
+        activeRunnerConfigId,
+        activePerformanceTestId,
+        activeEnvironmentId,
+        selectedWorkspaceId
+      };
+      activeSidebarPanel = 'performance';
+      activeMainPanel = 'performance';
+      activeCollectionId = null;
+      activeFolderId = null;
+      activeRequestId = null;
+      activeRunnerRequestRunnerId = null;
+      renderAll();
+      await importCollection();
+      assertUiSmoke(workspace.collections.length === collectionCountBeforeSuccessfulImport + 1, 'Successful collection import should add the imported collection.');
+      assertUiSmoke(activeSidebarPanel === 'collections', 'Successful collection import should switch to the Collections sidebar.');
+      assertUiSmoke(activeMainPanel === 'request', 'Successful collection import should switch to the collection/request panel group.');
+      assertUiSmoke(activeCollectionId === importedCollectionId, 'Successful collection import should select the imported collection.');
+      assertUiSmoke(activeFolderId === null && activeRequestId === null, 'Successful collection import should open the collection overview instead of a child request.');
+      assertUiSmoke(openCollectionTabs.some((tab) => tab.collectionId === importedCollectionId), 'Successful collection import should open a collection overview tab.');
+      assertUiSmoke(!$('collectionMainPanel').hidden, 'Successful collection import should reveal the collection overview pane.');
+      activeSidebarPanel = previousImportFocusState.activeSidebarPanel;
+      activeMainPanel = previousImportFocusState.activeMainPanel;
+      activeCollectionId = previousImportFocusState.activeCollectionId;
+      activeFolderId = previousImportFocusState.activeFolderId;
+      activeRequestId = previousImportFocusState.activeRequestId;
+      activeRunnerRequestRunnerId = previousImportFocusState.activeRunnerRequestRunnerId;
+      activeAuthRefreshRequestOwnerType = previousImportFocusState.activeAuthRefreshRequestOwnerType;
+      activeAuthRefreshRequestOwnerId = previousImportFocusState.activeAuthRefreshRequestOwnerId;
+      activeRunnerConfigId = previousImportFocusState.activeRunnerConfigId;
+      activePerformanceTestId = previousImportFocusState.activePerformanceTestId;
+      activeEnvironmentId = previousImportFocusState.activeEnvironmentId;
+      selectedWorkspaceId = previousImportFocusState.selectedWorkspaceId;
+      renderAll();
+
+      const collectionCountAfterSuccessfulImport = workspace.collections.length;
       window.__postmeterImportCollection = async () => {
         throw new Error('mocked collection import failure');
       };
       await importCollection();
       assertStatusIncludes('Collection import failed: mocked collection import failure', 'Failed collection import did not update status with an actionable error.');
-      assertUiSmoke(workspace.collections.length === collectionCount, 'Failed collection import should not mutate collections.');
+      assertUiSmoke(workspace.collections.length === collectionCountAfterSuccessfulImport, 'Failed collection import should not mutate collections.');
 
       window.__postmeterExportCollection = async () => {
         throw new Error('mocked collection export failure');
@@ -3130,10 +3189,8 @@
       trigger.focus();
       trigger.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
       assertUiSmoke(!$('newMenu').hidden, 'Toolbar activation smoke should open the New menu from the keyboard.');
-      assertUiSmoke(document.activeElement === $('newWorkspaceMenuButton'), 'Toolbar activation smoke should focus the first New menu action.');
-      $('newWorkspaceMenuButton').dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
       const item = $('newRequestButton');
-      assertUiSmoke(document.activeElement === item, 'Toolbar activation smoke should navigate to the Request action.');
+      assertUiSmoke(document.activeElement === item, 'Toolbar activation smoke should focus the first New menu action.');
       item.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }));
       assertUiSmoke($('newMenu').hidden, 'Keyboard toolbar menu activation should close the menu.');
       assertUiSmoke(Boolean(activeRequest()), 'Keyboard toolbar menu activation should run the focused action.');
@@ -3534,8 +3591,8 @@
       assertUiSmoke($('emptyCreateRunnerButton')?.textContent === 'New Runner', 'Runner empty state should render a New Runner button.');
       assertUiSmoke($('emptyCreatePerformanceTestButton')?.textContent === 'New Performance Test', 'Performance empty state should render a New Performance Test button.');
       const sidebarOrder = Array.from(document.querySelectorAll('.sidebar-tab')).map((button) => button.dataset.sidebarPanel);
-      assertUiSmoke(sidebarOrder.join('|') === 'collections|environments|workspaces|runners|performance|history', `Sidebar order was ${sidebarOrder.join('|')}.`);
-      for (const panel of ['collections', 'environments', 'workspaces', 'runners', 'performance', 'history']) {
+      assertUiSmoke(sidebarOrder.join('|') === 'collections|environments|runners|performance|workspaces|history', `Sidebar order was ${sidebarOrder.join('|')}.`);
+      for (const panel of ['collections', 'environments', 'runners', 'performance', 'workspaces', 'history']) {
         assertUiSmoke(document.querySelector(`.sidebar-tab[data-sidebar-panel="${panel}"]`), `Sidebar tab missing ${panel}.`);
         selectSidebarPanel(panel);
         assertUiSmoke(!document.querySelector(`[data-sidebar-panel-content="${panel}"]`).hidden, `Sidebar panel ${panel} did not open.`);
@@ -3934,8 +3991,9 @@
       dispatchInput($('performanceAuthBearerTokenInput'));
       $('performanceAuthRefreshTypeSelect').value = 'bearer';
       dispatchChange($('performanceAuthRefreshTypeSelect'));
-      $('performanceAuthRefreshEnabledInput').checked = true;
-      dispatchChange($('performanceAuthRefreshEnabledInput'));
+      $('performanceAuthRefreshButton').click();
+      assertUiSmoke(!$('performanceAuthRefreshMenu').hidden, 'Performance Refreshing Auth button should open the toggle menu.');
+      $('performanceToggleAuthRefreshButton').click();
       await nextPaint();
       let performanceAutoRefreshAccessOption = $('performanceAuthTypeSelect').querySelector('option[value="autoRefresh"]');
       assertUiSmoke(performanceAutoRefreshAccessOption, 'Performance request Auth Type list should include Use Refreshing Access Token when refreshing auth is active.');
@@ -3947,6 +4005,43 @@
       assertUiSmoke(performanceTest.request.auth?.type === 'autoRefresh', 'Turning performance refreshing auth on should auto-select refreshing auth for bearer performance requests.');
       assertUiSmoke($('performanceAuthTypeSelect').value === 'autoRefresh', 'Performance request Auth Type should show Use Refreshing Access Token after auto-selection.');
       assertUiSmoke($('performanceAuthTypeSelect').disabled === true, 'Performance request Auth Type select should be locked while refreshing auth is enabled.');
+      $('performanceAuthRefreshButton').click();
+      $('performanceEditAuthRefreshButton').click();
+      await nextPaint();
+      assertUiSmoke(!$('performanceAuthRefreshPanel').hidden, 'Refreshing Auth Edit action should open the settings panel.');
+      const performanceAccessSourceSelect = $('performanceAuthRefreshAccessTokenSourceSelect');
+      assertUiSmoke(
+        Array.from(performanceAccessSourceSelect?.options || []).map((option) => option.value).join('|') === 'body|rawBody|header|cookie',
+        'Refreshing Auth access token source list should expose JSON body path, entire body, header, and cookie sources.'
+      );
+      performanceAccessSourceSelect.value = 'rawBody';
+      dispatchChange(performanceAccessSourceSelect);
+      await nextPaint();
+      assertUiSmoke($('performanceAuthRefreshAccessTokenPathField').hidden, 'Selecting entire response body should hide the access token path field.');
+      assertUiSmoke(
+        performanceTest.authRefresh.outputs.some((output) => output.slot === 'accessToken' && output.source === 'rawBody' && output.path === '$body'),
+        'Selecting entire response body should save the access token output as a raw body source.'
+      );
+      performanceAccessSourceSelect.value = 'header';
+      dispatchChange(performanceAccessSourceSelect);
+      await nextPaint();
+      assertUiSmoke(!$('performanceAuthRefreshAccessTokenPathField').hidden, 'Selecting response header should show the access token name field.');
+      assertUiSmoke($('performanceAuthRefreshAccessTokenPathLabel').textContent === 'Access Token Header Name', 'Selecting response header should relabel the access token path field.');
+      $('performanceAuthRefreshAccessTokenPathInput').value = 'x-access-token';
+      dispatchInput($('performanceAuthRefreshAccessTokenPathInput'));
+      assertUiSmoke(
+        performanceTest.authRefresh.outputs.some((output) => output.slot === 'accessToken' && output.source === 'header' && output.path === 'x-access-token'),
+        'Selecting response header should save the access token output as a header source.'
+      );
+      performanceAccessSourceSelect.value = 'body';
+      dispatchChange(performanceAccessSourceSelect);
+      $('performanceAuthRefreshAccessTokenPathInput').value = 'access_token';
+      dispatchInput($('performanceAuthRefreshAccessTokenPathInput'));
+      $('performanceCsvVariablesButton').click();
+      await nextPaint();
+      assertUiSmoke($('performanceAuthRefreshPanel').hidden, 'Opening the CSV variables menu should close the Refreshing Auth panel.');
+      assertUiSmoke(!$('performanceCsvVariablesMenu').hidden, 'CSV variables menu should open after closing the Refreshing Auth panel.');
+      closeToolbarMenus();
       $('performanceAuthTypeSelect').value = 'none';
       dispatchChange($('performanceAuthTypeSelect'));
       await nextPaint();
@@ -4614,8 +4709,9 @@
       assertUiSmoke(!runnerLocalRow?.querySelector('.runner-row-refresh-auth'), 'Runner request rows should not show refreshing auth checkboxes until runner refreshing auth is enabled.');
       $('runnerAuthRefreshTypeSelect').value = 'bearer';
       dispatchChange($('runnerAuthRefreshTypeSelect'));
-      $('runnerAuthRefreshEnabledInput').checked = true;
-      dispatchChange($('runnerAuthRefreshEnabledInput'));
+      $('runnerAuthRefreshButton').click();
+      assertUiSmoke(!$('runnerAuthRefreshMenu').hidden, 'Runner Refreshing Auth button should open the toggle menu.');
+      $('runnerToggleAuthRefreshButton').click();
       await nextPaint();
       assertUiSmoke(
         runner.requests.find((request) => request.id === runnerLocalRequest.id)?.auth?.type === 'bearer',
@@ -4666,6 +4762,193 @@
       assertUiSmoke(!runnerAutoRefreshRefreshOption.hidden && !runnerAutoRefreshRefreshOption.disabled, 'Auth refresh request refresh-token option should be selectable.');
       assertUiSmoke(activeRequest()?.auth?.type === 'autoRefreshRefreshToken', 'Creating an access-token auth request after the refresh-token request should auto-select Refreshing Auth Refresh Token.');
       assertUiSmoke($('authTypeSelect').value === 'autoRefreshRefreshToken', 'Access-token auth request Auth Type should show Refreshing Auth Refresh Token after auto-selection.');
+      const authAccessRequestId = runner.authRefresh.request.id;
+      const authRefreshTokenRequestId = runner.authRefresh.refreshTokenRequest.id;
+      const previousAutoDetectSendRequest = global.__postmeterSendRequest;
+      const autoDetectSendCalls = [];
+      global.__postmeterSendRequest = async (request) => {
+        autoDetectSendCalls.push({ id: request.id, auth: request.auth });
+        if (request.id === authRefreshTokenRequestId) {
+          return {
+            statusCode: 200,
+            body: JSON.stringify({
+              refresh_token: 'body-refresh-token',
+              timestamp: '2026-05-16T12:00:00.000Z'
+            }),
+            headers: {
+              'content-type': 'application/json',
+              'x-frame-options': 'DENY'
+            },
+            updatedCookies: [
+              { name: 'theme', value: 'dark' },
+              { name: 'refresh_session', value: 'refresh-cookie' }
+            ]
+          };
+        }
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            access_token: 'body-access-token',
+            timestamp: '2026-05-16T12:00:00.000Z'
+          }),
+          headers: {
+            'x-access-token': 'header-token-value',
+            'x-frame-options': 'DENY',
+            'content-type': 'application/json'
+          },
+          updatedCookies: [
+            { name: 'theme', value: 'dark' },
+            { name: 'auth_session', value: 'cookie-access-token' }
+          ]
+        };
+      };
+      selectRunnerItem(runner.id);
+      $('runnerAuthRefreshButton').click();
+      $('runnerEditAuthRefreshButton').click();
+      await nextPaint();
+      assertUiSmoke(!$('runnerAuthRefreshPanel').hidden, 'Runner Refreshing Auth Edit action should open the settings panel before Auto-Detect.');
+      $('runnerAuthRefreshTokenManageRequestButton').click();
+      let authRefreshTokenManageLabels = Array.from($('runnerAuthRefreshTokenManageRequestMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(authRefreshTokenManageLabels.join('|') === 'Open|Auto-Detect|New Request|Import|Remove', `Refresh token request Manage menu should expose all request actions. labels=${authRefreshTokenManageLabels.join('|')}`);
+      assertUiSmoke($('runnerAuthRefreshTokenRemoveRequestButton').classList.contains('danger-button'), 'Refresh token request Remove action should use danger styling.');
+      $('runnerAuthRefreshTokenAutoDetectRequestButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === false,
+        'Refresh token Auto-Detect should open the detected response options modal.',
+        2500,
+        global
+      );
+      assertUiSmoke(
+        Number(getComputedStyle($('modalBackdrop')).zIndex) > Number(getComputedStyle($('runnerAuthRefreshPanel')).zIndex),
+        'Auto-Detect modal should render above the Refreshing Auth panel.'
+      );
+      $('authRefreshAutoDetectModal').click();
+      await nextPaint();
+      assertUiSmoke(!$('runnerAuthRefreshPanel').hidden, 'Clicking inside Auto-Detect should keep the Refreshing Auth panel open.');
+      $('closeAuthRefreshAutoDetectModalButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === true,
+        'Closing Refresh token Auto-Detect should close the modal.',
+        2500,
+        global
+      );
+      assertUiSmoke(!$('runnerAuthRefreshPanel').hidden, 'Closing Auto-Detect should keep the Refreshing Auth panel open.');
+      $('runnerAuthRefreshTokenManageRequestButton').click();
+      $('runnerAuthRefreshTokenAutoDetectRequestButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === false,
+        'Refresh token Auto-Detect should reopen after closing.',
+        2500,
+        global
+      );
+      $('cancelAuthRefreshAutoDetectButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === true,
+        'Cancelling Refresh token Auto-Detect should close the modal.',
+        2500,
+        global
+      );
+      assertUiSmoke(!$('runnerAuthRefreshPanel').hidden, 'Cancelling Auto-Detect should keep the Refreshing Auth panel open.');
+      $('runnerAuthRefreshTokenManageRequestButton').click();
+      $('runnerAuthRefreshTokenAutoDetectRequestButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === false,
+        'Refresh token Auto-Detect should reopen after cancelling.',
+        2500,
+        global
+      );
+      let autoDetectOptions = Array.from($('authRefreshAutoDetectList').querySelectorAll('.auth-refresh-auto-detect-option'));
+      let autoDetectSectionTitles = Array.from($('authRefreshAutoDetectList').querySelectorAll('.auth-refresh-auto-detect-section-title')).map((node) => node.textContent.trim());
+      assertUiSmoke(autoDetectSectionTitles.includes('Response Body'), 'Refresh token Auto-Detect should group JSON body options under a response body section.');
+      assertUiSmoke(autoDetectSectionTitles.includes('Cookies'), 'Refresh token Auto-Detect should group cookie options under a cookies section.');
+      assertUiSmoke(
+        autoDetectOptions.some((option) => option.textContent.includes('JSON body: refresh_token')),
+        'Refresh token Auto-Detect should list JSON body paths from the auth response.'
+      );
+      assertUiSmoke(
+        !autoDetectOptions.some((option) => option.textContent.includes('timestamp') || option.textContent.includes('x-frame-options') || option.textContent.includes('theme')),
+        'Refresh token Auto-Detect should not list unrelated body fields, security headers, or non-auth cookies.'
+      );
+      let refreshTokenOption = autoDetectOptions.find((option) => option.textContent.includes('JSON body: refresh_token'))?.querySelector('input');
+      assertUiSmoke(refreshTokenOption && !refreshTokenOption.disabled, 'Refresh token JSON body option should be selectable.');
+      refreshTokenOption.checked = true;
+      dispatchChange(refreshTokenOption);
+      assertUiSmoke(!$('confirmAuthRefreshAutoDetectButton').disabled, 'Selecting an Auto-Detect option should enable Confirm.');
+      $('confirmAuthRefreshAutoDetectButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === true,
+        'Confirming Refresh token Auto-Detect should close the modal.',
+        2500,
+        global
+      );
+      assertUiSmoke(
+        runner.authRefresh.outputs.some((output) => output.slot === 'refreshToken' && output.source === 'body' && output.path === 'refresh_token'),
+        'Confirming Refresh token Auto-Detect should save the selected refresh token output path.'
+      );
+      assertUiSmoke(!$('runnerAuthRefreshPanel').hidden, 'Confirming Refresh token Auto-Detect should keep the Refreshing Auth panel open.');
+      await nextPaint();
+      assertUiSmoke($('runnerAuthRefreshRefreshTokenPathInput').value === 'refresh_token', 'Confirming Refresh token Auto-Detect should update the visible refresh token path field immediately.');
+      $('runnerAuthRefreshManageRequestButton').click();
+      const authRefreshManageLabels = Array.from($('runnerAuthRefreshManageRequestMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(authRefreshManageLabels.join('|') === 'Open|Auto-Detect|New Request|Import|Remove', `Auth request Manage menu should expose all request actions. labels=${authRefreshManageLabels.join('|')}`);
+      assertUiSmoke($('runnerAuthRefreshRemoveRequestButton').classList.contains('danger-button'), 'Auth request Remove action should use danger styling.');
+      $('runnerAuthRefreshAutoDetectRequestButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === false,
+        'Access token Auto-Detect should open the detected response options modal.',
+        2500,
+        global
+      );
+      autoDetectOptions = Array.from($('authRefreshAutoDetectList').querySelectorAll('.auth-refresh-auto-detect-option'));
+      autoDetectSectionTitles = Array.from($('authRefreshAutoDetectList').querySelectorAll('.auth-refresh-auto-detect-section-title')).map((node) => node.textContent.trim());
+      assertUiSmoke(autoDetectSectionTitles.includes('Response Body'), 'Access token Auto-Detect should group JSON body options under a response body section.');
+      assertUiSmoke(autoDetectSectionTitles.includes('Headers'), 'Access token Auto-Detect should group response header options under a headers section.');
+      assertUiSmoke(
+        autoDetectOptions.some((option) => option.textContent.includes('Header: x-access-token')),
+        'Access token Auto-Detect should list response headers from the auth response.'
+      );
+      assertUiSmoke(
+        !autoDetectOptions.some((option) => option.textContent.includes('timestamp') || option.textContent.includes('x-frame-options') || option.textContent.includes('theme')),
+        'Access token Auto-Detect should not list unrelated body fields, security headers, or non-auth cookies.'
+      );
+      const accessTokenOption = autoDetectOptions.find((option) => option.textContent.includes('Header: x-access-token'))?.querySelector('input');
+      assertUiSmoke(accessTokenOption && !accessTokenOption.disabled, 'Access token header option should be selectable.');
+      accessTokenOption.checked = true;
+      dispatchChange(accessTokenOption);
+      $('confirmAuthRefreshAutoDetectButton').click();
+      await waitForUiSmoke(
+        () => $('authRefreshAutoDetectModal')?.hidden === true,
+        'Confirming Access token Auto-Detect should close the modal.',
+        2500,
+        global
+      );
+      assertUiSmoke(
+        runner.authRefresh.outputs.some((output) => output.slot === 'accessToken' && output.source === 'header' && output.path === 'x-access-token'),
+        'Confirming Access token Auto-Detect should save the selected access token output source and path.'
+      );
+      assertUiSmoke(!$('runnerAuthRefreshPanel').hidden, 'Confirming Access token Auto-Detect should keep the Refreshing Auth panel open.');
+      await nextPaint();
+      assertUiSmoke($('runnerAuthRefreshAccessTokenSourceSelect').value === 'header', 'Confirming Access token Auto-Detect should update the visible access token source field immediately.');
+      assertUiSmoke($('runnerAuthRefreshAccessTokenPathInput').value === 'x-access-token', 'Confirming Access token Auto-Detect should update the visible access token path field immediately.');
+      const accessAutoDetectCalls = autoDetectSendCalls.slice(-2);
+      assertUiSmoke(accessAutoDetectCalls[0]?.id === authRefreshTokenRequestId, 'Access token Auto-Detect should run the refresh-token request first when the access request uses Refreshing Auth Refresh Token.');
+      assertUiSmoke(accessAutoDetectCalls[1]?.id === authAccessRequestId, 'Access token Auto-Detect should run the access-token request after refreshing the refresh token.');
+      assertUiSmoke(
+        accessAutoDetectCalls[1]?.auth?.type === 'bearer' && accessAutoDetectCalls[1]?.auth?.token === 'body-refresh-token',
+        'Access token Auto-Detect should inject the refreshed refresh token into the access-token request.'
+      );
+      global.__postmeterSendRequest = previousAutoDetectSendRequest;
+      $('runnerAuthRefreshTokenManageRequestButton').click();
+      $('runnerAuthRefreshTokenRemoveRequestButton').click();
+      await nextPaint();
+      assertUiSmoke($('runnerAuthRefreshTokenRequestSummary').textContent.includes('No refresh token request selected'), 'Removing the refresh token request should clear its summary.');
+      assertUiSmoke(runner.authRefresh.request.auth?.type !== 'autoRefreshRefreshToken', 'Removing the refresh token request should clear the access request refresh-token auth type.');
+      assertUiSmoke(!openRequestTabs.some((tab) => tab.requestId === authRefreshTokenRequestId), 'Removing the refresh token request should close its request tab.');
+      $('runnerAuthRefreshManageRequestButton').click();
+      $('runnerAuthRefreshRemoveRequestButton').click();
+      await nextPaint();
+      assertUiSmoke($('runnerAuthRefreshRequestSummary').textContent.includes('No auth request selected'), 'Removing the auth request should clear its summary.');
+      assertUiSmoke(!openRequestTabs.some((tab) => tab.requestId === authAccessRequestId), 'Removing the auth request should close its request tab.');
       editRunnerRequest(runner, runnerLocalRequest);
       await nextPaint();
       runner.csvVariables = {

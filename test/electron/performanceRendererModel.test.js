@@ -52,6 +52,21 @@ test('renderer performance normalization defaults CSV variables off but preserve
   assert.equal(normalizePerformanceTest({ csvVariables: { schema: 'name', values: 'alice' } }).csvVariables.enabled, true);
 });
 
+test('renderer performance auth refresh normalization preserves raw body output sources', () => {
+  const normalized = normalizePerformanceTest({
+    authRefresh: {
+      outputs: [{ slot: 'accessToken', source: 'rawBody', path: '', variable: 'ACCESS_TOKEN' }]
+    }
+  });
+
+  assert.deepEqual(normalized.authRefresh.outputs.find((item) => item.slot === 'accessToken'), {
+    slot: 'accessToken',
+    source: 'rawBody',
+    path: '$body',
+    variable: 'ACCESS_TOKEN'
+  });
+});
+
 test('renderer performance normalization preserves original auth for auto-refreshing request auth', () => {
   const normalized = normalizePerformanceTest({
     request: {

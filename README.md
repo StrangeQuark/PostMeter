@@ -68,17 +68,15 @@ Use `Help > Tutorials` in the desktop app to open guided walkthroughs. The curre
 
 ## Data And Privacy
 
-PostMeter stores managed workspaces as local JSON files under:
+PostMeter stores local app data under the OS app-data directory used by Electron:
 
 ```text
-~/.postmeter/
+Linux:   ~/.config/postmeter/
+macOS:   ~/Library/Application Support/PostMeter/
+Windows: %APPDATA%\PostMeter\
 ```
 
-App-wide preferences are stored separately in:
-
-```text
-~/.postmeter/settings.json
-```
+User profile files live under `profile/` inside that directory. App-wide preferences are `profile/settings.json`, dirty tabs/session state is `profile/session.json`, and managed workspace files live under `profile/workspace/`.
 
 Workspace-local privacy and sandbox choices are stored in each managed workspace's non-portable `localsettings` section.
 
@@ -88,7 +86,7 @@ You can override the startup workspace path:
 POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 ```
 
-Workspace exports do not include `settings.json` or workspace `localsettings`, so sharing a workspace does not overwrite another user's theme, modal behavior, diagnostics opt-ins, file bindings, package reviews, or local vault grants.
+When `POSTMETER_DATA_PATH` is set, PostMeter uses that file as the startup workspace and creates companion app-data files beside it for development and test isolation. Workspace exports do not include `profile/settings.json`, `profile/session.json`, vaults, diagnostics, runtime files, or workspace `localsettings`, so sharing a workspace does not overwrite another user's theme, modal behavior, diagnostics opt-ins, file bindings, package reviews, local vault grants, or dirty tabs.
 
 Request, workspace, collection, environment, runner, and performance exports can include auth fields, variables, cookies, file references, scripts, and certificate passphrases. Review exports before sharing them.
 

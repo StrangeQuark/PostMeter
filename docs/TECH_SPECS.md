@@ -104,7 +104,7 @@ The current tutorial IDs are `request-basics`, `environment-variables`, and `run
 - Node.js 22 or newer.
 - npm 10 or newer.
 - Network access for request execution.
-- Writable user-home directory, or a writable directory for the path specified by `POSTMETER_DATA_PATH`.
+- Writable OS app-data directory for Electron `userData`, or writable directories for explicit `POSTMETER_DATA_PATH` / `POSTMETER_SETTINGS_PATH` overrides.
 
 ## Build, Run, And Test Commands
 
@@ -255,7 +255,7 @@ Main process responsibilities:
 - Start and cancel OAuth 2.0 authorization-code PKCE using loopback or custom URI-scheme redirects.
 - Start and cancel OAuth 2.0 device-code polling.
 - Validate renderer-originated IPC sender identity and payloads before handing them to persistence, request execution, or collection-run behavior.
-- Persist normalized workspace data as plain JSON, keep app-wide preferences in `settings.json`, and keep workspace-local non-portable trust/privacy settings in managed workspace `localsettings`.
+- Persist normalized workspace data as plain JSON under Electron `userData/profile/workspace/`, keep app-wide preferences in `profile/settings.json`, and keep workspace-local non-portable trust/privacy settings in managed workspace `localsettings`.
 - Export Runner and Performance results to JSON, CSV, or a self-contained HTML report.
 - Persist request history after sends.
 - Check GitHub Releases for update metadata and open approved release URLs in the external browser. The Help menu owns update checks and the prerelease opt-in checkbox.
@@ -361,7 +361,7 @@ Runtime-hydrated settings fields:
 - `modals.closeOnBackdropClick`
 - `updates.includePrereleases`
 
-`workspace.settings` is still supplied to the renderer as a normalized runtime object. The main process hydrates it by merging app-wide preferences from `settings.json` with the managed workspace's `localsettings`. Runtime `settings` is stripped from workspace persistence/export. Managed workspace JSON keeps `localsettings`; native workspace imports and exports strip it.
+`workspace.settings` is still supplied to the renderer as a normalized runtime object. The main process hydrates it by merging app-wide preferences from `profile/settings.json` with the managed workspace's `localsettings`. Runtime `settings` is stripped from workspace persistence/export. Managed workspace JSON keeps `localsettings`; native workspace imports and exports strip it.
 
 Collection fields:
 
@@ -512,28 +512,35 @@ Schema `10` removes workspace-level load-test defaults. Legacy load-test setting
 
 Schema `11` adds workspace-level globals for true `pm.globals` support and settings that can disable brokered script network requests, cookie-helper access, or vault access. These APIs are enabled by default for Postman import parity. The local settings model also carries the optional `sandbox.trustedCapabilities.vault` grant, scoped `sandbox.trustedCapabilities.vaultGrants`, and reviewed `sandbox.packageCache` entries for exact package-library/external package compatibility.
 
-Schema `12` adds first-class `workspace.runners` data and the `tabs.saveOnForceClose` setting. Existing workspaces migrate with an empty runner list and disabled save-on-force-close behavior; current-schema persistence keeps the tab setting in app-wide `settings.json`.
+Schema `12` adds first-class `workspace.runners` data and the `tabs.saveOnForceClose` setting. Existing workspaces migrate with an empty runner list and disabled save-on-force-close behavior; current-schema persistence keeps the tab setting in app-wide `profile/settings.json`.
 
 Schema `13` adds first-class `workspace.performanceTests` data.
 
 Schema `14` introduced the external app settings store and moved runtime `settings` out of persisted workspace files.
 
-Schema `15` adds managed-workspace `localsettings` for non-portable workspace-local trust/privacy settings. Native workspace import/export strips `localsettings`, and the main process hydrates runtime `workspace.settings` from app-wide `settings.json` plus the managed workspace's `localsettings`.
+Schema `15` adds managed-workspace `localsettings` for non-portable workspace-local trust/privacy settings. Native workspace import/export strips `localsettings`, and the main process hydrates runtime `workspace.settings` from app-wide `profile/settings.json` plus the managed workspace's `localsettings`.
 
 ## Persistence Specifications
 
 Persistence is handled by `WorkspaceStore` and `WorkspaceManager`.
 
-Managed workspace directory:
+Managed app-data directory:
 
 ```text
-~/.postmeter/
+Linux:   ~/.config/postmeter/
+macOS:   ~/Library/Application Support/PostMeter/
+Windows: %APPDATA%\PostMeter\
 ```
 
-Local settings file:
+Default app-data layout:
 
 ```text
-~/.postmeter/settings.json
+profile/settings.json
+profile/session.json
+profile/workspace/*.json
+vaults/
+diagnostics/
+runtime/
 ```
 
 Override the preferred startup workspace path:
@@ -550,17 +557,17 @@ POSTMETER_SETTINGS_PATH=/tmp/postmeter-settings.json npm start
 
 Behavior:
 
-- Uses `workspace.json` as the preferred startup path and scans the containing directory for native managed workspace JSON files. There is no persistent managed-workspace index or active-workspace pointer to go stale; the legacy manifest file is removed when found.
+- Uses `profile/workspace/workspace.json` in Electron `userData` as the preferred startup path and scans the containing `profile/workspace/` directory for native managed workspace JSON files. There is no persistent managed-workspace index or active-workspace pointer to go stale; the legacy manifest file is removed when found.
 - Creates a default managed workspace such as `Local Workspace.json` when no workspace files exist, allocating a suffixed name if that filename already exists as an unreadable or non-native file.
 - Allocates default, new, imported, and renamed managed workspace filenames around any existing filesystem entry, including unreadable or non-native JSON files, then publishes with no-overwrite semantics and retries suffixed names if a destination appears before publication.
 - Loads current schema `15` workspaces and migrates supported historical schema versions `1` through `14` to schema `15`.
 - Creates timestamped, collision-resistant `pre-migration.backup` sibling files through the atomic, no-overwrite write path before saving migrated workspaces.
 - Rejects future schema versions.
 - Quarantines unreadable workspace JSON by moving it through a no-overwrite file move to a timestamped, collision-resistant `corrupt` sibling file and best-effort fsyncing the directory, then creates a fresh default workspace through no-overwrite publication and raises a recovery error for the UI. If a replacement workspace file appears before recovery publication, PostMeter preserves that replacement instead of overwriting it.
-- Writes workspace, session, vault, and export files through collision-resistant same-directory temporary files, fsyncs file contents where supported, renames into place, and best-effort fsyncs the containing directory. Interrupted temporary files are ignored by workspace discovery.
+- Writes workspace, settings, session, vault, runtime, and export files through collision-resistant same-directory temporary files, fsyncs file contents where supported, renames into place, and best-effort fsyncs the containing directory. Interrupted temporary files are ignored by workspace discovery.
 - Writes normalized workspace values directly to local JSON, excluding runtime `settings` and retaining non-portable `localsettings` only for managed workspace files.
-- Writes app-wide settings to `settings.json` using the same atomic JSON write path. The file uses `format: "postmeter.settings"` and `version: 1` rather than `schemaVersion`, so managed-workspace discovery does not treat it as a workspace.
-- Writes workspace-local diagnostics opt-ins, TLS trust settings, managed client-certificate settings, reviewed package metadata, imported file bindings, and vault grants to the managed workspace `localsettings` object, not to `settings.json`.
+- Writes app-wide settings to `profile/settings.json` using the same atomic JSON write path. The file uses `format: "postmeter.settings"` and `version: 1` rather than `schemaVersion`, so managed-workspace discovery does not treat it as a workspace.
+- Writes workspace-local diagnostics opt-ins, TLS trust settings, managed client-certificate settings, reviewed package metadata, imported file bindings, and vault grants to the managed workspace `localsettings` object, not to `profile/settings.json`.
 - Normalizes IDs, names, body types, methods, arrays, settings, collection variables, collection certificates, request variables, request docs, request cookie jar settings, workspace cookies, folders, environments, and history, while removing legacy request load-test compatibility fields.
 - Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
 - Targeted renderer saves for request, runner-owned request, and environment tabs send only the selected item payload, the current runtime settings, and any owned shared request-side state such as collection variables or cookie-jar values; targeted settings saves send only `workspace.settings`, which the main process validates, splits into app-wide settings plus workspace `localsettings`, and applies to the cached workspace.

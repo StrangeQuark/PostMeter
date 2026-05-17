@@ -1,7 +1,7 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 1100;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -121,6 +121,59 @@
 
 .runner-import-modal {
   width: min(680px, 100%);
+}
+
+.auth-refresh-auto-detect-modal {
+  width: min(720px, 100%);
+}
+
+.auth-refresh-auto-detect-list {
+  max-height: min(380px, calc(100vh - 260px));
+}
+
+.auth-refresh-auto-detect-section {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-refresh-auto-detect-section + .auth-refresh-auto-detect-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.auth-refresh-auto-detect-section-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.auth-refresh-auto-detect-option {
+  align-items: flex-start;
+}
+
+.auth-refresh-auto-detect-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.auth-refresh-auto-detect-copy strong,
+.auth-refresh-auto-detect-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-refresh-auto-detect-copy small {
+  margin-left: 0;
+  text-align: left;
+}
+
+.auth-refresh-auto-detect-option.is-disabled {
+  opacity: 0.58;
 }
 
 .html-report-options-modal {

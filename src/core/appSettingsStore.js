@@ -1,5 +1,4 @@
 const fs = require('node:fs/promises');
-const os = require('node:os');
 const path = require('node:path');
 const {
   mergeSettingsWithWorkspaceLocalSettings,
@@ -11,6 +10,7 @@ const {
   moveFileNoOverwrite,
   pathExists,
   siblingPath,
+  defaultPostMeterProfileDirectory,
   writeJsonFileAtomic,
   writeJsonFileAtomicSync
 } = require('./workspacePersistence');
@@ -24,10 +24,7 @@ function defaultSettingsPath() {
   if (process.env.POSTMETER_SETTINGS_PATH && process.env.POSTMETER_SETTINGS_PATH.trim()) {
     return process.env.POSTMETER_SETTINGS_PATH;
   }
-  if (process.env.POSTMETER_DATA_PATH && process.env.POSTMETER_DATA_PATH.trim()) {
-    return path.join(path.dirname(path.resolve(process.env.POSTMETER_DATA_PATH)), DEFAULT_SETTINGS_FILENAME);
-  }
-  return path.join(os.homedir(), '.postmeter', DEFAULT_SETTINGS_FILENAME);
+  return path.join(defaultPostMeterProfileDirectory(), DEFAULT_SETTINGS_FILENAME);
 }
 
 function defaultAppSettings() {
