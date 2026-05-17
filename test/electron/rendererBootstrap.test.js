@@ -64,6 +64,29 @@ function assertHawkAdvancedMarkup(source, ids) {
   assert.match(advancedSource, /Include payload hash/);
 }
 
+function assertAwsAdvancedMarkup(source, ids) {
+  const accessKeyIndex = source.indexOf(`id="${ids.accessKey}"`);
+  assert.notEqual(accessKeyIndex, -1, `Expected ${ids.accessKey} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', accessKeyIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.accessKey} AWS advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.accessKey} AWS advanced disclosure to close.`);
+
+  const visibleSource = source.slice(accessKeyIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the AWS advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+}
+
 function assertOauth1AdvancedMarkup(source, ids) {
   const signatureIndex = source.indexOf(`id="${ids.signatureMethod}"`);
   assert.notEqual(signatureIndex, -1, `Expected ${ids.signatureMethod} to exist.`);
@@ -281,6 +304,23 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.doesNotMatch(indexSource, /OAuth 2\.0 Request Auth/);
   assert.equal(selectOptionValues(indexSource, 'authTypeSelect').includes('cookie'), false);
   assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('cookie'), false);
+  const postmanAuthOrder = [
+    'none',
+    'basic',
+    'bearer',
+    'jwtBearer',
+    'digest',
+    'oauth1',
+    'oauth2',
+    'hawk',
+    'aws',
+    'ntlm',
+    'apiKey',
+    'akamaiEdgeGrid',
+    'asap'
+  ];
+  assert.deepEqual(selectOptionValues(indexSource, 'authTypeSelect'), postmanAuthOrder);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthTypeSelect'), postmanAuthOrder);
   assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshTypeSelect'), ['bearer', 'apiKey', 'cookie', 'aws', 'custom']);
   assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshTypeSelect'), ['bearer', 'apiKey', 'cookie', 'aws', 'custom']);
   assert.doesNotMatch(indexSource, /<option value="oauth2">OAuth 2<\/option>/);
@@ -332,6 +372,65 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   ]);
   assert.deepEqual(selectOptionValues(indexSource, 'authHawkAlgorithmSelect'), ['sha256', 'sha1']);
   assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthHawkAlgorithmSelect'), ['sha256', 'sha1']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authAwsAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthAwsAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authJwtAlgorithmSelect'), [
+    'HS256',
+    'HS384',
+    'HS512',
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthJwtAlgorithmSelect'), [
+    'HS256',
+    'HS384',
+    'HS512',
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authAsapAlgorithmSelect'), [
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthAsapAlgorithmSelect'), [
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="jwtBearer"\]:not\(\[data-jwt-algorithm-kind="private"\]\) \[data-jwt-mode="private"\]/);
+  assert.match(indexSource, /data-auth-section="ntlm"[\s\S]*id="authNtlmUsernameInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authNtlmDomainInput"[\s\S]*id="authNtlmWorkstationInput"/);
+  assert.match(indexSource, /data-auth-section="akamaiEdgeGrid"[\s\S]*id="authAkamaiAccessTokenInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authAkamaiNonceInput"[\s\S]*id="authAkamaiMaxBodySizeInput"/);
+  assert.match(indexSource, /data-auth-section="asap"[\s\S]*id="authAsapAlgorithmSelect"[\s\S]*id="authAsapPrivateKeyInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authAsapSubjectInput"[\s\S]*id="authAsapAdditionalClaimsInput"[\s\S]*id="authAsapExpiresInInput"/);
+  assert.doesNotMatch(indexSource, /id="authAsapHeaderPrefixInput"|id="performanceAuthAsapHeaderPrefixInput"/);
+  assert.match(indexSource, /data-auth-section="jwtBearer"[\s\S]*id="authJwtAlgorithmSelect"[\s\S]*id="authJwtPayloadInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authJwtHeadersInput"/);
+  assert.doesNotMatch(indexSource, /id="authJwtQueryParamNameInput"|id="performanceAuthJwtQueryParamNameInput"|Query param name/);
   assert.deepEqual(selectOptionValues(indexSource, 'authOauth1SignatureMethodSelect'), [
     'HMAC-SHA1',
     'HMAC-SHA256',
@@ -536,6 +635,32 @@ test('renderer accessibility source keeps splitters body editor and pane save re
       'performanceAuthHawkDelegationInput',
       'performanceAuthHawkTimestampInput',
       'performanceAuthHawkIncludePayloadHashInput'
+    ]
+  });
+  assertAwsAdvancedMarkup(indexSource, {
+    accessKey: 'authAwsAccessKeyInput',
+    main: [
+      'authAwsAccessKeyInput',
+      'authAwsSecretKeyInput',
+      'authAwsAddAuthDataToSelect'
+    ],
+    advanced: [
+      'authAwsRegionInput',
+      'authAwsServiceInput',
+      'authAwsSessionTokenInput'
+    ]
+  });
+  assertAwsAdvancedMarkup(indexSource, {
+    accessKey: 'performanceAuthAwsAccessKeyInput',
+    main: [
+      'performanceAuthAwsAccessKeyInput',
+      'performanceAuthAwsSecretKeyInput',
+      'performanceAuthAwsAddAuthDataToSelect'
+    ],
+    advanced: [
+      'performanceAuthAwsRegionInput',
+      'performanceAuthAwsServiceInput',
+      'performanceAuthAwsSessionTokenInput'
     ]
   });
   assert.doesNotMatch(indexSource, /Yes, disable retrying the request/);

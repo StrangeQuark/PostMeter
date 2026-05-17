@@ -596,7 +596,9 @@ test('imports and exports advanced Postman auth helper shapes', () => {
               { key: 'accessKey', value: '{{awsAccessKey}}' },
               { key: 'secretKey', value: '{{awsSecretKey}}' },
               { key: 'region', value: 'us-east-1' },
-              { key: 'service', value: 'execute-api' }
+              { key: 'service', value: 'execute-api' },
+              { key: 'sessionToken', value: '{{awsSessionToken}}' },
+              { key: 'addAuthDataTo', value: 'Request URL' }
             ]
           }
         }
@@ -611,7 +613,9 @@ test('imports and exports advanced Postman auth helper shapes', () => {
             ntlm: [
               { key: 'username', value: 'user' },
               { key: 'password', value: 'pass' },
-              { key: 'domain', value: 'EXAMPLE' }
+              { key: 'disableRetryingRequest', value: true, type: 'boolean' },
+              { key: 'domain', value: 'EXAMPLE' },
+              { key: 'workstation', value: 'WORKSTATION' }
             ]
           }
         }
@@ -627,7 +631,11 @@ test('imports and exports advanced Postman auth helper shapes', () => {
               { key: 'accessToken', value: 'access' },
               { key: 'clientToken', value: 'client' },
               { key: 'clientSecret', value: 'secret' },
-              { key: 'headersToSign', value: 'host;x-test' }
+              { key: 'nonce', value: 'nonce-1' },
+              { key: 'timestamp', value: '20260427T120000+0000' },
+              { key: 'baseUrl', value: 'https://api.example.test' },
+              { key: 'headersToSign', value: 'host;x-test' },
+              { key: 'maxBodySize', value: '2048' }
             ]
           }
         }
@@ -642,9 +650,18 @@ test('imports and exports advanced Postman auth helper shapes', () => {
             'jwt-bearer': [
               { key: 'algorithm', value: 'HS256' },
               { key: 'secret', value: 'jwt-secret' },
+              { key: 'secretBase64Encoded', value: true, type: 'boolean' },
+              { key: 'privateKey', value: 'jwt-private-key' },
+              { key: 'keyId', value: 'jwt-kid' },
               { key: 'issuer', value: 'issuer' },
+              { key: 'subject', value: 'subject' },
               { key: 'audience', value: 'audience' },
-              { key: 'claims', value: '{"scope":"read"}' }
+              { key: 'expiresIn', value: '120' },
+              { key: 'claims', value: '{"scope":"read"}' },
+              { key: 'jwtHeaders', value: '{"typ":"JWT","kid":"custom"}' },
+              { key: 'headerPrefix', value: 'JWT' },
+              { key: 'addTokenTo', value: 'Query Param' },
+              { key: 'queryParamName', value: 'legacy-token' }
             ]
           }
         }
@@ -661,7 +678,10 @@ test('imports and exports advanced Postman auth helper shapes', () => {
               { key: 'secret', value: 'asap-secret' },
               { key: 'issuer', value: 'issuer' },
               { key: 'audience', value: 'audience' },
-              { key: 'keyId', value: 'kid-1' }
+              { key: 'keyId', value: 'kid-1' },
+              { key: 'expiry', value: '120' },
+              { key: 'headerPrefix', value: 'Legacy' },
+              { key: 'additionalClaims', value: '{"tenant":"postmeter"}' }
             ]
           }
         }
@@ -685,14 +705,30 @@ test('imports and exports advanced Postman auth helper shapes', () => {
   assert.equal(collection.requests[1].auth.addEmptyParamsToSign, true);
   assert.equal(collection.requests[2].auth.type, 'aws');
   assert.equal(collection.requests[2].auth.service, 'execute-api');
+  assert.equal(collection.requests[2].auth.sessionToken, '{{awsSessionToken}}');
+  assert.equal(collection.requests[2].auth.addAuthDataToQuery, true);
   assert.equal(collection.requests[3].auth.type, 'ntlm');
+  assert.equal(collection.requests[3].auth.disableRetryingRequest, true);
   assert.equal(collection.requests[3].auth.domain, 'EXAMPLE');
+  assert.equal(collection.requests[3].auth.workstation, 'WORKSTATION');
   assert.equal(collection.requests[4].auth.type, 'akamaiEdgeGrid');
+  assert.equal(collection.requests[4].auth.nonce, 'nonce-1');
+  assert.equal(collection.requests[4].auth.timestamp, '20260427T120000+0000');
+  assert.equal(collection.requests[4].auth.baseUrl, 'https://api.example.test');
   assert.equal(collection.requests[4].auth.headersToSign, 'host;x-test');
+  assert.equal(collection.requests[4].auth.maxBodySize, '2048');
   assert.equal(collection.requests[5].auth.type, 'jwtBearer');
+  assert.equal(collection.requests[5].auth.secretBase64Encoded, true);
+  assert.equal(collection.requests[5].auth.keyId, 'jwt-kid');
   assert.equal(collection.requests[5].auth.issuer, 'issuer');
+  assert.equal(collection.requests[5].auth.subject, 'subject');
+  assert.equal(collection.requests[5].auth.expiresIn, '120');
+  assert.equal(collection.requests[5].auth.jwtHeaders, '{"typ":"JWT","kid":"custom"}');
+  assert.equal(collection.requests[5].auth.addTokenTo, 'query');
   assert.equal(collection.requests[6].auth.type, 'asap');
   assert.equal(collection.requests[6].auth.keyId, 'kid-1');
+  assert.equal(collection.requests[6].auth.expiresIn, '120');
+  assert.equal(collection.requests[6].auth.additionalClaims, '{"tenant":"postmeter"}');
 
   const exported = exportPostmanCollection(collection);
   assert.equal(exported.item[0].request.auth.type, 'digest');
@@ -733,10 +769,145 @@ test('imports and exports advanced Postman auth helper shapes', () => {
     }
   );
   assert.equal(exported.item[2].request.auth.type, 'awsv4');
+  assert.equal(
+    Object.fromEntries(exported.item[2].request.auth.awsv4.map((item) => [item.key, item.value])).addAuthDataTo,
+    'Request URL'
+  );
   assert.equal(exported.item[3].request.auth.type, 'ntlm');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[3].request.auth.ntlm.map((item) => [item.key, item.value])),
+    {
+      username: 'user',
+      password: 'pass',
+      disableRetryingRequest: true,
+      domain: 'EXAMPLE',
+      workstation: 'WORKSTATION'
+    }
+  );
   assert.equal(exported.item[4].request.auth.type, 'akamaiEdgeGrid');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[4].request.auth.akamaiEdgeGrid.map((item) => [item.key, item.value])),
+    {
+      accessToken: 'access',
+      clientToken: 'client',
+      clientSecret: 'secret',
+      nonce: 'nonce-1',
+      timestamp: '20260427T120000+0000',
+      baseUrl: 'https://api.example.test',
+      headersToSign: 'host;x-test',
+      maxBodySize: '2048'
+    }
+  );
   assert.equal(exported.item[5].request.auth.type, 'jwt-bearer');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[5].request.auth['jwt-bearer'].map((item) => [item.key, item.value])),
+    {
+      algorithm: 'HS256',
+      secret: 'jwt-secret',
+      secretBase64Encoded: true,
+      privateKey: 'jwt-private-key',
+      keyId: 'jwt-kid',
+      issuer: 'issuer',
+      subject: 'subject',
+      audience: 'audience',
+      expiresIn: '120',
+      claims: '{"scope":"read"}',
+      jwtHeaders: '{"typ":"JWT","kid":"custom"}',
+      headerPrefix: 'JWT',
+      addTokenTo: 'Query Param'
+    }
+  );
+  assert.equal(exported.item[5].request.auth['jwt-bearer'].some((item) => item.key === 'queryParamName'), false);
   assert.equal(exported.item[6].request.auth.type, 'asap');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[6].request.auth.asap.map((item) => [item.key, item.value])),
+    {
+      algorithm: 'HS256',
+      secret: 'asap-secret',
+      issuer: 'issuer',
+      audience: 'audience',
+      keyId: 'kid-1',
+      expiry: '120',
+      additionalClaims: '{"tenant":"postmeter"}'
+    }
+  );
+  assert.equal(exported.item[6].request.auth.asap.some((item) => item.key === 'headerPrefix'), false);
+});
+
+test('exports current auth model fields after editing imported Postman auth', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Edited Auth Export',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'JWT',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/jwt',
+        auth: {
+          type: 'jwt-bearer',
+          'jwt-bearer': [
+            { key: 'algorithm', value: 'HS256' },
+            { key: 'secret', value: 'old-secret' },
+            { key: 'queryParamName', value: 'legacy-token' }
+          ]
+        }
+      }
+    }, {
+      name: 'AWS',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/aws',
+        auth: {
+          type: 'awsv4',
+          awsv4: [
+            { key: 'accessKey', value: 'old-access' },
+            { key: 'secretKey', value: 'old-secret' }
+          ]
+        }
+      }
+    }]
+  });
+
+  collection.requests[0].auth = {
+    type: 'jwtBearer',
+    algorithm: 'HS512',
+    secret: 'new-secret',
+    secretBase64Encoded: true,
+    claims: '{"edited":true}',
+    jwtHeaders: '{"kid":"edited"}',
+    headerPrefix: 'JWT',
+    addTokenTo: 'query'
+  };
+  collection.requests[1].auth = {
+    type: 'aws',
+    accessKey: 'new-access',
+    secretKey: 'new-secret',
+    region: 'us-west-2',
+    service: 'execute-api',
+    sessionToken: 'session',
+    addAuthDataToQuery: true
+  };
+
+  const exported = exportPostmanCollection(collection);
+  const jwt = Object.fromEntries(exported.item[0].request.auth['jwt-bearer'].map((item) => [item.key, item.value]));
+  assert.equal(jwt.algorithm, 'HS512');
+  assert.equal(jwt.secret, 'new-secret');
+  assert.equal(jwt.secretBase64Encoded, 'true');
+  assert.equal(jwt.claims, '{"edited":true}');
+  assert.equal(jwt.jwtHeaders, '{"kid":"edited"}');
+  assert.equal(jwt.addTokenTo, 'Query Param');
+  assert.equal(Object.hasOwn(jwt, 'queryParamName'), false);
+
+  const aws = Object.fromEntries(exported.item[1].request.auth.awsv4.map((item) => [item.key, item.value]));
+  assert.equal(aws.accessKey, 'new-access');
+  assert.equal(aws.secretKey, 'new-secret');
+  assert.equal(aws.region, 'us-west-2');
+  assert.equal(aws.service, 'execute-api');
+  assert.equal(aws.sessionToken, 'session');
+  assert.equal(aws.addAuthDataTo, 'Request URL');
+  assert.equal(Object.hasOwn(aws, 'addAuthDataToQuery'), false);
 });
 
 test('imports Postman collection certificates without request examples', () => {

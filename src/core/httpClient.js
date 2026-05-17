@@ -226,6 +226,10 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
   }
   const headers = headersToObject(response.headers);
   if (auth.type === 'ntlm') {
+    if (auth.disableRetryingRequest === true) {
+      ntlmAgent?.destroy?.();
+      return response;
+    }
     const challenge = headers['www-authenticate'];
     if (!challenge || !String(Array.isArray(challenge) ? challenge.join(', ') : challenge).match(/\bNTLM\s+\S+/i)) {
       ntlmAgent?.destroy?.();

@@ -1391,16 +1391,17 @@ function applyAkamaiEdgeGridSignature(auth, environment, target) {
   const accessToken = resolveEnvironmentValue(auth.accessToken, environment);
   const clientToken = resolveEnvironmentValue(auth.clientToken, environment);
   const clientSecret = resolveEnvironmentValue(auth.clientSecret, environment);
-  const timestamp = edgeGridTimestamp(target.now || Date.now());
+  const timestamp = resolveEnvironmentValue(auth.timestamp, environment).trim() || edgeGridTimestamp(target.now || Date.now());
   const nonce = resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(16).toString('hex');
+  const signingUrl = edgeGridSigningUrl(target.url, auth.baseUrl, environment);
   const authPrefix = `EG1-HMAC-SHA256 client_token=${clientToken};access_token=${accessToken};timestamp=${timestamp};nonce=${nonce};`;
   const dataToSign = [
     String(target.method || 'GET').toUpperCase(),
-    target.url.protocol.replace(/:$/, ''),
-    target.url.hostname.toLowerCase(),
+    signingUrl.protocol.replace(/:$/, ''),
+    signingUrl.hostname.toLowerCase(),
     `${target.url.pathname}${target.url.search}`,
     edgeGridCanonicalHeaders(target.headers, auth.headersToSign, environment),
-    sha256Base64(target.body || ''),
+    sha256Base64(edgeGridBodyForHash(target.body || '', auth.maxBodySize, environment)),
     authPrefix
   ].join('\t');
   const signingKey = crypto.createHmac('sha256', clientSecret).update(timestamp, 'utf8').digest('base64');
@@ -1410,9 +1411,9 @@ function applyAkamaiEdgeGridSignature(auth, environment, target) {
 
 function applyJwtBearerAuth(auth, environment, target) {
   const token = buildJwtToken(auth, environment, target.now || Date.now());
-  const location = String(resolveEnvironmentValue(auth.addTokenTo, environment) || 'header').toLowerCase();
+  const location = normalizeJwtTokenPlacement(resolveEnvironmentValue(auth.addTokenTo, environment) || 'header');
   if (location === 'query') {
-    target.url.searchParams.set(resolveEnvironmentValue(auth.queryParamName, environment).trim() || 'token', token);
+    target.url.searchParams.set('token', token);
     return;
   }
   const prefix = resolveEnvironmentValue(auth.headerPrefix, environment).trim() || 'Bearer';
@@ -1420,17 +1421,24 @@ function applyJwtBearerAuth(auth, environment, target) {
 }
 
 function applyAsapAuth(auth, environment, target) {
+  const issuer = resolveEnvironmentValue(auth.issuer, environment);
+  const subject = resolveEnvironmentValue(auth.subject, environment) || issuer;
+  const audience = resolveEnvironmentValue(auth.audience, environment);
+  const configuredClaims = {
+    iss: issuer,
+    sub: subject,
+    aud: audience,
+    ...parseJwtClaims(resolveEnvironmentValue(auth.additionalClaims || auth.claims || '{}', environment))
+  };
   const token = buildJwtToken({
     ...auth,
-    claims: JSON.stringify({
-      iss: resolveEnvironmentValue(auth.issuer, environment),
-      sub: resolveEnvironmentValue(auth.subject, environment) || resolveEnvironmentValue(auth.issuer, environment),
-      aud: resolveEnvironmentValue(auth.audience, environment)
-    }),
-    headerPrefix: auth.headerPrefix || 'Bearer'
+    issuer: '',
+    subject: '',
+    audience: '',
+    expiresIn: auth.expiresIn || auth.expiry || '3600',
+    claims: JSON.stringify(configuredClaims)
   }, environment, target.now || Date.now());
-  const prefix = resolveEnvironmentValue(auth.headerPrefix, environment).trim() || 'Bearer';
-  setHeader(target.headers, 'Authorization', `${prefix} ${token}`);
+  setHeader(target.headers, 'Authorization', `Bearer ${token}`);
 }
 
 function buildJwtToken(auth, environment, now = Date.now()) {
@@ -1451,7 +1459,8 @@ function buildJwtToken(auth, environment, now = Date.now()) {
   if (issuer) { payload.iss = issuer; }
   if (subject) { payload.sub = subject; }
   if (audience) { payload.aud = audience; }
-  const header = { alg: algorithm, typ: 'JWT' };
+  const customHeaders = parseJwtHeaders(resolveEnvironmentValue(auth.jwtHeaders, environment));
+  const header = { typ: 'JWT', ...customHeaders, alg: algorithm };
   const keyId = resolveEnvironmentValue(auth.keyId, environment);
   if (keyId) { header.kid = keyId; }
   const signingInput = `${base64UrlJson(header)}.${base64UrlJson(payload)}`;
@@ -1463,11 +1472,22 @@ function jwtSignature(algorithm, signingInput, auth, environment) {
     return '';
   }
   if (algorithm.startsWith('HS')) {
-    const secret = requireResolvedValue(auth.secret || auth.clientSecret, environment, 'JWT secret');
+    const secret = jwtHmacSecret(auth, environment);
     return crypto.createHmac(jwtHashForAlgorithm(algorithm), secret).update(signingInput, 'utf8').digest('base64url');
   }
   const privateKey = requireResolvedValue(auth.privateKey, environment, 'JWT private key');
-  return crypto.sign(jwtHashForAlgorithm(algorithm), Buffer.from(signingInput, 'utf8'), privateKey).toString('base64url');
+  const input = Buffer.from(signingInput, 'utf8');
+  if (algorithm.startsWith('PS')) {
+    return crypto.sign(jwtHashForAlgorithm(algorithm), input, {
+      key: privateKey,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
+    }).toString('base64url');
+  }
+  if (algorithm.startsWith('ES')) {
+    return ecdsaDerToJose(crypto.sign(jwtHashForAlgorithm(algorithm), input, privateKey), ecdsaPartLength(algorithm)).toString('base64url');
+  }
+  return crypto.sign(jwtHashForAlgorithm(algorithm), input, privateKey).toString('base64url');
 }
 
 function normalizeJwtAlgorithm(value) {
@@ -1475,10 +1495,40 @@ function normalizeJwtAlgorithm(value) {
   if (algorithm === 'NONE') {
     return 'none';
   }
-  if (['HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512'].includes(algorithm)) {
+  if ([
+    'HS256',
+    'HS384',
+    'HS512',
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ].includes(algorithm)) {
     return algorithm;
   }
   return '';
+}
+
+function normalizeJwtTokenPlacement(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+  if (normalized === 'query' || normalized === 'queryparam' || normalized === 'requesturl' || normalized === 'url') {
+    return 'query';
+  }
+  return 'header';
+}
+
+function jwtHmacSecret(auth, environment) {
+  const raw = requireResolvedValue(auth.secret || auth.clientSecret, environment, 'JWT secret');
+  if (auth.secretBase64Encoded !== true) {
+    return raw;
+  }
+  const normalized = raw.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(normalized, 'base64');
 }
 
 function jwtHashForAlgorithm(algorithm) {
@@ -1502,6 +1552,80 @@ function parseJwtClaims(value) {
   } catch {
     return {};
   }
+}
+
+function parseJwtHeaders(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function ecdsaPartLength(algorithm) {
+  if (algorithm.endsWith('384')) {
+    return 48;
+  }
+  if (algorithm.endsWith('512')) {
+    return 66;
+  }
+  return 32;
+}
+
+function ecdsaDerToJose(signature, partLength) {
+  const der = Buffer.from(signature);
+  let offset = 0;
+  if (der[offset++] !== 0x30) {
+    return der;
+  }
+  const sequenceLength = readDerLength(der, offset);
+  offset = sequenceLength.offset;
+  if (der[offset++] !== 0x02) {
+    return der;
+  }
+  const rLength = readDerLength(der, offset);
+  offset = rLength.offset;
+  const r = der.slice(offset, offset + rLength.length);
+  offset += rLength.length;
+  if (der[offset++] !== 0x02) {
+    return der;
+  }
+  const sLength = readDerLength(der, offset);
+  offset = sLength.offset;
+  const s = der.slice(offset, offset + sLength.length);
+  return Buffer.concat([leftPadEcdsaPart(r, partLength), leftPadEcdsaPart(s, partLength)]);
+}
+
+function readDerLength(buffer, offset) {
+  const first = buffer[offset];
+  if ((first & 0x80) === 0) {
+    return { length: first, offset: offset + 1 };
+  }
+  const bytes = first & 0x7f;
+  let length = 0;
+  for (let index = 0; index < bytes; index += 1) {
+    length = (length << 8) | buffer[offset + 1 + index];
+  }
+  return { length, offset: offset + 1 + bytes };
+}
+
+function leftPadEcdsaPart(value, partLength) {
+  let part = Buffer.from(value);
+  while (part.length > partLength && part[0] === 0) {
+    part = part.slice(1);
+  }
+  if (part.length > partLength) {
+    return part.slice(part.length - partLength);
+  }
+  if (part.length === partLength) {
+    return part;
+  }
+  return Buffer.concat([Buffer.alloc(partLength - part.length), part]);
 }
 
 function base64UrlJson(value) {
@@ -1731,6 +1855,18 @@ function edgeGridTimestamp(now) {
   return new Date(Number(now)).toISOString().replace(/\.\d{3}Z$/, '+0000');
 }
 
+function edgeGridSigningUrl(requestUrl, baseUrl, environment) {
+  const rawBaseUrl = resolveEnvironmentValue(baseUrl, environment).trim();
+  if (!rawBaseUrl) {
+    return requestUrl;
+  }
+  try {
+    return new URL(rawBaseUrl);
+  } catch {
+    return requestUrl;
+  }
+}
+
 function edgeGridCanonicalHeaders(headers, headersToSign, environment) {
   const names = String(resolveEnvironmentValue(headersToSign || '', environment) || '')
     .split(/[,\s]+/)
@@ -1743,6 +1879,19 @@ function edgeGridCanonicalHeaders(headers, headersToSign, environment) {
     })
     .filter(Boolean)
     .join('\t');
+}
+
+function edgeGridBodyForHash(body, maxBodySize, environment) {
+  const rawMaxBodySize = resolveEnvironmentValue(maxBodySize, environment).trim();
+  const parsed = Number(rawMaxBodySize);
+  if (!rawMaxBodySize || !Number.isFinite(parsed) || parsed < 0) {
+    return body;
+  }
+  const size = Math.floor(parsed);
+  if (Buffer.isBuffer(body)) {
+    return body.slice(0, size);
+  }
+  return Buffer.from(String(body || ''), 'utf8').slice(0, size);
 }
 
 function sha256Base64(value) {

@@ -36,6 +36,31 @@ const OAUTH1_SIGNATURE_METHOD_OPTIONS = [
   'RSA-SHA512',
   'PLAINTEXT'
 ];
+const JWT_BEARER_ALGORITHM_OPTIONS = [
+  'HS256',
+  'HS384',
+  'HS512',
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512'
+];
+const ASAP_ALGORITHM_OPTIONS = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512'
+];
 
 test('normalizes unsupported auth types to none', () => {
   assert.deepEqual(normalizeAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });
@@ -179,7 +204,7 @@ test('applies advanced Postman auth helpers through the brokered HTTP sender', a
       authorization: request.headers.authorization || '',
       amzDate: request.headers['x-amz-date'] || '',
       amzToken: request.headers['x-amz-security-token'] || '',
-      tokenQuery: new URL(request.url, 'http://127.0.0.1').searchParams.get('jwt') || ''
+      tokenQuery: new URL(request.url, 'http://127.0.0.1').searchParams.get('token') || ''
     }));
   });
 
@@ -250,8 +275,7 @@ test('applies advanced Postman auth helpers through the brokered HTTP sender', a
       type: 'jwtBearer',
       algorithm: 'HS256',
       secret: 'jwt-secret',
-      addTokenTo: 'query',
-      queryParamName: 'jwt'
+      addTokenTo: 'query'
     }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
     assert.match(jwtQuery.tokenQuery, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
 
@@ -277,6 +301,333 @@ test('applies advanced Postman auth helpers through the brokered HTTP sender', a
       workstation: 'WORKSTATION'
     });
     assert.match(ntlm.authorization, /^NTLM TlRMTVNTUAAD/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes NTLM auth against a localhost challenge server', async () => {
+  let challengeCount = 0;
+  const server = await createServer(async (request, response) => {
+    const authorization = request.headers.authorization || '';
+    if (request.url === '/ntlm-no-retry') {
+      response.writeHead(401, {
+        'WWW-Authenticate': `NTLM ${ntlmType2Challenge()}`,
+        'Content-Type': 'application/json',
+        Connection: 'keep-alive'
+      });
+      response.end(JSON.stringify({
+        initial: parseNtlmType1Authorization(authorization)
+      }));
+      return;
+    }
+    if (request.url === '/ntlm' && !/^NTLM\s+TlRMTVNTUAAD/.test(authorization)) {
+      challengeCount += 1;
+      const initial = parseNtlmType1Authorization(authorization);
+      assert.equal(initial.type, 1);
+      assert.equal(initial.domain, 'POSTMETER');
+      assert.equal(initial.workstation, 'WORKSTATION');
+      response.writeHead(401, {
+        'WWW-Authenticate': `NTLM ${ntlmType2Challenge()}`,
+        'Content-Type': 'application/json',
+        Connection: 'keep-alive'
+      });
+      response.end(JSON.stringify({ challenge: true }));
+      return;
+    }
+    const type3 = parseNtlmType3Authorization(authorization);
+    const verified = verifyNtlmType3(type3, {
+      username: 'ada',
+      password: 'secret',
+      domain: 'POSTMETER',
+      workstation: 'WORKSTATION',
+      targetName: 'POSTMETER',
+      serverChallenge: Buffer.from('0123456789abcdef', 'hex')
+    });
+    response.statusCode = verified ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ type3, verified }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/ntlm`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'ntlm',
+        username: 'ada',
+        password: 'secret',
+        domain: 'postmeter',
+        workstation: 'workstation'
+      }
+    }, null, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    const body = JSON.parse(result.body);
+    assert.equal(result.statusCode, 200);
+    assert.equal(challengeCount, 1);
+    assert.equal(body.verified, true);
+    assert.equal(body.type3.user, 'ada');
+    assert.equal(body.type3.domain, 'POSTMETER');
+    assert.equal(body.type3.workstation, 'WORKSTATION');
+
+    const disabled = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/ntlm-no-retry`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'ntlm',
+        username: 'ada',
+        password: 'secret',
+        domain: 'postmeter',
+        workstation: 'workstation',
+        disableRetryingRequest: true
+      }
+    });
+    assert.equal(disabled.statusCode, 401);
+    const disabledBody = JSON.parse(disabled.body);
+    assert.equal(disabledBody.initial.type, 1);
+    assert.equal(disabledBody.initial.domain, 'POSTMETER');
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes Akamai EdgeGrid auth against a localhost verifier', async () => {
+  const credentials = {
+    accessToken: 'akamai-access',
+    clientToken: 'akamai-client',
+    clientSecret: 'akamai-secret',
+    nonce: 'akamai-nonce',
+    timestamp: '20260427T12:00:00+0000',
+    baseUrl: 'https://edge.example.test',
+    headersToSign: 'x-custom x-second',
+    maxBodySize: '7'
+  };
+  const server = await createServer(async (request, response) => {
+    const bodyText = await readRequestBody(request);
+    const verification = verifyAkamaiEdgeGridRequest({
+      ...credentials,
+      body: bodyText,
+      headers: request.headers,
+      method: request.method,
+      url: `http://${request.headers.host}${request.url}`
+    });
+    response.statusCode = verification.verified ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify(verification));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/akamai/resource?existing=1`,
+      queryParams: [],
+      headers: [
+        { enabled: true, key: 'X-Custom', value: 'alpha  beta' },
+        { enabled: true, key: 'X-Second', value: 'signed' },
+        { enabled: true, key: 'Content-Type', value: 'text/plain' }
+      ],
+      bodyType: 'RAW_TEXT',
+      body: '0123456789-body',
+      auth: {
+        type: 'akamaiEdgeGrid',
+        ...credentials
+      }
+    });
+    const body = JSON.parse(result.body);
+    assert.equal(result.statusCode, 200);
+    assert.equal(body.verified, true);
+    assert.equal(body.fields.client_token, 'akamai-client');
+    assert.equal(body.fields.access_token, 'akamai-access');
+    assert.equal(body.fields.nonce, 'akamai-nonce');
+    assert.equal(body.fields.timestamp, '20260427T12:00:00+0000');
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes JWT Bearer auth against a localhost verifier for every exposed algorithm', async () => {
+  const server = await createServer(async (request, response) => {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || '',
+      tokenQuery: url.searchParams.get('token') || ''
+    }));
+  });
+
+  try {
+    for (const algorithm of JWT_BEARER_ALGORITHM_OPTIONS) {
+      const material = jwtTestKeyMaterial(algorithm);
+      const auth = {
+        type: 'jwtBearer',
+        algorithm,
+        expiresIn: '120',
+        claims: JSON.stringify({ custom: algorithm, aud: 'jwt-audience' }),
+        jwtHeaders: JSON.stringify({ kid: `jwt-${algorithm}`, x_postmeter: 'ok' })
+      };
+      if (algorithm.startsWith('HS')) {
+        auth.secret = Buffer.from(material.secret).toString('base64');
+        auth.secretBase64Encoded = true;
+      } else {
+        auth.privateKey = material.privateKey;
+      }
+      const result = await authRequest(`${server.baseUrl}/jwt/${algorithm}`, auth, {
+        now: Date.parse('2026-04-27T12:00:00.000Z')
+      });
+      assert.match(result.authorization, /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+      const verified = verifyJwtToken(result.authorization.replace(/^Bearer\s+/, ''), {
+        algorithm,
+        publicKey: material.publicKey,
+        secret: material.secret
+      });
+      assert.equal(verified.header.alg, algorithm);
+      assert.equal(verified.header.kid, `jwt-${algorithm}`);
+      assert.equal(verified.header.x_postmeter, 'ok');
+      assert.equal(verified.payload.custom, algorithm);
+      assert.equal(verified.payload.aud, 'jwt-audience');
+      assert.equal(verified.payload.iat, 1777291200);
+      assert.equal(verified.payload.exp, 1777291320);
+    }
+
+    const queryResult = await authRequest(`${server.baseUrl}/jwt-query`, {
+      type: 'jwtBearer',
+      algorithm: 'HS256',
+      secret: 'jwt-query-secret',
+      addTokenTo: 'Request URL',
+      claims: '{"query":true}'
+    }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    assert.equal(queryResult.authorization, '');
+    const queryVerified = verifyJwtToken(queryResult.tokenQuery, {
+      algorithm: 'HS256',
+      secret: 'jwt-query-secret'
+    });
+    assert.equal(queryVerified.payload.query, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes ASAP auth against a localhost verifier for every exposed algorithm', async () => {
+  const server = await createServer(async (request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || ''
+    }));
+  });
+
+  try {
+    for (const algorithm of ASAP_ALGORITHM_OPTIONS) {
+      const material = jwtTestKeyMaterial(algorithm);
+      const result = await authRequest(`${server.baseUrl}/asap/${algorithm}`, {
+        type: 'asap',
+        algorithm,
+        privateKey: material.privateKey,
+        issuer: 'postmeter-issuer',
+        subject: 'postmeter-subject',
+        audience: 'postmeter-audience',
+        keyId: `asap-${algorithm}`,
+        expiresIn: '90',
+        additionalClaims: '{"scope":["read","write"],"tenant":"postmeter","aud":"claim-audience","iss":"claim-issuer","sub":"claim-subject"}'
+      }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+      assert.match(result.authorization, /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+      const verified = verifyJwtToken(result.authorization.replace(/^Bearer\s+/, ''), {
+        algorithm,
+        publicKey: material.publicKey
+      });
+      assert.equal(verified.header.alg, algorithm);
+      assert.equal(verified.header.kid, `asap-${algorithm}`);
+      assert.equal(verified.payload.iss, 'claim-issuer');
+      assert.equal(verified.payload.sub, 'claim-subject');
+      assert.equal(verified.payload.aud, 'claim-audience');
+      assert.deepEqual(verified.payload.scope, ['read', 'write']);
+      assert.equal(verified.payload.tenant, 'postmeter');
+      assert.equal(verified.payload.exp, 1777291290);
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test('executes AWS Signature auth against a localhost server with header and query placement', async () => {
+  const awsCredentials = {
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token'
+  };
+  const server = await createServer(async (request, response) => {
+    const bodyText = await readRequestBody(request);
+    const verification = verifyAwsRequest({
+      ...awsCredentials,
+      body: bodyText,
+      headers: request.headers,
+      method: request.method,
+      placement: request.url.startsWith('/aws-query') ? 'query' : 'header',
+      url: `http://${request.headers.host}${request.url}`
+    });
+    response.statusCode = verification.verified ? 200 : 403;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      body: bodyText,
+      fields: verification.fields,
+      reason: verification.reason,
+      verified: verification.verified
+    }));
+  });
+
+  try {
+    const headerResult = await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/aws-header?existing=1`,
+      queryParams: [],
+      headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }],
+      bodyType: 'RAW_JSON',
+      body: '{"server":"aws"}',
+      auth: {
+        type: 'aws',
+        ...awsCredentials
+      }
+    }, null, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    const headerBody = JSON.parse(headerResult.body);
+    assert.equal(headerResult.statusCode, 200);
+    assert.equal(headerBody.verified, true);
+    assert.equal(headerBody.fields.credentialScope, '20260427/us-east-1/execute-api/aws4_request');
+    assert.equal(headerBody.fields.amzDate, '20260427T120000Z');
+    assert.equal(headerBody.fields.sessionToken, 'session-token');
+    assert.match(headerBody.fields.signedHeaders, /host/);
+    assert.match(headerBody.fields.signedHeaders, /x-amz-date/);
+    assert.match(headerBody.fields.authorization, /^AWS4-HMAC-SHA256 /);
+
+    const queryResult = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/aws-query?existing=1`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'aws',
+        ...awsCredentials,
+        addAuthDataToQuery: true
+      }
+    }, null, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    const queryBody = JSON.parse(queryResult.body);
+    assert.equal(queryResult.statusCode, 200);
+    assert.equal(queryBody.verified, true);
+    assert.equal(queryBody.fields.authorization, '');
+    assert.equal(queryBody.fields.credentialScope, '20260427/us-east-1/execute-api/aws4_request');
+    assert.equal(queryBody.fields.amzDate, '20260427T120000Z');
+    assert.equal(queryBody.fields.sessionToken, 'session-token');
+    assert.equal(queryBody.fields.expires, '900');
+    assert.match(queryBody.fields.signature, /^[a-f0-9]{64}$/);
   } finally {
     await server.close();
   }
@@ -2223,6 +2574,153 @@ function digestHash(algorithm, value) {
   return crypto.createHash(algorithm).update(value, 'utf8').digest('hex');
 }
 
+function verifyAwsRequest(options) {
+  const url = new URL(options.url);
+  const fields = options.placement === 'query'
+    ? awsQuerySignatureFields(url)
+    : awsHeaderSignatureFields(options.headers.authorization || '');
+  if (options.placement === 'header') {
+    fields.amzDate = awsTestHeaderValue(options.headers, 'x-amz-date');
+    fields.sessionToken = awsTestHeaderValue(options.headers, 'x-amz-security-token');
+  }
+  if (fields.algorithm !== 'AWS4-HMAC-SHA256') {
+    return { fields, reason: 'algorithm mismatch', verified: false };
+  }
+  if (fields.accessKey !== options.accessKey || fields.region !== options.region || fields.service !== options.service) {
+    return { fields, reason: 'credential mismatch', verified: false };
+  }
+  if (fields.terminal !== 'aws4_request') {
+    return { fields, reason: 'credential scope mismatch', verified: false };
+  }
+  if (options.sessionToken && fields.sessionToken !== options.sessionToken) {
+    return { fields, reason: 'session token mismatch', verified: false };
+  }
+  if (options.placement === 'query' && options.headers.authorization) {
+    return { fields, reason: 'query signing should not send Authorization header', verified: false };
+  }
+  const canonicalRequest = [
+    String(options.method || 'GET').toUpperCase(),
+    awsTestCanonicalUri(url),
+    awsTestCanonicalQuery(url, { excludeSignature: options.placement === 'query' }),
+    awsTestCanonicalHeaders(options.headers, fields.signedHeaders),
+    fields.signedHeaders,
+    awsTestSha256Hex(options.body || '')
+  ].join('\n');
+  const stringToSign = [
+    fields.algorithm,
+    fields.amzDate,
+    fields.credentialScope,
+    awsTestSha256Hex(canonicalRequest)
+  ].join('\n');
+  const expectedSignature = crypto
+    .createHmac('sha256', awsTestSigningKey(options.secretKey, fields.shortDate, options.region, options.service))
+    .update(stringToSign, 'utf8')
+    .digest('hex');
+  return {
+    fields,
+    reason: fields.signature === expectedSignature ? '' : 'signature mismatch',
+    verified: fields.signature === expectedSignature
+  };
+}
+
+function awsHeaderSignatureFields(header) {
+  const value = String(header || '');
+  const fields = { authorization: value };
+  const algorithmMatch = value.match(/^([A-Za-z0-9-]+)\s+/);
+  fields.algorithm = algorithmMatch?.[1] || '';
+  const params = {};
+  for (const part of value.replace(/^[A-Za-z0-9-]+\s+/, '').split(',')) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key) {
+      params[key] = rest.join('=');
+    }
+  }
+  fields.signature = params.Signature || '';
+  fields.signedHeaders = params.SignedHeaders || '';
+  applyAwsCredentialFields(fields, params.Credential || '');
+  return fields;
+}
+
+function awsQuerySignatureFields(url) {
+  const credential = url.searchParams.get('X-Amz-Credential') || '';
+  const fields = {
+    algorithm: url.searchParams.get('X-Amz-Algorithm') || '',
+    amzDate: url.searchParams.get('X-Amz-Date') || '',
+    authorization: '',
+    expires: url.searchParams.get('X-Amz-Expires') || '',
+    sessionToken: url.searchParams.get('X-Amz-Security-Token') || '',
+    signature: url.searchParams.get('X-Amz-Signature') || '',
+    signedHeaders: url.searchParams.get('X-Amz-SignedHeaders') || ''
+  };
+  applyAwsCredentialFields(fields, credential);
+  return fields;
+}
+
+function applyAwsCredentialFields(fields, credential) {
+  const parts = String(credential || '').split('/');
+  fields.accessKey = parts[0] || '';
+  fields.shortDate = parts[1] || '';
+  fields.region = parts[2] || '';
+  fields.service = parts[3] || '';
+  fields.terminal = parts[4] || '';
+  fields.credentialScope = parts.slice(1).join('/');
+  fields.amzDate ||= '';
+}
+
+function awsTestCanonicalUri(url) {
+  const path = url.pathname || '/';
+  return path
+    .split('/')
+    .map((part) => awsTestEncodeRfc3986(awsTestDecodeURIComponentSafe(part)))
+    .join('/') || '/';
+}
+
+function awsTestCanonicalQuery(url, options = {}) {
+  return [...url.searchParams.entries()]
+    .filter(([key]) => !(options.excludeSignature && key === 'X-Amz-Signature'))
+    .map(([key, value]) => [awsTestEncodeRfc3986(key), awsTestEncodeRfc3986(value)])
+    .sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+}
+
+function awsTestCanonicalHeaders(headers, signedHeaders) {
+  return String(signedHeaders || '')
+    .split(';')
+    .filter(Boolean)
+    .map((name) => `${name}:${String(awsTestHeaderValue(headers, name) || '').trim().replace(/\s+/g, ' ')}`)
+    .join('\n') + '\n';
+}
+
+function awsTestHeaderValue(headers, name) {
+  const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === String(name).toLowerCase());
+  return key ? headers[key] : '';
+}
+
+function awsTestSigningKey(secretKey, shortDate, region, service) {
+  const dateKey = crypto.createHmac('sha256', `AWS4${secretKey}`).update(shortDate, 'utf8').digest();
+  const dateRegionKey = crypto.createHmac('sha256', dateKey).update(region, 'utf8').digest();
+  const dateRegionServiceKey = crypto.createHmac('sha256', dateRegionKey).update(service, 'utf8').digest();
+  return crypto.createHmac('sha256', dateRegionServiceKey).update('aws4_request', 'utf8').digest();
+}
+
+function awsTestSha256Hex(value) {
+  return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+function awsTestEncodeRfc3986(value) {
+  return encodeURIComponent(String(value == null ? '' : value))
+    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function awsTestDecodeURIComponentSafe(value) {
+  try {
+    return decodeURIComponent(String(value || ''));
+  } catch {
+    return String(value || '');
+  }
+}
+
 function parseHawkAuthorization(header) {
   const value = String(header || '').replace(/^Hawk\s+/i, '');
   const fields = {};
@@ -2427,6 +2925,200 @@ function oauthPercentEncodeTest(value) {
     .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
+function parseNtlmType1Authorization(header) {
+  const message = decodeNtlmAuthorization(header);
+  return {
+    type: message.readUInt32LE(8),
+    domain: readSecurityBufferTest(message, 16).toString('ascii'),
+    workstation: readSecurityBufferTest(message, 24).toString('ascii')
+  };
+}
+
+function parseNtlmType3Authorization(header) {
+  const message = decodeNtlmAuthorization(header);
+  return {
+    type: message.readUInt32LE(8),
+    lmResponse: readSecurityBufferTest(message, 12).toString('hex'),
+    ntResponse: readSecurityBufferTest(message, 20).toString('hex'),
+    domain: readSecurityBufferTest(message, 28).toString('utf16le'),
+    user: readSecurityBufferTest(message, 36).toString('utf16le'),
+    workstation: readSecurityBufferTest(message, 44).toString('utf16le')
+  };
+}
+
+function decodeNtlmAuthorization(header) {
+  assert.match(header || '', /^NTLM\s+/);
+  const message = Buffer.from(String(header).replace(/^NTLM\s+/i, ''), 'base64');
+  assert.equal(message.slice(0, 8).toString('ascii'), 'NTLMSSP\0');
+  return message;
+}
+
+function verifyNtlmType3(type3, expected) {
+  assert.equal(type3.type, 3);
+  assert.equal(type3.user, expected.username);
+  assert.equal(type3.domain, expected.domain);
+  assert.equal(type3.workstation, expected.workstation);
+  const ntResponse = Buffer.from(type3.ntResponse, 'hex');
+  const lmResponse = Buffer.from(type3.lmResponse, 'hex');
+  assert.ok(ntResponse.length > 16);
+  assert.equal(lmResponse.length, 24);
+  const blob = ntResponse.slice(16);
+  const clientNonce = blob.slice(16, 24);
+  const ntlmHash = md4Test(Buffer.from(expected.password, 'utf16le'));
+  const ntlmV2Hash = crypto.createHmac('md5', ntlmHash)
+    .update(Buffer.from(`${expected.username.toUpperCase()}${expected.targetName}`, 'utf16le'))
+    .digest();
+  const expectedProof = crypto.createHmac('md5', ntlmV2Hash)
+    .update(Buffer.concat([expected.serverChallenge, blob]))
+    .digest();
+  const expectedLm = Buffer.concat([
+    crypto.createHmac('md5', ntlmV2Hash).update(Buffer.concat([expected.serverChallenge, clientNonce])).digest(),
+    clientNonce
+  ]);
+  return crypto.timingSafeEqual(expectedProof, ntResponse.slice(0, 16))
+    && crypto.timingSafeEqual(expectedLm, lmResponse);
+}
+
+function verifyAkamaiEdgeGridRequest(options) {
+  const fields = parseEdgeGridAuthorization(options.headers.authorization || '');
+  const url = new URL(options.url);
+  const signingUrl = new URL(options.baseUrl);
+  const authPrefix = `EG1-HMAC-SHA256 client_token=${fields.client_token};access_token=${fields.access_token};timestamp=${fields.timestamp};nonce=${fields.nonce};`;
+  const bodyForHash = Buffer.from(String(options.body || ''), 'utf8').slice(0, Number(options.maxBodySize));
+  const dataToSign = [
+    String(options.method || 'GET').toUpperCase(),
+    signingUrl.protocol.replace(/:$/, ''),
+    signingUrl.hostname.toLowerCase(),
+    `${url.pathname}${url.search}`,
+    akamaiCanonicalHeadersTest(options.headers, options.headersToSign),
+    crypto.createHash('sha256').update(bodyForHash).digest('base64'),
+    authPrefix
+  ].join('\t');
+  const signingKey = crypto.createHmac('sha256', options.clientSecret).update(options.timestamp, 'utf8').digest('base64');
+  const signature = crypto.createHmac('sha256', signingKey).update(dataToSign, 'utf8').digest('base64');
+  return {
+    fields,
+    verified: fields.client_token === options.clientToken
+      && fields.access_token === options.accessToken
+      && fields.timestamp === options.timestamp
+      && fields.nonce === options.nonce
+      && fields.signature === signature
+  };
+}
+
+function parseEdgeGridAuthorization(header) {
+  const fields = {};
+  const text = String(header || '').replace(/^EG1-HMAC-SHA256\s+/i, '');
+  for (const part of text.split(';')) {
+    const [key, ...valueParts] = part.split('=');
+    if (key) {
+      fields[key.trim()] = valueParts.join('=');
+    }
+  }
+  return fields;
+}
+
+function akamaiCanonicalHeadersTest(headers, headersToSign) {
+  return String(headersToSign || '')
+    .split(/[,\s]+/)
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean)
+    .map((name) => {
+      const value = headers[name];
+      return value == null || value === '' ? '' : `${name}:${String(value).trim().replace(/\s+/g, ' ')}`;
+    })
+    .filter(Boolean)
+    .join('\t');
+}
+
+function jwtTestKeyMaterial(algorithm) {
+  if (algorithm.startsWith('HS')) {
+    return { secret: `jwt-${algorithm.toLowerCase()}-secret` };
+  }
+  if (algorithm.startsWith('ES')) {
+    const curve = algorithm.endsWith('384') ? 'secp384r1' : algorithm.endsWith('512') ? 'secp521r1' : 'prime256v1';
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: curve });
+    return {
+      privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      publicKey
+    };
+  }
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  return {
+    privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    publicKey
+  };
+}
+
+function verifyJwtToken(token, options) {
+  const parts = String(token || '').split('.');
+  assert.equal(parts.length, 3);
+  const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  const signingInput = `${parts[0]}.${parts[1]}`;
+  const signature = Buffer.from(parts[2], 'base64url');
+  assert.equal(header.alg, options.algorithm);
+  const hash = jwtHashForAlgorithmTest(options.algorithm);
+  if (options.algorithm.startsWith('HS')) {
+    const expected = crypto.createHmac(hash, options.secret).update(signingInput, 'utf8').digest();
+    assert.equal(crypto.timingSafeEqual(signature, expected), true);
+  } else if (options.algorithm.startsWith('PS')) {
+    assert.equal(crypto.verify(hash, Buffer.from(signingInput, 'utf8'), {
+      key: options.publicKey,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
+    }, signature), true);
+  } else if (options.algorithm.startsWith('ES')) {
+    assert.equal(crypto.verify(hash, Buffer.from(signingInput, 'utf8'), options.publicKey, ecdsaJoseToDerTest(signature)), true);
+  } else {
+    assert.equal(crypto.verify(hash, Buffer.from(signingInput, 'utf8'), options.publicKey, signature), true);
+  }
+  return { header, payload };
+}
+
+function jwtHashForAlgorithmTest(algorithm) {
+  if (algorithm.endsWith('384')) {
+    return 'sha384';
+  }
+  if (algorithm.endsWith('512')) {
+    return 'sha512';
+  }
+  return 'sha256';
+}
+
+function ecdsaJoseToDerTest(signature) {
+  const raw = Buffer.from(signature);
+  const partLength = raw.length / 2;
+  const r = derIntegerPart(raw.slice(0, partLength));
+  const s = derIntegerPart(raw.slice(partLength));
+  const sequence = Buffer.concat([Buffer.from([0x02]), derLengthTest(r.length), r, Buffer.from([0x02]), derLengthTest(s.length), s]);
+  return Buffer.concat([Buffer.from([0x30]), derLengthTest(sequence.length), sequence]);
+}
+
+function derIntegerPart(value) {
+  let part = Buffer.from(value);
+  while (part.length > 1 && part[0] === 0) {
+    part = part.slice(1);
+  }
+  if ((part[0] & 0x80) !== 0) {
+    part = Buffer.concat([Buffer.from([0]), part]);
+  }
+  return part;
+}
+
+function derLengthTest(length) {
+  if (length < 0x80) {
+    return Buffer.from([length]);
+  }
+  const bytes = [];
+  let value = length;
+  while (value > 0) {
+    bytes.unshift(value & 0xff);
+    value >>= 8;
+  }
+  return Buffer.from([0x80 | bytes.length, ...bytes]);
+}
+
 function ntlmType2Challenge() {
   const target = Buffer.from('POSTMETER', 'utf16le');
   const targetInfo = Buffer.from('00000000', 'hex');
@@ -2448,3 +3140,81 @@ function writeSecurityBuffer(message, offset, length, payloadOffset) {
   message.writeUInt16LE(length, offset + 2);
   message.writeUInt32LE(payloadOffset, offset + 4);
 }
+
+function readSecurityBufferTest(message, offset) {
+  const length = message.readUInt16LE(offset);
+  const payloadOffset = message.readUInt32LE(offset + 4);
+  return message.slice(payloadOffset, payloadOffset + length);
+}
+
+function md4Test(input) {
+  const message = Buffer.from(input);
+  const bitLength = BigInt(message.length) * 8n;
+  const paddedLength = (((message.length + 9 + 63) >> 6) << 6);
+  const buffer = Buffer.alloc(paddedLength);
+  message.copy(buffer);
+  buffer[message.length] = 0x80;
+  buffer.writeBigUInt64LE(bitLength, paddedLength - 8);
+  let a = 0x67452301;
+  let b = 0xefcdab89;
+  let c = 0x98badcfe;
+  let d = 0x10325476;
+  for (let offset = 0; offset < buffer.length; offset += 64) {
+    const x = Array.from({ length: 16 }, (_value, index) => buffer.readUInt32LE(offset + index * 4));
+    const aa = a;
+    const bb = b;
+    const cc = c;
+    const dd = d;
+    [a, b, c, d] = md4Round1Test(a, b, c, d, x);
+    [a, b, c, d] = md4Round2Test(a, b, c, d, x);
+    [a, b, c, d] = md4Round3Test(a, b, c, d, x);
+    a = (a + aa) >>> 0;
+    b = (b + bb) >>> 0;
+    c = (c + cc) >>> 0;
+    d = (d + dd) >>> 0;
+  }
+  const digest = Buffer.alloc(16);
+  digest.writeUInt32LE(a, 0);
+  digest.writeUInt32LE(b, 4);
+  digest.writeUInt32LE(c, 8);
+  digest.writeUInt32LE(d, 12);
+  return digest;
+}
+
+function md4Round1Test(a, b, c, d, x) {
+  const s = [3, 7, 11, 19];
+  for (let i = 0; i < 16; i += 4) {
+    a = rotlTest((a + md4FTest(b, c, d) + x[i]) >>> 0, s[0]);
+    d = rotlTest((d + md4FTest(a, b, c) + x[i + 1]) >>> 0, s[1]);
+    c = rotlTest((c + md4FTest(d, a, b) + x[i + 2]) >>> 0, s[2]);
+    b = rotlTest((b + md4FTest(c, d, a) + x[i + 3]) >>> 0, s[3]);
+  }
+  return [a, b, c, d];
+}
+
+function md4Round2Test(a, b, c, d, x) {
+  const s = [3, 5, 9, 13];
+  for (const i of [0, 1, 2, 3]) {
+    a = rotlTest((a + md4GTest(b, c, d) + x[i] + 0x5a827999) >>> 0, s[0]);
+    d = rotlTest((d + md4GTest(a, b, c) + x[i + 4] + 0x5a827999) >>> 0, s[1]);
+    c = rotlTest((c + md4GTest(d, a, b) + x[i + 8] + 0x5a827999) >>> 0, s[2]);
+    b = rotlTest((b + md4GTest(c, d, a) + x[i + 12] + 0x5a827999) >>> 0, s[3]);
+  }
+  return [a, b, c, d];
+}
+
+function md4Round3Test(a, b, c, d, x) {
+  const s = [3, 9, 11, 15];
+  for (const i of [0, 2, 1, 3]) {
+    a = rotlTest((a + md4HTest(b, c, d) + x[i] + 0x6ed9eba1) >>> 0, s[0]);
+    d = rotlTest((d + md4HTest(a, b, c) + x[i + 8] + 0x6ed9eba1) >>> 0, s[1]);
+    c = rotlTest((c + md4HTest(d, a, b) + x[i + 4] + 0x6ed9eba1) >>> 0, s[2]);
+    b = rotlTest((b + md4HTest(c, d, a) + x[i + 12] + 0x6ed9eba1) >>> 0, s[3]);
+  }
+  return [a, b, c, d];
+}
+
+function md4FTest(x, y, z) { return ((x & y) | (~x & z)) >>> 0; }
+function md4GTest(x, y, z) { return ((x & y) | (x & z) | (y & z)) >>> 0; }
+function md4HTest(x, y, z) { return (x ^ y ^ z) >>> 0; }
+function rotlTest(value, bits) { return ((value << bits) | (value >>> (32 - bits))) >>> 0; }

@@ -1667,6 +1667,7 @@ function normalizePmSendRequestAuth(auth, options = {}) {
     };
   }
   if (type === 'aws') {
+    const placement = authField(source, 'addAuthDataTo') || authField(source, 'addAuthorizationDataTo') || authField(source, 'addTokenTo') || source.addAuthDataTo || source.addAuthorizationDataTo || source.addTokenTo;
     return {
       type: 'aws',
       accessKey: authField(source, 'accessKey') || source.accessKey || '',
@@ -1674,7 +1675,9 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       region: authField(source, 'region') || source.region || '',
       service: authField(source, 'service') || authField(source, 'serviceName') || source.service || source.serviceName || '',
       sessionToken: authField(source, 'sessionToken') || source.sessionToken || '',
-      addAuthDataToQuery: boolAuthField(source, 'addAuthDataToQuery') || source.addAuthDataToQuery === true
+      addAuthDataToQuery: placement
+        ? normalizeAwsScriptPlacement(placement) === 'query'
+        : (boolAuthField(source, 'addAuthDataToQuery') || source.addAuthDataToQuery === true)
     };
   }
   if (type === 'oauth1') {
@@ -1704,6 +1707,9 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       type: 'ntlm',
       username: authField(source, 'username') || source.username || '',
       password: authField(source, 'password') || source.password || '',
+      disableRetryingRequest: boolAuthField(source, 'disableRetryingRequest')
+        || boolAuthField(source, 'disableRetrying')
+        || source.disableRetryingRequest === true,
       domain: authField(source, 'domain') || source.domain || '',
       workstation: authField(source, 'workstation') || source.workstation || ''
     };
@@ -1714,7 +1720,11 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       accessToken: authField(source, 'accessToken') || source.accessToken || '',
       clientToken: authField(source, 'clientToken') || source.clientToken || '',
       clientSecret: authField(source, 'clientSecret') || source.clientSecret || '',
-      headersToSign: authField(source, 'headersToSign') || source.headersToSign || ''
+      nonce: authField(source, 'nonce') || source.nonce || '',
+      timestamp: authField(source, 'timestamp') || source.timestamp || '',
+      baseUrl: authField(source, 'baseUrl') || authField(source, 'baseURL') || source.baseUrl || source.baseURL || '',
+      headersToSign: authField(source, 'headersToSign') || source.headersToSign || '',
+      maxBodySize: authField(source, 'maxBodySize') || authField(source, 'maxBodySizeBytes') || source.maxBodySize || source.maxBodySizeBytes || ''
     };
   }
   if (type === 'jwtbearer') {
@@ -1722,6 +1732,9 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       type: 'jwtBearer',
       algorithm: authField(source, 'algorithm') || authField(source, 'alg') || source.algorithm || source.alg || 'HS256',
       secret: authField(source, 'secret') || authField(source, 'clientSecret') || source.secret || source.clientSecret || '',
+      secretBase64Encoded: boolAuthField(source, 'secretBase64Encoded')
+        || boolAuthField(source, 'secretBase64')
+        || source.secretBase64Encoded === true,
       privateKey: authField(source, 'privateKey') || authField(source, 'key') || source.privateKey || source.key || '',
       keyId: authField(source, 'keyId') || authField(source, 'kid') || source.keyId || source.kid || '',
       issuer: authField(source, 'issuer') || authField(source, 'iss') || source.issuer || source.iss || '',
@@ -1729,9 +1742,9 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       audience: authField(source, 'audience') || authField(source, 'aud') || source.audience || source.aud || '',
       expiresIn: authField(source, 'expiresIn') || source.expiresIn || '300',
       claims: authField(source, 'claims') || authField(source, 'payload') || source.claims || source.payload || '',
+      jwtHeaders: authField(source, 'jwtHeaders') || authField(source, 'headers') || source.jwtHeaders || source.headers || '',
       headerPrefix: authField(source, 'headerPrefix') || source.headerPrefix || 'Bearer',
-      addTokenTo: authField(source, 'addTokenTo') || source.addTokenTo || 'header',
-      queryParamName: authField(source, 'queryParamName') || source.queryParamName || 'token'
+      addTokenTo: authField(source, 'addTokenTo') || source.addTokenTo || 'header'
     };
   }
   if (type === 'asap') {
@@ -1744,14 +1757,15 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       subject: authField(source, 'subject') || authField(source, 'sub') || source.subject || source.sub || '',
       audience: authField(source, 'audience') || authField(source, 'aud') || source.audience || source.aud || '',
       keyId: authField(source, 'keyId') || authField(source, 'kid') || source.keyId || source.kid || '',
-      expiresIn: authField(source, 'expiresIn') || source.expiresIn || '300'
+      expiresIn: authField(source, 'expiresIn') || authField(source, 'expiry') || source.expiresIn || source.expiry || '3600',
+      additionalClaims: authField(source, 'additionalClaims') || authField(source, 'claims') || authField(source, 'payload') || source.additionalClaims || source.claims || source.payload || '{}'
     };
   }
   throw new Error(`pm.sendRequest auth helper "${source.type}" is not supported by the sandboxed HTTP broker yet.`);
 }
 
 function normalizePmAuthType(value) {
-  const normalized = String(value || '').toLowerCase().replace(/[\s_.-]+/g, '');
+  const normalized = String(value || '').toLowerCase().replace(/[\s_.()/-]+/g, '');
   if (normalized === 'noauth' || normalized === 'none' || normalized === 'inherit') {
     return normalized;
   }
@@ -1767,13 +1781,16 @@ function normalizePmAuthType(value) {
   if (normalized === 'oauth1' || normalized === 'oauth10') {
     return 'oauth1';
   }
+  if (normalized === 'ntlm' || normalized === 'ntlmauthentication') {
+    return 'ntlm';
+  }
   if (normalized === 'akamai' || normalized === 'edgegrid' || normalized === 'akamaiedgegrid') {
     return 'akamaiedgegrid';
   }
   if (normalized === 'jwt' || normalized === 'jwtbearer' || normalized === 'bearerjwt') {
     return 'jwtbearer';
   }
-  if (normalized === 'asap' || normalized === 'atlassianasap') {
+  if (normalized === 'asap' || normalized === 'atlassianasap' || normalized === 'asapatlassian') {
     return 'asap';
   }
   return normalized;
@@ -1818,6 +1835,13 @@ function authField(auth, key) {
 function boolAuthField(auth, key) {
   const value = authField(auth, key);
   return value === true || String(value).toLowerCase() === 'true';
+}
+
+function normalizeAwsScriptPlacement(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+  return normalized === 'query' || normalized === 'url' || normalized === 'requesturl' || normalized === 'querystring'
+    ? 'query'
+    : 'header';
 }
 
 function oauth1AddAuthDataToFromScriptAuth(auth) {

@@ -577,17 +577,21 @@ const FIELD_SCHEMAS = {
     domain: { type: 'string', limit: 'value', optional: true },
     workstation: { type: 'string', limit: 'value', optional: true },
     clientToken: { type: 'string', limit: 'value', optional: true },
+    baseUrl: { type: 'string', limit: 'value', optional: true },
     headersToSign: { type: 'string', limit: 'value', optional: true },
+    maxBodySize: { type: 'string', limit: 'short', optional: true },
     privateKey: { type: 'string', limit: 'value', optional: true },
     secret: { type: 'string', limit: 'value', optional: true },
+    secretBase64Encoded: { type: 'boolean', optional: true },
     issuer: { type: 'string', limit: 'value', optional: true },
     subject: { type: 'string', limit: 'value', optional: true },
     audience: { type: 'string', limit: 'value', optional: true },
     keyId: { type: 'string', limit: 'value', optional: true },
     expiresIn: { type: 'string', limit: 'short', optional: true },
+    additionalClaims: { type: 'string', limit: 'value', optional: true },
     claims: { type: 'string', limit: 'value', optional: true },
-    addTokenTo: { type: 'string', limit: 'short', optional: true },
-    queryParamName: { type: 'string', limit: 'short', optional: true }
+    jwtHeaders: { type: 'string', limit: 'value', optional: true },
+    addTokenTo: { type: 'string', limit: 'short', optional: true }
   }
 };
 

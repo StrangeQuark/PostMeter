@@ -10,6 +10,7 @@
   const { runUiTypographySmoke } = resolveUiSmokeTypography(global);
   const { runUiOauthSmoke } = resolveUiSmokeOauth(global);
   const { runUiHawkSmoke } = resolveUiSmokeHawk(global);
+  const { runUiAwsSmoke } = resolveUiSmokeAws(global);
 
   function queueUiWorkflowSmoke() {
     queueUiSmokeRun({
@@ -62,6 +63,15 @@
       run: runUiHawkSmoke,
       runtimeGlobal: global,
       titlePrefix: 'PostMeter UI Hawk'
+    });
+  }
+
+  function queueUiAwsSmoke() {
+    queueUiSmokeRun({
+      flag: 'uiAwsSmoke',
+      run: runUiAwsSmoke,
+      runtimeGlobal: global,
+      titlePrefix: 'PostMeter UI AWS'
     });
   }
 
@@ -135,7 +145,18 @@
     throw new Error('PostMeter UI Hawk smoke helpers must load before uiSmoke.js.');
   }
 
+  function resolveUiSmokeAws(runtimeGlobal) {
+    if (runtimeGlobal.PostMeterUiAwsSmoke) {
+      return runtimeGlobal.PostMeterUiAwsSmoke;
+    }
+    if (typeof module !== 'undefined' && module.exports) {
+      return require('./uiAwsSmoke');
+    }
+    throw new Error('PostMeter UI AWS smoke helpers must load before uiSmoke.js.');
+  }
+
   const exported = {
+    queueUiAwsSmoke,
     queueUiHawkSmoke,
     queueUiOauthSmoke,
     queueUiRegressionSmoke,
@@ -154,4 +175,5 @@
   global.queueUiTypographySmoke = queueUiTypographySmoke;
   global.queueUiOauthSmoke = queueUiOauthSmoke;
   global.queueUiHawkSmoke = queueUiHawkSmoke;
+  global.queueUiAwsSmoke = queueUiAwsSmoke;
 })(typeof window === 'undefined' ? globalThis : window);

@@ -324,17 +324,19 @@
             <label class="field">
               <span>Auth Type</span>
               <select id="authTypeSelect">
-                <option value="none">None</option>
-                <option value="bearer">Bearer Token</option>
+                <option value="none">No Auth</option>
                 <option value="basic">Basic Auth</option>
-                <option value="apiKey">API Key</option>
-                <option value="oauth2">OAuth 2.0</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="jwtBearer">JWT Bearer</option>
                 <option value="digest">Digest Auth</option>
+                <option value="oauth1">OAuth 1.0</option>
+                <option value="oauth2">OAuth 2.0</option>
                 <option value="hawk">Hawk Authentication</option>
                 <option value="aws">AWS Signature</option>
-                <option value="oauth1">OAuth 1.0</option>
-                <option value="ntlm">NTLM</option>
+                <option value="ntlm">NTLM Authentication</option>
+                <option value="apiKey">API Key</option>
                 <option value="akamaiEdgeGrid">Akamai EdgeGrid</option>
+                <option value="asap">ASAP (Atlassian)</option>
               </select>
             </label>
 
@@ -746,6 +748,215 @@
                   <label class="checkbox-line auth-wide">
                     <input id="authHawkIncludePayloadHashInput" type="checkbox">
                     <span>Include payload hash</span>
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="aws">
+              <label class="field">
+                <span>AccessKey</span>
+                <input id="authAwsAccessKeyInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>SecretKey</span>
+                <input id="authAwsSecretKeyInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Add authorization data to</span>
+                <select id="authAwsAddAuthDataToSelect">
+                  <option value="header">Request Headers</option>
+                  <option value="query">Request URL</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>AWS Region</span>
+                    <input id="authAwsRegionInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Service Name</span>
+                    <input id="authAwsServiceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Session Token</span>
+                    <input id="authAwsSessionTokenInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="ntlm">
+              <label class="field">
+                <span>Username</span>
+                <input id="authNtlmUsernameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input id="authNtlmPasswordInput" type="text" autocomplete="off">
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="checkbox-line auth-wide" title="PostMeter normally retries once after an NTLM challenge and uses values from the server response. Disable retry sends only the initial NTLM request.">
+                    <input id="authNtlmDisableRetryingRequestInput" type="checkbox" title="PostMeter normally retries once after an NTLM challenge and uses values from the server response. Disable retry sends only the initial NTLM request.">
+                    <span>Disable retry</span>
+                  </label>
+                  <label class="field">
+                    <span>Domain</span>
+                    <input id="authNtlmDomainInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Workstation</span>
+                    <input id="authNtlmWorkstationInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="akamaiEdgeGrid">
+              <label class="field">
+                <span>Access Token</span>
+                <input id="authAkamaiAccessTokenInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Client Token</span>
+                <input id="authAkamaiClientTokenInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Client Secret</span>
+                <input id="authAkamaiClientSecretInput" type="text" autocomplete="off">
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authAkamaiNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Timestamp</span>
+                    <input id="authAkamaiTimestampInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Base URL</span>
+                    <input id="authAkamaiBaseUrlInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Headers to Sign</span>
+                    <input id="authAkamaiHeadersToSignInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Max Body Size</span>
+                    <input id="authAkamaiMaxBodySizeInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="asap">
+              <label class="field">
+                <span>Algorithm</span>
+                <select id="authAsapAlgorithmSelect">
+                  <option value="RS256">RS256</option>
+                  <option value="RS384">RS384</option>
+                  <option value="RS512">RS512</option>
+                  <option value="PS256">PS256</option>
+                  <option value="PS384">PS384</option>
+                  <option value="PS512">PS512</option>
+                  <option value="ES256">ES256</option>
+                  <option value="ES384">ES384</option>
+                  <option value="ES512">ES512</option>
+                </select>
+              </label>
+              <label class="field auth-wide">
+                <span>Issuer</span>
+                <input id="authAsapIssuerInput" autocomplete="off">
+              </label>
+              <label class="field auth-wide">
+                <span>Audience</span>
+                <input id="authAsapAudienceInput" autocomplete="off">
+              </label>
+              <label class="field auth-wide">
+                <span>Key ID</span>
+                <input id="authAsapKeyIdInput" autocomplete="off">
+              </label>
+              <label class="field auth-wide">
+                <span>Private key</span>
+                <textarea id="authAsapPrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Subject</span>
+                    <input id="authAsapSubjectInput" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide">
+                    <span>Additional claims</span>
+                    <textarea id="authAsapAdditionalClaimsInput" autocomplete="off" spellcheck="false"></textarea>
+                  </label>
+                  <label class="field">
+                    <span>Expiry</span>
+                    <input id="authAsapExpiresInInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="jwtBearer" data-jwt-algorithm-kind="secret">
+              <label class="field">
+                <span>Algorithm</span>
+                <select id="authJwtAlgorithmSelect">
+                  <option value="HS256">HS256</option>
+                  <option value="HS384">HS384</option>
+                  <option value="HS512">HS512</option>
+                  <option value="RS256">RS256</option>
+                  <option value="RS384">RS384</option>
+                  <option value="RS512">RS512</option>
+                  <option value="PS256">PS256</option>
+                  <option value="PS384">PS384</option>
+                  <option value="PS512">PS512</option>
+                  <option value="ES256">ES256</option>
+                  <option value="ES384">ES384</option>
+                  <option value="ES512">ES512</option>
+                </select>
+              </label>
+              <label class="field" data-jwt-mode="secret">
+                <span>Secret</span>
+                <input id="authJwtSecretInput" type="text" autocomplete="off">
+              </label>
+              <label class="checkbox-line" data-jwt-mode="secret">
+                <input id="authJwtSecretBase64EncodedInput" type="checkbox">
+                <span>Secret Base64 encoded</span>
+              </label>
+              <label class="field auth-wide" data-jwt-mode="private">
+                <span>Private Key</span>
+                <textarea id="authJwtPrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <label class="field auth-wide">
+                <span>Payload</span>
+                <textarea id="authJwtPayloadInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <label class="field">
+                <span>Add JWT token to</span>
+                <select id="authJwtAddTokenToSelect">
+                  <option value="header">Request Header</option>
+                  <option value="query">Query Param</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Request header prefix</span>
+                    <input id="authJwtHeaderPrefixInput" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide">
+                    <span>JWT headers</span>
+                    <textarea id="authJwtHeadersInput" autocomplete="off" spellcheck="false"></textarea>
                   </label>
                 </div>
               </details>
@@ -1363,17 +1574,19 @@
                 <label class="field">
                   <span>Auth Type</span>
                   <select id="performanceAuthTypeSelect">
-                    <option value="none">None</option>
-                    <option value="bearer">Bearer Token</option>
+                    <option value="none">No Auth</option>
                     <option value="basic">Basic Auth</option>
-                    <option value="apiKey">API Key</option>
-                    <option value="oauth2">OAuth 2.0</option>
+                    <option value="bearer">Bearer Token</option>
+                    <option value="jwtBearer">JWT Bearer</option>
                     <option value="digest">Digest Auth</option>
+                    <option value="oauth1">OAuth 1.0</option>
+                    <option value="oauth2">OAuth 2.0</option>
                     <option value="hawk">Hawk Authentication</option>
                     <option value="aws">AWS Signature</option>
-                    <option value="oauth1">OAuth 1.0</option>
-                    <option value="ntlm">NTLM</option>
+                    <option value="ntlm">NTLM Authentication</option>
+                    <option value="apiKey">API Key</option>
                     <option value="akamaiEdgeGrid">Akamai EdgeGrid</option>
+                    <option value="asap">ASAP (Atlassian)</option>
                   </select>
                 </label>
 
@@ -1776,6 +1989,215 @@
                       <label class="checkbox-line auth-wide">
                         <input id="performanceAuthHawkIncludePayloadHashInput" type="checkbox">
                         <span>Include payload hash</span>
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="auth-section" data-auth-section="aws">
+                  <label class="field">
+                    <span>AccessKey</span>
+                    <input id="performanceAuthAwsAccessKeyInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>SecretKey</span>
+                    <input id="performanceAuthAwsSecretKeyInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Add authorization data to</span>
+                    <select id="performanceAuthAwsAddAuthDataToSelect">
+                      <option value="header">Request Headers</option>
+                      <option value="query">Request URL</option>
+                    </select>
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="field">
+                        <span>AWS Region</span>
+                        <input id="performanceAuthAwsRegionInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Service Name</span>
+                        <input id="performanceAuthAwsServiceInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Session Token</span>
+                        <input id="performanceAuthAwsSessionTokenInput" autocomplete="off">
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="auth-section" data-auth-section="ntlm">
+                  <label class="field">
+                    <span>Username</span>
+                    <input id="performanceAuthNtlmUsernameInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Password</span>
+                    <input id="performanceAuthNtlmPasswordInput" type="text" autocomplete="off">
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="checkbox-line auth-wide" title="PostMeter normally retries once after an NTLM challenge and uses values from the server response. Disable retry sends only the initial NTLM request.">
+                        <input id="performanceAuthNtlmDisableRetryingRequestInput" type="checkbox" title="PostMeter normally retries once after an NTLM challenge and uses values from the server response. Disable retry sends only the initial NTLM request.">
+                        <span>Disable retry</span>
+                      </label>
+                      <label class="field">
+                        <span>Domain</span>
+                        <input id="performanceAuthNtlmDomainInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Workstation</span>
+                        <input id="performanceAuthNtlmWorkstationInput" autocomplete="off">
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="auth-section" data-auth-section="akamaiEdgeGrid">
+                  <label class="field">
+                    <span>Access Token</span>
+                    <input id="performanceAuthAkamaiAccessTokenInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Client Token</span>
+                    <input id="performanceAuthAkamaiClientTokenInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Client Secret</span>
+                    <input id="performanceAuthAkamaiClientSecretInput" type="text" autocomplete="off">
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="field">
+                        <span>Nonce</span>
+                        <input id="performanceAuthAkamaiNonceInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Timestamp</span>
+                        <input id="performanceAuthAkamaiTimestampInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Base URL</span>
+                        <input id="performanceAuthAkamaiBaseUrlInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Headers to Sign</span>
+                        <input id="performanceAuthAkamaiHeadersToSignInput" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span>Max Body Size</span>
+                        <input id="performanceAuthAkamaiMaxBodySizeInput" autocomplete="off">
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="auth-section" data-auth-section="asap">
+                  <label class="field">
+                    <span>Algorithm</span>
+                    <select id="performanceAuthAsapAlgorithmSelect">
+                      <option value="RS256">RS256</option>
+                      <option value="RS384">RS384</option>
+                      <option value="RS512">RS512</option>
+                      <option value="PS256">PS256</option>
+                      <option value="PS384">PS384</option>
+                      <option value="PS512">PS512</option>
+                      <option value="ES256">ES256</option>
+                      <option value="ES384">ES384</option>
+                      <option value="ES512">ES512</option>
+                    </select>
+                  </label>
+                  <label class="field auth-wide">
+                    <span>Issuer</span>
+                    <input id="performanceAuthAsapIssuerInput" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide">
+                    <span>Audience</span>
+                    <input id="performanceAuthAsapAudienceInput" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide">
+                    <span>Key ID</span>
+                    <input id="performanceAuthAsapKeyIdInput" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide">
+                    <span>Private key</span>
+                    <textarea id="performanceAuthAsapPrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="field">
+                        <span>Subject</span>
+                        <input id="performanceAuthAsapSubjectInput" autocomplete="off">
+                      </label>
+                      <label class="field auth-wide">
+                        <span>Additional claims</span>
+                        <textarea id="performanceAuthAsapAdditionalClaimsInput" autocomplete="off" spellcheck="false"></textarea>
+                      </label>
+                      <label class="field">
+                        <span>Expiry</span>
+                        <input id="performanceAuthAsapExpiresInInput" autocomplete="off">
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="auth-section" data-auth-section="jwtBearer" data-jwt-algorithm-kind="secret">
+                  <label class="field">
+                    <span>Algorithm</span>
+                    <select id="performanceAuthJwtAlgorithmSelect">
+                      <option value="HS256">HS256</option>
+                      <option value="HS384">HS384</option>
+                      <option value="HS512">HS512</option>
+                      <option value="RS256">RS256</option>
+                      <option value="RS384">RS384</option>
+                      <option value="RS512">RS512</option>
+                      <option value="PS256">PS256</option>
+                      <option value="PS384">PS384</option>
+                      <option value="PS512">PS512</option>
+                      <option value="ES256">ES256</option>
+                      <option value="ES384">ES384</option>
+                      <option value="ES512">ES512</option>
+                    </select>
+                  </label>
+                  <label class="field" data-jwt-mode="secret">
+                    <span>Secret</span>
+                    <input id="performanceAuthJwtSecretInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="checkbox-line" data-jwt-mode="secret">
+                    <input id="performanceAuthJwtSecretBase64EncodedInput" type="checkbox">
+                    <span>Secret Base64 encoded</span>
+                  </label>
+                  <label class="field auth-wide" data-jwt-mode="private">
+                    <span>Private Key</span>
+                    <textarea id="performanceAuthJwtPrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+                  </label>
+                  <label class="field auth-wide">
+                    <span>Payload</span>
+                    <textarea id="performanceAuthJwtPayloadInput" autocomplete="off" spellcheck="false"></textarea>
+                  </label>
+                  <label class="field">
+                    <span>Add JWT token to</span>
+                    <select id="performanceAuthJwtAddTokenToSelect">
+                      <option value="header">Request Header</option>
+                      <option value="query">Query Param</option>
+                    </select>
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                    <label class="field">
+                      <span>Request header prefix</span>
+                      <input id="performanceAuthJwtHeaderPrefixInput" autocomplete="off">
+                    </label>
+                    <label class="field auth-wide">
+                      <span>JWT headers</span>
+                      <textarea id="performanceAuthJwtHeadersInput" autocomplete="off" spellcheck="false"></textarea>
                       </label>
                     </div>
                   </details>
@@ -2902,6 +3324,7 @@
   <script src="uiTypographySmoke.js"></script>
   <script src="uiOauthSmoke.js"></script>
   <script src="uiHawkSmoke.js"></script>
+  <script src="uiAwsSmoke.js"></script>
   <script src="uiSmoke.js"></script>
 </body>
 </html>

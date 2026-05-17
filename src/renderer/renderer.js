@@ -738,6 +738,7 @@ initializeRenderer({
     queueUiTypographySmoke();
     queueUiOauthSmoke();
     queueUiHawkSmoke();
+    queueUiAwsSmoke();
     markUiWorkflowStartupStep('after-smoke-queue');
   }
 });
@@ -21127,5 +21128,6 @@ function isAutomatedUiSmoke() {
     || params.get('uiSnapshotSmoke') === '1'
     || params.get('uiTypographySmoke') === '1'
     || params.get('uiOauthSmoke') === '1'
-    || params.get('uiHawkSmoke') === '1';
+    || params.get('uiHawkSmoke') === '1'
+    || params.get('uiAwsSmoke') === '1';
 }

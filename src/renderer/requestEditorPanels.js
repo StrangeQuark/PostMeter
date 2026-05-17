@@ -55,6 +55,15 @@
     }
   }
 
+  function syncJwtAlgorithmFields(options = {}) {
+    const doc = options.doc || document;
+    const algorithm = String(optionElementValue(doc, options, 'authJwtAlgorithmSelect') || 'HS256').toUpperCase();
+    const section = optionElement(doc, options, 'authJwtAlgorithmSelect')?.closest?.('[data-auth-section="jwtBearer"]');
+    if (section) {
+      section.dataset.jwtAlgorithmKind = algorithm.startsWith('HS') ? 'secret' : 'private';
+    }
+  }
+
   function bodyTypeCodeLanguage(bodyType) {
     return bodyType === 'RAW_JSON' ? 'json' : 'text';
   }
@@ -521,6 +530,42 @@
     setOptionElementValue(doc, options, 'authHawkDelegationInput', fields.hawkDelegation);
     setOptionElementValue(doc, options, 'authHawkTimestampInput', fields.hawkTimestamp);
     setOptionElementChecked(doc, options, 'authHawkIncludePayloadHashInput', fields.hawkIncludePayloadHash);
+    setOptionElementValue(doc, options, 'authAwsAccessKeyInput', fields.awsAccessKey);
+    setOptionElementValue(doc, options, 'authAwsSecretKeyInput', fields.awsSecretKey);
+    setOptionElementValue(doc, options, 'authAwsAddAuthDataToSelect', fields.awsAddAuthDataTo);
+    setOptionElementValue(doc, options, 'authAwsRegionInput', fields.awsRegion);
+    setOptionElementValue(doc, options, 'authAwsServiceInput', fields.awsService);
+    setOptionElementValue(doc, options, 'authAwsSessionTokenInput', fields.awsSessionToken);
+    setOptionElementValue(doc, options, 'authNtlmUsernameInput', fields.ntlmUsername);
+    setOptionElementValue(doc, options, 'authNtlmPasswordInput', fields.ntlmPassword);
+    setOptionElementChecked(doc, options, 'authNtlmDisableRetryingRequestInput', fields.ntlmDisableRetryingRequest);
+    setOptionElementValue(doc, options, 'authNtlmDomainInput', fields.ntlmDomain);
+    setOptionElementValue(doc, options, 'authNtlmWorkstationInput', fields.ntlmWorkstation);
+    setOptionElementValue(doc, options, 'authAkamaiAccessTokenInput', fields.akamaiAccessToken);
+    setOptionElementValue(doc, options, 'authAkamaiClientTokenInput', fields.akamaiClientToken);
+    setOptionElementValue(doc, options, 'authAkamaiClientSecretInput', fields.akamaiClientSecret);
+    setOptionElementValue(doc, options, 'authAkamaiNonceInput', fields.akamaiNonce);
+    setOptionElementValue(doc, options, 'authAkamaiTimestampInput', fields.akamaiTimestamp);
+    setOptionElementValue(doc, options, 'authAkamaiBaseUrlInput', fields.akamaiBaseUrl);
+    setOptionElementValue(doc, options, 'authAkamaiHeadersToSignInput', fields.akamaiHeadersToSign);
+    setOptionElementValue(doc, options, 'authAkamaiMaxBodySizeInput', fields.akamaiMaxBodySize);
+    setOptionElementValue(doc, options, 'authJwtAlgorithmSelect', fields.jwtAlgorithm);
+    setOptionElementValue(doc, options, 'authJwtSecretInput', fields.jwtSecret);
+    setOptionElementChecked(doc, options, 'authJwtSecretBase64EncodedInput', fields.jwtSecretBase64Encoded);
+    setOptionElementValue(doc, options, 'authJwtPrivateKeyInput', fields.jwtPrivateKey);
+    setOptionElementValue(doc, options, 'authJwtAddTokenToSelect', fields.jwtAddTokenTo);
+    setOptionElementValue(doc, options, 'authJwtPayloadInput', fields.jwtPayload);
+    setOptionElementValue(doc, options, 'authJwtHeaderPrefixInput', fields.jwtHeaderPrefix);
+    setOptionElementValue(doc, options, 'authJwtHeadersInput', fields.jwtHeaders);
+    syncJwtAlgorithmFields({ ...options, doc });
+    setOptionElementValue(doc, options, 'authAsapAlgorithmSelect', fields.asapAlgorithm);
+    setOptionElementValue(doc, options, 'authAsapIssuerInput', fields.asapIssuer);
+    setOptionElementValue(doc, options, 'authAsapAudienceInput', fields.asapAudience);
+    setOptionElementValue(doc, options, 'authAsapKeyIdInput', fields.asapKeyId);
+    setOptionElementValue(doc, options, 'authAsapPrivateKeyInput', fields.asapPrivateKey);
+    setOptionElementValue(doc, options, 'authAsapSubjectInput', fields.asapSubject);
+    setOptionElementValue(doc, options, 'authAsapAdditionalClaimsInput', fields.asapAdditionalClaims);
+    setOptionElementValue(doc, options, 'authAsapExpiresInInput', fields.asapExpiresIn);
     setOptionElementValue(doc, options, 'authClientPfxPathInput', fields.clientPfxPath);
     setOptionElementValue(doc, options, 'authClientCertPathInput', fields.clientCertPath);
     setOptionElementValue(doc, options, 'authClientKeyPathInput', fields.clientKeyPath);
@@ -532,6 +577,7 @@
     const doc = options.doc || document;
     syncOauth1SignatureFields({ ...options, doc });
     syncOauth2GrantFields({ ...options, doc });
+    syncJwtAlgorithmFields({ ...options, doc });
     return authFromEditorState({
       type: optionElementValue(doc, options, 'authTypeSelect'),
       bearerToken: optionElementValue(doc, options, 'authBearerTokenInput'),
@@ -610,6 +656,41 @@
       hawkDelegation: optionElementValue(doc, options, 'authHawkDelegationInput'),
       hawkTimestamp: optionElementValue(doc, options, 'authHawkTimestampInput'),
       hawkIncludePayloadHash: optionElementChecked(doc, options, 'authHawkIncludePayloadHashInput'),
+      awsAccessKey: optionElementValue(doc, options, 'authAwsAccessKeyInput'),
+      awsSecretKey: optionElementValue(doc, options, 'authAwsSecretKeyInput'),
+      awsAddAuthDataTo: optionElementValue(doc, options, 'authAwsAddAuthDataToSelect'),
+      awsRegion: optionElementValue(doc, options, 'authAwsRegionInput'),
+      awsService: optionElementValue(doc, options, 'authAwsServiceInput'),
+      awsSessionToken: optionElementValue(doc, options, 'authAwsSessionTokenInput'),
+      ntlmUsername: optionElementValue(doc, options, 'authNtlmUsernameInput'),
+      ntlmPassword: optionElementValue(doc, options, 'authNtlmPasswordInput'),
+      ntlmDisableRetryingRequest: optionElementChecked(doc, options, 'authNtlmDisableRetryingRequestInput'),
+      ntlmDomain: optionElementValue(doc, options, 'authNtlmDomainInput'),
+      ntlmWorkstation: optionElementValue(doc, options, 'authNtlmWorkstationInput'),
+      akamaiAccessToken: optionElementValue(doc, options, 'authAkamaiAccessTokenInput'),
+      akamaiClientToken: optionElementValue(doc, options, 'authAkamaiClientTokenInput'),
+      akamaiClientSecret: optionElementValue(doc, options, 'authAkamaiClientSecretInput'),
+      akamaiNonce: optionElementValue(doc, options, 'authAkamaiNonceInput'),
+      akamaiTimestamp: optionElementValue(doc, options, 'authAkamaiTimestampInput'),
+      akamaiBaseUrl: optionElementValue(doc, options, 'authAkamaiBaseUrlInput'),
+      akamaiHeadersToSign: optionElementValue(doc, options, 'authAkamaiHeadersToSignInput'),
+      akamaiMaxBodySize: optionElementValue(doc, options, 'authAkamaiMaxBodySizeInput'),
+      jwtAlgorithm: optionElementValue(doc, options, 'authJwtAlgorithmSelect'),
+      jwtSecret: optionElementValue(doc, options, 'authJwtSecretInput'),
+      jwtSecretBase64Encoded: optionElementChecked(doc, options, 'authJwtSecretBase64EncodedInput'),
+      jwtPrivateKey: optionElementValue(doc, options, 'authJwtPrivateKeyInput'),
+      jwtAddTokenTo: optionElementValue(doc, options, 'authJwtAddTokenToSelect'),
+      jwtPayload: optionElementValue(doc, options, 'authJwtPayloadInput'),
+      jwtHeaderPrefix: optionElementValue(doc, options, 'authJwtHeaderPrefixInput'),
+      jwtHeaders: optionElementValue(doc, options, 'authJwtHeadersInput'),
+      asapAlgorithm: optionElementValue(doc, options, 'authAsapAlgorithmSelect'),
+      asapIssuer: optionElementValue(doc, options, 'authAsapIssuerInput'),
+      asapAudience: optionElementValue(doc, options, 'authAsapAudienceInput'),
+      asapKeyId: optionElementValue(doc, options, 'authAsapKeyIdInput'),
+      asapPrivateKey: optionElementValue(doc, options, 'authAsapPrivateKeyInput'),
+      asapSubject: optionElementValue(doc, options, 'authAsapSubjectInput'),
+      asapAdditionalClaims: optionElementValue(doc, options, 'authAsapAdditionalClaimsInput'),
+      asapExpiresIn: optionElementValue(doc, options, 'authAsapExpiresInInput'),
       clientPfxPath: optionElementValue(doc, options, 'authClientPfxPathInput'),
       clientCertPath: optionElementValue(doc, options, 'authClientCertPathInput'),
       clientKeyPath: optionElementValue(doc, options, 'authClientKeyPathInput'),
@@ -1061,6 +1142,7 @@
     renderAuthEditor,
     renderCookieJarEditor,
     renderRequestPairs,
+    syncJwtAlgorithmFields,
     syncOauth1SignatureFields,
     syncOauth2GrantFields,
     syncRefreshingAuthSelectOptions,

@@ -153,7 +153,7 @@
         region: auth.region ?? '',
         service: auth.service ?? auth.serviceName ?? '',
         sessionToken: auth.sessionToken ?? '',
-        addAuthDataToQuery: auth.addAuthDataToQuery === true
+        addAuthDataToQuery: awsAddAuthDataToQueryFromAuth(auth)
       };
     }
     if (type === 'oauth1') {
@@ -185,6 +185,12 @@
         type,
         username: auth.username ?? '',
         password: auth.password ?? '',
+        disableRetryingRequest: authBoolean(
+          auth.disableRetryingRequest
+          ?? auth.disableRetryRequest
+          ?? auth.disableRetry
+          ?? auth.disableRetrying
+        ),
         domain: auth.domain ?? '',
         workstation: auth.workstation ?? ''
       };
@@ -195,7 +201,11 @@
         accessToken: auth.accessToken ?? '',
         clientToken: auth.clientToken ?? '',
         clientSecret: auth.clientSecret ?? '',
-        headersToSign: auth.headersToSign ?? ''
+        nonce: auth.nonce ?? '',
+        timestamp: auth.timestamp ?? '',
+        baseUrl: auth.baseUrl ?? auth.baseURL ?? '',
+        headersToSign: auth.headersToSign ?? '',
+        maxBodySize: auth.maxBodySize ?? auth.maxBodySizeBytes ?? ''
       };
     }
     if (type === 'jwtBearer') {
@@ -203,16 +213,17 @@
         type,
         algorithm: auth.algorithm ?? 'HS256',
         secret: auth.secret ?? auth.clientSecret ?? '',
+        secretBase64Encoded: authBoolean(auth.secretBase64Encoded ?? auth.secretBase64 ?? auth.base64Secret),
         privateKey: auth.privateKey ?? '',
         keyId: auth.keyId ?? auth.kid ?? '',
         issuer: auth.issuer ?? auth.iss ?? '',
         subject: auth.subject ?? auth.sub ?? '',
         audience: auth.audience ?? auth.aud ?? '',
         expiresIn: auth.expiresIn ?? '300',
-        claims: auth.claims ?? '',
+        claims: auth.claims ?? auth.payload ?? '',
+        jwtHeaders: auth.jwtHeaders ?? auth.headers ?? '',
         headerPrefix: auth.headerPrefix ?? 'Bearer',
-        addTokenTo: auth.addTokenTo ?? 'header',
-        queryParamName: auth.queryParamName ?? 'token'
+        addTokenTo: normalizeJwtTokenPlacement(auth.addTokenTo ?? auth.addJwtTokenTo ?? auth.addTokenToRequest)
       };
     }
     if (type === 'asap') {
@@ -225,8 +236,8 @@
         subject: auth.subject ?? auth.sub ?? '',
         audience: auth.audience ?? auth.aud ?? '',
         keyId: auth.keyId ?? auth.kid ?? '',
-        expiresIn: auth.expiresIn ?? '300',
-        headerPrefix: auth.headerPrefix ?? 'Bearer'
+        expiresIn: auth.expiresIn ?? auth.expiry ?? '3600',
+        additionalClaims: auth.additionalClaims ?? auth.claims ?? auth.payload ?? '{}'
       };
     }
     return { type: 'none' };
@@ -234,7 +245,7 @@
 
   function normalizeAuthType(value) {
     const text = String(value || '').trim();
-    const lowered = text.toLowerCase().replace(/[\s_.-]+/g, '');
+    const lowered = text.toLowerCase().replace(/[\s_.()/-]+/g, '');
     if (!text || lowered === 'none' || lowered === 'noauth') {
       return 'none';
     }
@@ -265,13 +276,16 @@
     if (lowered === 'oauth1' || lowered === 'oauth10' || lowered === 'oauth1auth') {
       return 'oauth1';
     }
+    if (lowered === 'ntlm' || lowered === 'ntlmauthentication') {
+      return 'ntlm';
+    }
     if (lowered === 'akamai' || lowered === 'edgegrid' || lowered === 'akamaiedgegrid') {
       return 'akamaiEdgeGrid';
     }
     if (lowered === 'jwt' || lowered === 'jwtbearer' || lowered === 'bearerjwt') {
       return 'jwtBearer';
     }
-    if (lowered === 'asap' || lowered === 'atlassianasap') {
+    if (lowered === 'asap' || lowered === 'atlassianasap' || lowered === 'asapatlassian') {
       return 'asap';
     }
     return AUTH_TYPES.has(text) ? text : normalizeSchemaEnumValue('authTypes', text, 'none');
@@ -279,6 +293,15 @@
 
   function authBoolean(value) {
     return value === true || String(value).trim().toLowerCase() === 'true';
+  }
+
+  function awsAddAuthDataToQueryFromAuth(auth = {}) {
+    const explicit = auth.addAuthDataTo ?? auth.addAuthorizationDataTo ?? auth.addTokenTo;
+    if (explicit != null) {
+      const normalized = String(explicit || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+      return normalized === 'query' || normalized === 'url' || normalized === 'requesturl' || normalized === 'querystring';
+    }
+    return authBoolean(auth.addAuthDataToQuery);
   }
 
   function normalizeHawkAlgorithm(value) {
@@ -506,11 +529,46 @@
       hawkDelegation: '',
       hawkTimestamp: '',
       hawkIncludePayloadHash: false,
+      awsAccessKey: '',
+      awsSecretKey: '',
+      awsAddAuthDataTo: 'header',
+      awsRegion: '',
+      awsService: '',
+      awsSessionToken: '',
       clientPfxPath: '',
       clientCertPath: '',
       clientKeyPath: '',
       clientCaPath: '',
-      clientPassphrase: ''
+      clientPassphrase: '',
+      ntlmUsername: '',
+      ntlmPassword: '',
+      ntlmDisableRetryingRequest: false,
+      ntlmDomain: '',
+      ntlmWorkstation: '',
+      akamaiAccessToken: '',
+      akamaiClientToken: '',
+      akamaiClientSecret: '',
+      akamaiNonce: '',
+      akamaiTimestamp: '',
+      akamaiBaseUrl: '',
+      akamaiHeadersToSign: '',
+      akamaiMaxBodySize: '',
+      jwtAlgorithm: 'HS256',
+      jwtSecret: '',
+      jwtSecretBase64Encoded: false,
+      jwtPrivateKey: '',
+      jwtAddTokenTo: 'header',
+      jwtPayload: '{}',
+      jwtHeaderPrefix: 'Bearer',
+      jwtHeaders: '{}',
+      asapAlgorithm: 'RS256',
+      asapIssuer: '',
+      asapAudience: '',
+      asapKeyId: '',
+      asapPrivateKey: '',
+      asapSubject: '',
+      asapExpiresIn: '3600',
+      asapAdditionalClaims: '{}'
     };
   }
 
@@ -604,6 +662,15 @@
       state.hawkIncludePayloadHash = normalized.includePayloadHash;
       return state;
     }
+    if (normalized.type === 'aws') {
+      state.awsAccessKey = normalized.accessKey;
+      state.awsSecretKey = normalized.secretKey;
+      state.awsAddAuthDataTo = normalized.addAuthDataToQuery === true ? 'query' : 'header';
+      state.awsRegion = normalized.region;
+      state.awsService = normalized.service;
+      state.awsSessionToken = normalized.sessionToken;
+      return state;
+    }
     if (normalized.type === 'oauth1') {
       state.oauth1SignatureMethod = normalized.signatureMethod;
       state.oauth1ConsumerKey = normalized.consumerKey;
@@ -628,6 +695,47 @@
       state.clientKeyPath = normalized.keyPath;
       state.clientCaPath = normalized.caPath;
       state.clientPassphrase = normalized.passphrase;
+      return state;
+    }
+    if (normalized.type === 'ntlm') {
+      state.ntlmUsername = normalized.username;
+      state.ntlmPassword = normalized.password;
+      state.ntlmDisableRetryingRequest = normalized.disableRetryingRequest;
+      state.ntlmDomain = normalized.domain;
+      state.ntlmWorkstation = normalized.workstation;
+      return state;
+    }
+    if (normalized.type === 'akamaiEdgeGrid') {
+      state.akamaiAccessToken = normalized.accessToken;
+      state.akamaiClientToken = normalized.clientToken;
+      state.akamaiClientSecret = normalized.clientSecret;
+      state.akamaiNonce = normalized.nonce;
+      state.akamaiTimestamp = normalized.timestamp;
+      state.akamaiBaseUrl = normalized.baseUrl;
+      state.akamaiHeadersToSign = normalized.headersToSign;
+      state.akamaiMaxBodySize = normalized.maxBodySize;
+      return state;
+    }
+    if (normalized.type === 'jwtBearer') {
+      state.jwtAlgorithm = normalized.algorithm;
+      state.jwtSecret = normalized.secret;
+      state.jwtSecretBase64Encoded = normalized.secretBase64Encoded;
+      state.jwtPrivateKey = normalized.privateKey;
+      state.jwtAddTokenTo = normalized.addTokenTo;
+      state.jwtPayload = normalized.claims || '{}';
+      state.jwtHeaderPrefix = normalized.headerPrefix;
+      state.jwtHeaders = normalized.jwtHeaders || '{}';
+      return state;
+    }
+    if (normalized.type === 'asap') {
+      state.asapAlgorithm = normalized.algorithm;
+      state.asapIssuer = normalized.issuer;
+      state.asapAudience = normalized.audience;
+      state.asapKeyId = normalized.keyId;
+      state.asapPrivateKey = normalized.privateKey;
+      state.asapSubject = normalized.subject;
+      state.asapExpiresIn = normalized.expiresIn;
+      state.asapAdditionalClaims = normalized.additionalClaims || '{}';
       return state;
     }
     return state;
@@ -753,6 +861,17 @@
         includePayloadHash: state.hawkIncludePayloadHash === true
       });
     }
+    if (type === 'aws') {
+      return normalizeAuth({
+        type,
+        accessKey: state.awsAccessKey ?? '',
+        secretKey: state.awsSecretKey ?? '',
+        addAuthDataTo: state.awsAddAuthDataTo ?? 'header',
+        region: state.awsRegion ?? '',
+        service: state.awsService ?? '',
+        sessionToken: state.awsSessionToken ?? ''
+      });
+    }
     if (type === 'oauth1') {
       return normalizeAuth({
         type,
@@ -773,11 +892,64 @@
         addEmptyParamsToSign: state.oauth1AddEmptyParamsToSign === true
       });
     }
-    if (['aws', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
-      const existing = normalizeAuth(existingAuth);
-      return normalizeAuth(existing.type === type ? existing : { type });
+    if (type === 'ntlm') {
+      return normalizeAuth({
+        type,
+        username: state.ntlmUsername ?? '',
+        password: state.ntlmPassword ?? '',
+        disableRetryingRequest: state.ntlmDisableRetryingRequest === true,
+        domain: state.ntlmDomain ?? '',
+        workstation: state.ntlmWorkstation ?? ''
+      });
+    }
+    if (type === 'akamaiEdgeGrid') {
+      return normalizeAuth({
+        type,
+        accessToken: state.akamaiAccessToken ?? '',
+        clientToken: state.akamaiClientToken ?? '',
+        clientSecret: state.akamaiClientSecret ?? '',
+        nonce: state.akamaiNonce ?? '',
+        timestamp: state.akamaiTimestamp ?? '',
+        baseUrl: state.akamaiBaseUrl ?? '',
+        headersToSign: state.akamaiHeadersToSign ?? '',
+        maxBodySize: state.akamaiMaxBodySize ?? ''
+      });
+    }
+    if (type === 'jwtBearer') {
+      return normalizeAuth({
+        type,
+        algorithm: state.jwtAlgorithm ?? 'HS256',
+        secret: state.jwtSecret ?? '',
+        secretBase64Encoded: state.jwtSecretBase64Encoded === true,
+        privateKey: state.jwtPrivateKey ?? '',
+        claims: state.jwtPayload ?? '',
+        headerPrefix: state.jwtHeaderPrefix ?? 'Bearer',
+        jwtHeaders: state.jwtHeaders ?? '',
+        addTokenTo: state.jwtAddTokenTo ?? 'header'
+      });
+    }
+    if (type === 'asap') {
+      return normalizeAuth({
+        type,
+        algorithm: state.asapAlgorithm ?? 'RS256',
+        issuer: state.asapIssuer ?? '',
+        audience: state.asapAudience ?? '',
+        keyId: state.asapKeyId ?? '',
+        privateKey: state.asapPrivateKey ?? '',
+        subject: state.asapSubject ?? '',
+        expiresIn: state.asapExpiresIn ?? '3600',
+        additionalClaims: state.asapAdditionalClaims ?? '{}'
+      });
     }
     return { type: 'none' };
+  }
+
+  function normalizeJwtTokenPlacement(value) {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+    if (normalized === 'query' || normalized === 'queryparam' || normalized === 'requesturl' || normalized === 'url') {
+      return 'query';
+    }
+    return 'header';
   }
 
   function editorOAuth2Params(key, value, sendIn = null) {

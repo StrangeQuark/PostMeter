@@ -1208,6 +1208,11 @@ textarea.code-editor-input.has-openable-variable-hover {
   display: none;
 }
 
+.auth-section[data-auth-section="jwtBearer"]:not([data-jwt-algorithm-kind="private"]) [data-jwt-mode="private"],
+.auth-section[data-auth-section="jwtBearer"][data-jwt-algorithm-kind="private"] [data-jwt-mode="secret"] {
+  display: none;
+}
+
 .auth-section[data-auth-section="oauth2"] [data-oauth2-grant-field] {
   display: none;
 }

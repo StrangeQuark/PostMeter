@@ -5566,10 +5566,12 @@ function createPostmanAuth(auth = {}, onChange) {
     'audience',
     'keyId',
     'expiresIn',
+    'additionalClaims',
     'claims',
+    'jwtHeaders',
+    'secretBase64Encoded',
     'headerPrefix',
-    'addTokenTo',
-    'queryParamName'
+    'addTokenTo'
   ]);
   for (const key of authKeys) {
     if (key === 'type' || VISUALIZER_UNSAFE_PATH_PARTS.has(key)) {

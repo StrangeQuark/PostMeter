@@ -20,6 +20,8 @@ test('shared auth model normalizes runtime auth values by type', () => {
   assert.deepEqual(normalizeAuth({ type: 'Use Refreshing Access Token', token: 'ignored' }), { type: 'autoRefresh' });
   assert.deepEqual(normalizeAuth({ type: 'Use Refreshing API Key', token: 'ignored' }), { type: 'autoRefresh' });
   assert.deepEqual(normalizeAuth({ type: 'Refreshing Auth Refresh Token', token: 'ignored' }), { type: 'autoRefreshRefreshToken' });
+  assert.equal(normalizeAuth({ type: 'NTLM Authentication' }).type, 'ntlm');
+  assert.equal(normalizeAuth({ type: 'ASAP (Atlassian)' }).type, 'asap');
   assert.deepEqual(normalizeAuth({ type: 'oauth2', tokenType: 'Unknown', grantType: 'bad', redirectStrategy: 'bad' }), {
     type: 'oauth2',
     tokenType: 'Bearer',
@@ -142,7 +144,24 @@ test('shared auth model normalizes runtime auth values by type', () => {
     timestamp: '1777291200',
     includePayloadHash: true
   });
+  assert.deepEqual(normalizeAuth({
+    type: 'AWS Signature',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    serviceName: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataTo: 'Request URL'
+  }), {
+    type: 'aws',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataToQuery: true
   });
+});
 
 test('shared auth model keeps persisted auth shallow for workspace compatibility', () => {
   assert.deepEqual(normalizePersistedAuth({ type: 'basic', username: 'alice' }), {
@@ -243,11 +262,46 @@ test('shared auth model maps runtime auth to renderer editor fields', () => {
     hawkDelegation: '',
     hawkTimestamp: '',
     hawkIncludePayloadHash: false,
+    awsAccessKey: '',
+    awsSecretKey: '',
+    awsAddAuthDataTo: 'header',
+    awsRegion: '',
+    awsService: '',
+    awsSessionToken: '',
     clientPfxPath: '',
     clientCertPath: '',
     clientKeyPath: '',
     clientCaPath: '',
-    clientPassphrase: ''
+    clientPassphrase: '',
+    ntlmUsername: '',
+    ntlmPassword: '',
+    ntlmDisableRetryingRequest: false,
+    ntlmDomain: '',
+    ntlmWorkstation: '',
+    akamaiAccessToken: '',
+    akamaiClientToken: '',
+    akamaiClientSecret: '',
+    akamaiNonce: '',
+    akamaiTimestamp: '',
+    akamaiBaseUrl: '',
+    akamaiHeadersToSign: '',
+    akamaiMaxBodySize: '',
+    jwtAlgorithm: 'HS256',
+    jwtSecret: '',
+    jwtSecretBase64Encoded: false,
+    jwtPrivateKey: '',
+    jwtAddTokenTo: 'header',
+    jwtPayload: '{}',
+    jwtHeaderPrefix: 'Bearer',
+    jwtHeaders: '{}',
+    asapAlgorithm: 'RS256',
+    asapIssuer: '',
+    asapAudience: '',
+    asapKeyId: '',
+    asapPrivateKey: '',
+    asapSubject: '',
+    asapExpiresIn: '3600',
+    asapAdditionalClaims: '{}'
   });
 });
 
@@ -343,11 +397,46 @@ test('shared auth model maps Digest auth to and from renderer editor fields', ()
     hawkDelegation: '',
     hawkTimestamp: '',
     hawkIncludePayloadHash: false,
+    awsAccessKey: '',
+    awsSecretKey: '',
+    awsAddAuthDataTo: 'header',
+    awsRegion: '',
+    awsService: '',
+    awsSessionToken: '',
     clientPfxPath: '',
     clientCertPath: '',
     clientKeyPath: '',
     clientCaPath: '',
-    clientPassphrase: ''
+    clientPassphrase: '',
+    ntlmUsername: '',
+    ntlmPassword: '',
+    ntlmDisableRetryingRequest: false,
+    ntlmDomain: '',
+    ntlmWorkstation: '',
+    akamaiAccessToken: '',
+    akamaiClientToken: '',
+    akamaiClientSecret: '',
+    akamaiNonce: '',
+    akamaiTimestamp: '',
+    akamaiBaseUrl: '',
+    akamaiHeadersToSign: '',
+    akamaiMaxBodySize: '',
+    jwtAlgorithm: 'HS256',
+    jwtSecret: '',
+    jwtSecretBase64Encoded: false,
+    jwtPrivateKey: '',
+    jwtAddTokenTo: 'header',
+    jwtPayload: '{}',
+    jwtHeaderPrefix: 'Bearer',
+    jwtHeaders: '{}',
+    asapAlgorithm: 'RS256',
+    asapIssuer: '',
+    asapAudience: '',
+    asapKeyId: '',
+    asapPrivateKey: '',
+    asapSubject: '',
+    asapExpiresIn: '3600',
+    asapAdditionalClaims: '{}'
   });
 
   assert.deepEqual(authFromEditorState({
@@ -419,6 +508,180 @@ test('shared auth model maps Hawk auth to and from renderer editor fields', () =
     delegation: 'delegated-by',
     timestamp: '1777291200',
     includePayloadHash: true
+  });
+});
+
+test('shared auth model maps AWS Signature auth to and from renderer editor fields', () => {
+  const editorState = authEditorState({
+    type: 'aws',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataToQuery: true
+  });
+  assert.equal(editorState.awsAccessKey, 'AKIDEXAMPLE');
+  assert.equal(editorState.awsSecretKey, 'aws-secret');
+  assert.equal(editorState.awsAddAuthDataTo, 'query');
+  assert.equal(editorState.awsRegion, 'us-east-1');
+  assert.equal(editorState.awsService, 'execute-api');
+  assert.equal(editorState.awsSessionToken, 'session-token');
+
+  assert.deepEqual(authFromEditorState({
+    type: 'aws',
+    awsAccessKey: 'AKIDEXAMPLE',
+    awsSecretKey: 'aws-secret',
+    awsAddAuthDataTo: 'query',
+    awsRegion: 'us-east-1',
+    awsService: 'execute-api',
+    awsSessionToken: 'session-token'
+  }), {
+    type: 'aws',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataToQuery: true
+  });
+});
+
+test('shared auth model maps NTLM Akamai JWT Bearer and ASAP editor fields', () => {
+  const ntlmState = authEditorState({
+    type: 'ntlm',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    domain: 'POSTMETER',
+    workstation: 'WORKSTATION'
+  });
+  assert.equal(ntlmState.ntlmUsername, 'ada');
+  assert.equal(ntlmState.ntlmDisableRetryingRequest, true);
+  assert.deepEqual(authFromEditorState({
+    type: 'ntlm',
+    ntlmUsername: 'ada',
+    ntlmPassword: 'secret',
+    ntlmDisableRetryingRequest: true,
+    ntlmDomain: 'POSTMETER',
+    ntlmWorkstation: 'WORKSTATION'
+  }), {
+    type: 'ntlm',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    domain: 'POSTMETER',
+    workstation: 'WORKSTATION'
+  });
+
+  const akamaiState = authEditorState({
+    type: 'akamaiEdgeGrid',
+    accessToken: 'access',
+    clientToken: 'client',
+    clientSecret: 'secret',
+    nonce: 'nonce',
+    timestamp: '20260427T12:00:00+0000',
+    baseUrl: 'https://edge.example.test',
+    headersToSign: 'x-one x-two',
+    maxBodySize: '1024'
+  });
+  assert.equal(akamaiState.akamaiAccessToken, 'access');
+  assert.equal(akamaiState.akamaiBaseUrl, 'https://edge.example.test');
+  assert.deepEqual(authFromEditorState({
+    type: 'akamaiEdgeGrid',
+    akamaiAccessToken: 'access',
+    akamaiClientToken: 'client',
+    akamaiClientSecret: 'secret',
+    akamaiNonce: 'nonce',
+    akamaiTimestamp: '20260427T12:00:00+0000',
+    akamaiBaseUrl: 'https://edge.example.test',
+    akamaiHeadersToSign: 'x-one x-two',
+    akamaiMaxBodySize: '1024'
+  }), {
+    type: 'akamaiEdgeGrid',
+    accessToken: 'access',
+    clientToken: 'client',
+    clientSecret: 'secret',
+    nonce: 'nonce',
+    timestamp: '20260427T12:00:00+0000',
+    baseUrl: 'https://edge.example.test',
+    headersToSign: 'x-one x-two',
+    maxBodySize: '1024'
+  });
+
+  const jwtState = authEditorState({
+    type: 'jwtBearer',
+    algorithm: 'PS256',
+    privateKey: 'private-key',
+    claims: '{"claim":true}',
+    jwtHeaders: '{"kid":"jwt-kid"}',
+    headerPrefix: 'JWT',
+    addTokenTo: 'Request URL'
+  });
+  assert.equal(jwtState.jwtAlgorithm, 'PS256');
+  assert.equal(jwtState.jwtAddTokenTo, 'query');
+  assert.equal(jwtState.jwtHeaders, '{"kid":"jwt-kid"}');
+  assert.deepEqual(authFromEditorState({
+    type: 'jwtBearer',
+    jwtAlgorithm: 'HS512',
+    jwtSecret: 'secret',
+    jwtSecretBase64Encoded: true,
+    jwtPayload: '{"claim":true}',
+    jwtHeaderPrefix: 'JWT',
+    jwtHeaders: '{"typ":"JWT"}',
+    jwtAddTokenTo: 'query'
+  }), {
+    type: 'jwtBearer',
+    algorithm: 'HS512',
+    secret: 'secret',
+    secretBase64Encoded: true,
+    privateKey: '',
+    keyId: '',
+    issuer: '',
+    subject: '',
+    audience: '',
+    expiresIn: '300',
+    claims: '{"claim":true}',
+    jwtHeaders: '{"typ":"JWT"}',
+    headerPrefix: 'JWT',
+    addTokenTo: 'query'
+  });
+
+  const asapState = authEditorState({
+    type: 'asap',
+    algorithm: 'ES256',
+    issuer: 'issuer',
+    audience: 'audience',
+    keyId: 'kid',
+    privateKey: 'private-key',
+    subject: 'subject',
+    expiresIn: '60',
+    additionalClaims: '{"scope":["read"],"tenant":"postmeter"}'
+  });
+  assert.equal(asapState.asapAlgorithm, 'ES256');
+  assert.equal(asapState.asapPrivateKey, 'private-key');
+  assert.equal(asapState.asapAdditionalClaims, '{"scope":["read"],"tenant":"postmeter"}');
+  assert.deepEqual(authFromEditorState({
+    type: 'asap',
+    asapAlgorithm: 'ES256',
+    asapIssuer: 'issuer',
+    asapAudience: 'audience',
+    asapKeyId: 'kid',
+    asapPrivateKey: 'private-key',
+    asapSubject: 'subject',
+    asapExpiresIn: '60',
+    asapAdditionalClaims: '{"scope":["read"],"tenant":"postmeter"}'
+  }), {
+    type: 'asap',
+    algorithm: 'ES256',
+    privateKey: 'private-key',
+    secret: '',
+    issuer: 'issuer',
+    subject: 'subject',
+    audience: 'audience',
+    keyId: 'kid',
+    expiresIn: '60',
+    additionalClaims: '{"scope":["read"],"tenant":"postmeter"}'
   });
 });
 

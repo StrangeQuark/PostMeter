@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { BODY_TYPES, collectionModel, folderModel, keyValue, requestModel } = require('./models');
+const { normalizeAuth } = require('./authModel');
 const { collectSandboxPackageReferencesFromCollection } = require('./sandboxPackageCache');
 const { clientCertificateMatchesUrl, findMatchingClientCertificate } = require('./tlsSettings');
 
@@ -782,14 +783,15 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
     };
   }
   if (type === 'awsv4' || type === 'aws') {
+    const awsParams = authNode.awsv4 || authNode.aws;
     return {
       type: 'aws',
-      accessKey: authParam(authNode.awsv4 || authNode.aws, 'accessKey'),
-      secretKey: authParam(authNode.awsv4 || authNode.aws, 'secretKey'),
-      region: authParam(authNode.awsv4 || authNode.aws, 'region'),
-      service: authParam(authNode.awsv4 || authNode.aws, 'service') || authParam(authNode.awsv4 || authNode.aws, 'serviceName'),
-      sessionToken: authParam(authNode.awsv4 || authNode.aws, 'sessionToken'),
-      addAuthDataToQuery: String(authParam(authNode.awsv4 || authNode.aws, 'addAuthDataToQuery')).toLowerCase() === 'true'
+      accessKey: authParam(awsParams, 'accessKey'),
+      secretKey: authParam(awsParams, 'secretKey'),
+      region: authParam(awsParams, 'region'),
+      service: authParam(awsParams, 'service') || authParam(awsParams, 'serviceName'),
+      sessionToken: authParam(awsParams, 'sessionToken'),
+      addAuthDataToQuery: postmanAwsAddAuthDataToQuery(awsParams)
     };
   }
   if (type === 'oauth1') {
@@ -821,17 +823,23 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'ntlm',
       username: authParam(authNode.ntlm, 'username'),
       password: authParam(authNode.ntlm, 'password'),
+      disableRetryingRequest: authBooleanParam(authNode.ntlm, 'disableRetryingRequest'),
       domain: authParam(authNode.ntlm, 'domain'),
       workstation: authParam(authNode.ntlm, 'workstation')
     };
   }
   if (type === 'akamai' || type === 'edgegrid' || type === 'akamaiedgegrid') {
+    const edgeGrid = authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid;
     return {
       type: 'akamaiEdgeGrid',
-      accessToken: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'accessToken'),
-      clientToken: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'clientToken'),
-      clientSecret: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'clientSecret'),
-      headersToSign: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'headersToSign')
+      accessToken: authParam(edgeGrid, 'accessToken'),
+      clientToken: authParam(edgeGrid, 'clientToken'),
+      clientSecret: authParam(edgeGrid, 'clientSecret'),
+      nonce: authParam(edgeGrid, 'nonce'),
+      timestamp: authParam(edgeGrid, 'timestamp'),
+      baseUrl: authParam(edgeGrid, 'baseUrl') || authParam(edgeGrid, 'baseURL'),
+      headersToSign: authParam(edgeGrid, 'headersToSign'),
+      maxBodySize: authParam(edgeGrid, 'maxBodySize') || authParam(edgeGrid, 'maxBodySizeBytes')
     };
   }
   if (type === 'jwt' || type === 'jwtbearer' || type === 'jwt-bearer') {
@@ -840,6 +848,7 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'jwtBearer',
       algorithm: authParam(jwt, 'algorithm') || authParam(jwt, 'alg') || 'HS256',
       secret: authParam(jwt, 'secret') || authParam(jwt, 'clientSecret'),
+      secretBase64Encoded: authBooleanParam(jwt, 'secretBase64Encoded') || authBooleanParam(jwt, 'secretBase64'),
       privateKey: authParam(jwt, 'privateKey') || authParam(jwt, 'key'),
       keyId: authParam(jwt, 'keyId') || authParam(jwt, 'kid'),
       issuer: authParam(jwt, 'issuer') || authParam(jwt, 'iss'),
@@ -847,9 +856,9 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       audience: authParam(jwt, 'audience') || authParam(jwt, 'aud'),
       expiresIn: authParam(jwt, 'expiresIn') || '300',
       claims: authParam(jwt, 'claims') || authParam(jwt, 'payload'),
+      jwtHeaders: authParam(jwt, 'jwtHeaders') || authParam(jwt, 'headers'),
       headerPrefix: authParam(jwt, 'headerPrefix') || 'Bearer',
-      addTokenTo: authParam(jwt, 'addTokenTo') || 'header',
-      queryParamName: authParam(jwt, 'queryParamName') || 'token'
+      addTokenTo: postmanOauth2AddAuthDataTo(authParam(jwt, 'addTokenTo') || 'header')
     };
   }
   if (type === 'asap') {
@@ -863,7 +872,8 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       subject: authParam(asap, 'subject') || authParam(asap, 'sub'),
       audience: authParam(asap, 'audience') || authParam(asap, 'aud'),
       keyId: authParam(asap, 'keyId') || authParam(asap, 'kid'),
-      expiresIn: authParam(asap, 'expiresIn') || '300'
+      expiresIn: authParam(asap, 'expiresIn') || authParam(asap, 'expiry') || '3600',
+      additionalClaims: authParam(asap, 'additionalClaims') || authParam(asap, 'claims') || authParam(asap, 'payload') || '{}'
     };
   }
   return inheritedAuth || { type: 'none' };
@@ -913,7 +923,15 @@ function authBooleanParam(values, key) {
 
 function postmanOauth2AddAuthDataTo(value) {
   const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
-  return normalized === 'requesturl' || normalized === 'url' || normalized === 'query' ? 'query' : 'header';
+  return normalized === 'requesturl' || normalized === 'url' || normalized === 'query' || normalized === 'queryparam' ? 'query' : 'header';
+}
+
+function postmanAwsAddAuthDataToQuery(values) {
+  const placement = authParam(values, 'addAuthDataTo') || authParam(values, 'addAuthorizationDataTo') || authParam(values, 'addTokenTo');
+  if (placement) {
+    return postmanOauth2AddAuthDataTo(placement) === 'query';
+  }
+  return String(authParam(values, 'addAuthDataToQuery')).trim().toLowerCase() === 'true';
 }
 
 function postmanOauth2ClientAuthentication(value) {
@@ -1457,9 +1475,38 @@ function postmanRawLanguageForBodyType(bodyType) {
 
 function exportPostmanRequestAuth(request, rawAuth) {
   if (rawAuth && typeof rawAuth === 'object' && Object.keys(rawAuth).length) {
-    return clonePostmanObject(rawAuth);
+    const rawModel = normalizeAuth(importAuth(rawAuth, { type: 'none' }));
+    const requestModelAuth = normalizeAuth(request?.auth);
+    if (JSON.stringify(rawModel) === JSON.stringify(requestModelAuth)) {
+      return sanitizePostmanAuthForCurrentParity(rawAuth);
+    }
   }
   return exportPostmanAuthModel(request?.auth);
+}
+
+function sanitizePostmanAuthForCurrentParity(rawAuth) {
+  const auth = clonePostmanObject(rawAuth);
+  const type = String(auth.type || '').toLowerCase();
+  if (type === 'jwt' || type === 'jwtbearer' || type === 'jwt-bearer') {
+    stripAuthParams(auth, ['jwt', 'jwtBearer', 'jwt-bearer', 'jwtbearer'], ['queryParamName']);
+  }
+  if (type === 'asap') {
+    stripAuthParams(auth, ['asap'], ['headerPrefix']);
+  }
+  return auth;
+}
+
+function stripAuthParams(auth, candidateKeys, paramKeys) {
+  const remove = new Set(paramKeys);
+  for (const key of candidateKeys) {
+    if (Array.isArray(auth[key])) {
+      auth[key] = auth[key].filter((item) => !remove.has(item?.key));
+    } else if (auth[key] && typeof auth[key] === 'object') {
+      for (const paramKey of remove) {
+        delete auth[key][paramKey];
+      }
+    }
+  }
 }
 
 function exportPostmanAuthModel(auth) {
@@ -1564,7 +1611,7 @@ function exportPostmanAuthModel(auth) {
         { key: 'region', value: auth.region || '', type: 'string' },
         { key: 'service', value: auth.service || '', type: 'string' },
         { key: 'sessionToken', value: auth.sessionToken || '', type: 'string' },
-        { key: 'addAuthDataToQuery', value: auth.addAuthDataToQuery === true ? 'true' : 'false', type: 'boolean' }
+        { key: 'addAuthDataTo', value: auth.addAuthDataToQuery === true ? 'Request URL' : 'Request Headers', type: 'string' }
       ]
     };
   }
@@ -1596,6 +1643,7 @@ function exportPostmanAuthModel(auth) {
       ntlm: [
         { key: 'username', value: auth.username || '', type: 'string' },
         { key: 'password', value: auth.password || '', type: 'string' },
+        { key: 'disableRetryingRequest', value: auth.disableRetryingRequest === true ? 'true' : 'false', type: 'boolean' },
         { key: 'domain', value: auth.domain || '', type: 'string' },
         { key: 'workstation', value: auth.workstation || '', type: 'string' }
       ]
@@ -1608,7 +1656,11 @@ function exportPostmanAuthModel(auth) {
         { key: 'accessToken', value: auth.accessToken || '', type: 'string' },
         { key: 'clientToken', value: auth.clientToken || '', type: 'string' },
         { key: 'clientSecret', value: auth.clientSecret || '', type: 'string' },
-        { key: 'headersToSign', value: auth.headersToSign || '', type: 'string' }
+        { key: 'nonce', value: auth.nonce || '', type: 'string' },
+        { key: 'timestamp', value: auth.timestamp || '', type: 'string' },
+        { key: 'baseUrl', value: auth.baseUrl || '', type: 'string' },
+        { key: 'headersToSign', value: auth.headersToSign || '', type: 'string' },
+        { key: 'maxBodySize', value: auth.maxBodySize || '', type: 'string' }
       ]
     };
   }
@@ -1618,6 +1670,7 @@ function exportPostmanAuthModel(auth) {
       'jwt-bearer': [
         { key: 'algorithm', value: auth.algorithm || 'HS256', type: 'string' },
         { key: 'secret', value: auth.secret || '', type: 'string' },
+        { key: 'secretBase64Encoded', value: auth.secretBase64Encoded === true ? 'true' : 'false', type: 'boolean' },
         { key: 'privateKey', value: auth.privateKey || '', type: 'string' },
         { key: 'keyId', value: auth.keyId || '', type: 'string' },
         { key: 'issuer', value: auth.issuer || '', type: 'string' },
@@ -1625,9 +1678,9 @@ function exportPostmanAuthModel(auth) {
         { key: 'audience', value: auth.audience || '', type: 'string' },
         { key: 'expiresIn', value: auth.expiresIn || '300', type: 'string' },
         { key: 'claims', value: auth.claims || '', type: 'string' },
+        { key: 'jwtHeaders', value: auth.jwtHeaders || '', type: 'string' },
         { key: 'headerPrefix', value: auth.headerPrefix || 'Bearer', type: 'string' },
-        { key: 'addTokenTo', value: auth.addTokenTo || 'header', type: 'string' },
-        { key: 'queryParamName', value: auth.queryParamName || 'token', type: 'string' }
+        { key: 'addTokenTo', value: auth.addTokenTo === 'query' ? 'Query Param' : 'Request Header', type: 'string' }
       ]
     };
   }
@@ -1642,7 +1695,8 @@ function exportPostmanAuthModel(auth) {
         { key: 'subject', value: auth.subject || '', type: 'string' },
         { key: 'audience', value: auth.audience || '', type: 'string' },
         { key: 'keyId', value: auth.keyId || '', type: 'string' },
-        { key: 'expiresIn', value: auth.expiresIn || '300', type: 'string' }
+        { key: 'expiry', value: auth.expiresIn || '3600', type: 'string' },
+        { key: 'additionalClaims', value: auth.additionalClaims || '{}', type: 'string' }
       ]
     };
   }

@@ -78,6 +78,41 @@
     'authHawkDelegationInput',
     'authHawkTimestampInput',
     'authHawkIncludePayloadHashInput',
+    'authAwsAccessKeyInput',
+    'authAwsSecretKeyInput',
+    'authAwsAddAuthDataToSelect',
+    'authAwsRegionInput',
+    'authAwsServiceInput',
+    'authAwsSessionTokenInput',
+    'authNtlmUsernameInput',
+    'authNtlmPasswordInput',
+    'authNtlmDisableRetryingRequestInput',
+    'authNtlmDomainInput',
+    'authNtlmWorkstationInput',
+    'authAkamaiAccessTokenInput',
+    'authAkamaiClientTokenInput',
+    'authAkamaiClientSecretInput',
+    'authAkamaiNonceInput',
+    'authAkamaiTimestampInput',
+    'authAkamaiBaseUrlInput',
+    'authAkamaiHeadersToSignInput',
+    'authAkamaiMaxBodySizeInput',
+    'authJwtAlgorithmSelect',
+    'authJwtSecretInput',
+    'authJwtSecretBase64EncodedInput',
+    'authJwtPrivateKeyInput',
+    'authJwtAddTokenToSelect',
+    'authJwtPayloadInput',
+    'authJwtHeaderPrefixInput',
+    'authJwtHeadersInput',
+    'authAsapAlgorithmSelect',
+    'authAsapIssuerInput',
+    'authAsapAudienceInput',
+    'authAsapKeyIdInput',
+    'authAsapPrivateKeyInput',
+    'authAsapSubjectInput',
+    'authAsapAdditionalClaimsInput',
+    'authAsapExpiresInInput',
     'authClientPfxPathInput',
     'authClientCertPathInput',
     'authClientKeyPathInput',
@@ -139,7 +174,8 @@
       ['uiSnapshotSmoke', 'PostMeter UI Snapshot'],
       ['uiTypographySmoke', 'PostMeter UI Typography'],
       ['uiOauthSmoke', 'PostMeter UI OAuth'],
-      ['uiHawkSmoke', 'PostMeter UI Hawk']
+      ['uiHawkSmoke', 'PostMeter UI Hawk'],
+      ['uiAwsSmoke', 'PostMeter UI AWS']
     ]) {
       if (params.get(flag) === '1') {
         doc.title = `${prefix}:FAIL:${message}`;
@@ -603,6 +639,9 @@
     if (id === 'authOauthGrantTypeSelect') {
       syncOauth2GrantDataset(input);
     }
+    if (id === 'authJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
+    }
     options.onAuthInput?.();
   }
 
@@ -612,6 +651,9 @@
     }
     if (id === 'performanceAuthOauthGrantTypeSelect') {
       syncOauth2GrantDataset(input);
+    }
+    if (id === 'performanceAuthJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
     }
     options.onPerformanceAuthInput?.();
   }
@@ -623,6 +665,9 @@
     if (id === 'collectionAuthOauthGrantTypeSelect') {
       syncOauth2GrantDataset(input);
     }
+    if (id === 'collectionAuthJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
+    }
     options.onCollectionAuthInput?.();
   }
 
@@ -633,6 +678,9 @@
     if (id === 'folderAuthOauthGrantTypeSelect') {
       syncOauth2GrantDataset(input);
     }
+    if (id === 'folderAuthJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
+    }
     options.onFolderAuthInput?.();
   }
 
@@ -640,6 +688,13 @@
     const section = input?.closest?.('[data-auth-section="oauth2"]');
     if (section) {
       section.dataset.oauth2GrantType = input.value || 'authorizationCode';
+    }
+  }
+
+  function syncJwtAlgorithmDataset(input) {
+    const section = input?.closest?.('[data-auth-section="jwtBearer"]');
+    if (section) {
+      section.dataset.jwtAlgorithmKind = String(input.value || 'HS256').toUpperCase().startsWith('HS') ? 'secret' : 'private';
     }
   }
 

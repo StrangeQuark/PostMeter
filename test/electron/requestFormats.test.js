@@ -41,6 +41,154 @@ test('exports and imports a single PostMeter request envelope', () => {
   });
 });
 
+test('native request import and export preserve expanded auth fields', () => {
+  const authCases = [
+    {
+      type: 'digest',
+      username: 'ada',
+      password: 'secret',
+      disableRetryingRequest: true,
+      realm: 'postmeter',
+      nonce: 'nonce',
+      algorithm: 'SHA-512-256-sess',
+      qop: 'auth',
+      opaque: 'opaque',
+      clientNonce: 'client',
+      nonceCount: '00000002'
+    },
+    {
+      type: 'oauth1',
+      consumerKey: 'consumer',
+      consumerSecret: 'consumer-secret',
+      token: 'token',
+      tokenSecret: 'token-secret',
+      signatureMethod: 'RSA-SHA512',
+      privateKey: 'private-key',
+      addAuthDataTo: 'queryOrBody',
+      callback: 'https://client.example.test/callback',
+      verifier: 'verifier',
+      timestamp: '1777291200',
+      nonce: 'nonce',
+      version: '1.0',
+      realm: 'realm',
+      includeBodyHash: true,
+      addEmptyParamsToSign: true
+    },
+    {
+      type: 'oauth2',
+      tokenType: 'Bearer',
+      headerPrefix: 'Bearer',
+      tokenName: 'Postman token',
+      addAuthDataTo: 'header',
+      accessToken: '{{accessToken}}',
+      autoRefreshToken: true,
+      shareToken: false,
+      authorizationUrl: 'https://auth.example.test/authorize',
+      tokenUrl: 'https://auth.example.test/token',
+      refreshTokenUrl: 'https://auth.example.test/refresh',
+      redirectUri: 'postmeter://oauth/callback',
+      clientId: 'client-id',
+      clientSecret: '{{clientSecret}}',
+      username: 'resource-owner',
+      password: '{{password}}',
+      scopes: 'openid profile',
+      state: 'state',
+      codeChallengeMethod: 'S256',
+      codeVerifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ',
+      authorizeUsingBrowser: true,
+      clientAuthentication: 'body',
+      authRequestParams: [{ enabled: true, key: 'prompt', value: 'consent' }],
+      tokenRequestParams: [{ enabled: true, key: 'resource', value: 'api', sendIn: 'body' }],
+      refreshRequestParams: [{ enabled: true, key: 'resource', value: 'api', sendIn: 'body' }],
+      grantType: 'authorizationCodePkce'
+    },
+    {
+      type: 'hawk',
+      authId: 'hawk-id',
+      authKey: 'hawk-key',
+      algorithm: 'sha1',
+      user: 'user',
+      nonce: 'nonce',
+      extraData: 'ext',
+      app: 'app',
+      delegation: 'dlg',
+      timestamp: '1777291200',
+      includePayloadHash: true
+    },
+    {
+      type: 'aws',
+      accessKey: 'access',
+      secretKey: 'secret',
+      region: 'us-east-1',
+      service: 'execute-api',
+      sessionToken: 'session',
+      addAuthDataToQuery: true
+    },
+    {
+      type: 'ntlm',
+      username: 'user',
+      password: 'pass',
+      disableRetryingRequest: true,
+      domain: 'EXAMPLE',
+      workstation: 'WORKSTATION'
+    },
+    {
+      type: 'akamaiEdgeGrid',
+      accessToken: 'access',
+      clientToken: 'client',
+      clientSecret: 'secret',
+      nonce: 'nonce',
+      timestamp: '20260427T120000+0000',
+      baseUrl: 'https://api.example.test',
+      headersToSign: 'host;x-test',
+      maxBodySize: '2048'
+    },
+    {
+      type: 'jwtBearer',
+      algorithm: 'PS256',
+      secret: '',
+      secretBase64Encoded: false,
+      privateKey: 'private-key',
+      keyId: 'jwt-kid',
+      issuer: 'issuer',
+      subject: 'subject',
+      audience: 'audience',
+      expiresIn: '120',
+      claims: '{"scope":"read"}',
+      jwtHeaders: '{"typ":"JWT"}',
+      headerPrefix: 'JWT',
+      addTokenTo: 'query'
+    },
+    {
+      type: 'asap',
+      algorithm: 'ES256',
+      privateKey: 'private-key',
+      issuer: 'issuer',
+      subject: 'subject',
+      audience: 'audience',
+      keyId: 'asap-kid',
+      expiresIn: '3600',
+      additionalClaims: '{"tenant":"postmeter"}'
+    }
+  ];
+
+  for (const auth of authCases) {
+    const exported = exportRequestToJson({
+      name: `${auth.type} auth`,
+      method: 'GET',
+      url: `https://api.example.test/${auth.type}`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth,
+      scripts: { preRequest: '', tests: '' }
+    });
+    const imported = importRequestFromText(exported);
+    assert.deepEqual(imported.auth, auth);
+  }
+});
+
 test('imports raw PostMeter request JSON and curl command text as single requests', () => {
   const rawImported = importRequestFromText(JSON.stringify({
     name: 'Raw Request',

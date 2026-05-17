@@ -92,6 +92,81 @@ function hawkEditorValues(prefix = '', overrides = {}) {
   return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
 }
 
+function awsEditorValues(prefix = '', overrides = {}) {
+  const base = prefix ? `${prefix}AuthAws` : 'authAws';
+  const values = {
+    AccessKeyInput: { value: '' },
+    SecretKeyInput: { value: '' },
+    AddAuthDataToSelect: { value: 'header' },
+    RegionInput: { value: '' },
+    ServiceInput: { value: '' },
+    SessionTokenInput: { value: '' },
+    ...overrides
+  };
+  return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
+}
+
+function ntlmEditorValues(prefix = '', overrides = {}) {
+  const base = prefix ? `${prefix}AuthNtlm` : 'authNtlm';
+  const values = {
+    UsernameInput: { value: '' },
+    PasswordInput: { value: '' },
+    DisableRetryingRequestInput: { checked: false },
+    DomainInput: { value: '' },
+    WorkstationInput: { value: '' },
+    ...overrides
+  };
+  return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
+}
+
+function akamaiEditorValues(prefix = '', overrides = {}) {
+  const base = prefix ? `${prefix}AuthAkamai` : 'authAkamai';
+  const values = {
+    AccessTokenInput: { value: '' },
+    ClientTokenInput: { value: '' },
+    ClientSecretInput: { value: '' },
+    NonceInput: { value: '' },
+    TimestampInput: { value: '' },
+    BaseUrlInput: { value: '' },
+    HeadersToSignInput: { value: '' },
+    MaxBodySizeInput: { value: '' },
+    ...overrides
+  };
+  return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
+}
+
+function jwtEditorValues(prefix = '', overrides = {}) {
+  const base = prefix ? `${prefix}AuthJwt` : 'authJwt';
+  const values = {
+    AlgorithmSelect: { value: 'HS256', closest: () => null },
+    SecretInput: { value: '' },
+    SecretBase64EncodedInput: { checked: false },
+    PrivateKeyInput: { value: '' },
+    AddTokenToSelect: { value: 'header' },
+    PayloadInput: { value: '{}' },
+    HeaderPrefixInput: { value: 'Bearer' },
+    HeadersInput: { value: '{}' },
+    ...overrides
+  };
+  return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
+}
+
+function asapEditorValues(prefix = '', overrides = {}) {
+  const base = prefix ? `${prefix}AuthAsap` : 'authAsap';
+  const values = {
+    AlgorithmSelect: { value: 'RS256' },
+    IssuerInput: { value: '' },
+    AudienceInput: { value: '' },
+    KeyIdInput: { value: '' },
+    PrivateKeyInput: { value: '' },
+    SubjectInput: { value: '' },
+    AdditionalClaimsInput: { value: '{}' },
+    ExpiresInInput: { value: '3600' },
+    ...overrides
+  };
+  return Object.entries(values).map(([suffix, value]) => [`${base}${suffix}`, value]);
+}
+
 test('request editor panels choose code editor language from body type', () => {
   assert.equal(bodyTypeCodeLanguage('RAW_JSON'), 'json');
   assert.equal(bodyTypeCodeLanguage('RAW_TEXT'), 'text');
@@ -226,6 +301,11 @@ test('request editor panels read auth editor inputs through the shared auth mode
       }),
       ...oauth1EditorValues(),
       ...hawkEditorValues(),
+      ...awsEditorValues(),
+      ...ntlmEditorValues(),
+      ...akamaiEditorValues(),
+      ...jwtEditorValues(),
+      ...asapEditorValues(),
       ['authDigestUsernameInput', { value: '' }],
     ['authDigestPasswordInput', { value: '' }],
     ['authDigestDisableRetryingRequestInput', { checked: false }],
@@ -324,6 +404,11 @@ test('request editor panels read Digest auth editor inputs', () => {
       ...oauth2EditorValues(),
       ...oauth1EditorValues(),
       ...hawkEditorValues(),
+      ...awsEditorValues(),
+      ...ntlmEditorValues(),
+      ...akamaiEditorValues(),
+      ...jwtEditorValues(),
+      ...asapEditorValues(),
       ['authDigestUsernameInput', { value: 'ada' }],
     ['authDigestPasswordInput', { value: 'secret' }],
     ['authDigestDisableRetryingRequestInput', { checked: true }],
@@ -389,6 +474,11 @@ test('request editor panels read Hawk auth editor inputs', () => {
       TimestampInput: { value: '1777291200' },
       IncludePayloadHashInput: { checked: true }
     }),
+    ...awsEditorValues(),
+    ...ntlmEditorValues(),
+    ...akamaiEditorValues(),
+    ...jwtEditorValues(),
+    ...asapEditorValues(),
     ['authDigestUsernameInput', { value: '' }],
     ['authDigestPasswordInput', { value: '' }],
     ['authDigestDisableRetryingRequestInput', { checked: false }],
@@ -430,6 +520,222 @@ test('request editor panels read Hawk auth editor inputs', () => {
   });
 });
 
+test('request editor panels read AWS Signature auth editor inputs', () => {
+  const values = new Map([
+    ['authTypeSelect', { value: 'aws' }],
+    ['authBearerTokenInput', { value: '' }],
+    ['authBasicUsernameInput', { value: '' }],
+    ['authBasicPasswordInput', { value: '' }],
+    ['authApiKeyLocationSelect', { value: 'header' }],
+    ['authApiKeyNameInput', { value: '' }],
+    ['authApiKeyValueInput', { value: '' }],
+    ['authCookieValueInput', { value: '' }],
+    ...oauth2EditorValues(),
+    ...oauth1EditorValues(),
+    ...hawkEditorValues(),
+    ...awsEditorValues('', {
+      AccessKeyInput: { value: 'AKIDEXAMPLE' },
+      SecretKeyInput: { value: 'aws-secret' },
+      AddAuthDataToSelect: { value: 'query' },
+      RegionInput: { value: 'us-east-1' },
+      ServiceInput: { value: 'execute-api' },
+      SessionTokenInput: { value: 'session-token' }
+    }),
+    ...ntlmEditorValues(),
+    ...akamaiEditorValues(),
+    ...jwtEditorValues(),
+    ...asapEditorValues(),
+    ['authDigestUsernameInput', { value: '' }],
+    ['authDigestPasswordInput', { value: '' }],
+    ['authDigestDisableRetryingRequestInput', { checked: false }],
+    ['authDigestRealmInput', { value: '' }],
+    ['authDigestNonceInput', { value: '' }],
+    ['authDigestAlgorithmSelect', { value: 'MD5' }],
+    ['authDigestQopInput', { value: 'auth' }],
+    ['authDigestNonceCountInput', { value: '' }],
+    ['authDigestClientNonceInput', { value: '' }],
+    ['authDigestOpaqueInput', { value: '' }],
+    ['authClientPfxPathInput', { value: '' }],
+    ['authClientCertPathInput', { value: '' }],
+    ['authClientKeyPathInput', { value: '' }],
+    ['authClientCaPathInput', { value: '' }],
+    ['authClientPassphraseInput', { value: '' }]
+  ]);
+  const fakeDoc = {
+    getElementById(id) {
+      const value = values.get(id);
+      if (!value) {
+        throw new Error(`Unexpected element lookup: ${id}`);
+      }
+      return value;
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc }), {
+    type: 'aws',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataToQuery: true
+  });
+});
+
+test('request editor panels read NTLM Akamai JWT Bearer and ASAP auth editor inputs', () => {
+  const baseValues = () => new Map([
+    ['authBearerTokenInput', { value: '' }],
+    ['authBasicUsernameInput', { value: '' }],
+    ['authBasicPasswordInput', { value: '' }],
+    ['authApiKeyLocationSelect', { value: 'header' }],
+    ['authApiKeyNameInput', { value: '' }],
+    ['authApiKeyValueInput', { value: '' }],
+    ['authCookieValueInput', { value: '' }],
+    ...oauth2EditorValues(),
+    ...oauth1EditorValues(),
+    ...hawkEditorValues(),
+    ...awsEditorValues(),
+    ['authDigestUsernameInput', { value: '' }],
+    ['authDigestPasswordInput', { value: '' }],
+    ['authDigestDisableRetryingRequestInput', { checked: false }],
+    ['authDigestRealmInput', { value: '' }],
+    ['authDigestNonceInput', { value: '' }],
+    ['authDigestAlgorithmSelect', { value: 'MD5' }],
+    ['authDigestQopInput', { value: 'auth' }],
+    ['authDigestNonceCountInput', { value: '' }],
+    ['authDigestClientNonceInput', { value: '' }],
+    ['authDigestOpaqueInput', { value: '' }],
+    ['authClientPfxPathInput', { value: '' }],
+    ['authClientCertPathInput', { value: '' }],
+    ['authClientKeyPathInput', { value: '' }],
+    ['authClientCaPathInput', { value: '' }],
+    ['authClientPassphraseInput', { value: '' }]
+  ]);
+  const collect = (entries) => {
+    const values = baseValues();
+    for (const [key, value] of entries) {
+      values.set(key, value);
+    }
+    return collectAuthFromEditor({
+      doc: {
+        getElementById(id) {
+          const value = values.get(id);
+          if (!value) {
+            throw new Error(`Unexpected element lookup: ${id}`);
+          }
+          return value;
+        }
+      }
+    });
+  };
+
+  assert.deepEqual(collect([
+    ['authTypeSelect', { value: 'ntlm' }],
+    ...ntlmEditorValues('', {
+      UsernameInput: { value: 'ada' },
+      PasswordInput: { value: 'secret' },
+      DisableRetryingRequestInput: { checked: true },
+      DomainInput: { value: 'POSTMETER' },
+      WorkstationInput: { value: 'WORKSTATION' }
+    }),
+    ...akamaiEditorValues(),
+    ...jwtEditorValues(),
+    ...asapEditorValues()
+  ]), {
+    type: 'ntlm',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    domain: 'POSTMETER',
+    workstation: 'WORKSTATION'
+  });
+
+  assert.deepEqual(collect([
+    ['authTypeSelect', { value: 'akamaiEdgeGrid' }],
+    ...ntlmEditorValues(),
+    ...akamaiEditorValues('', {
+      AccessTokenInput: { value: 'access' },
+      ClientTokenInput: { value: 'client' },
+      ClientSecretInput: { value: 'secret' },
+      NonceInput: { value: 'nonce' },
+      TimestampInput: { value: 'timestamp' },
+      BaseUrlInput: { value: 'https://edge.example.test' },
+      HeadersToSignInput: { value: 'x-one x-two' },
+      MaxBodySizeInput: { value: '1024' }
+    }),
+    ...jwtEditorValues(),
+    ...asapEditorValues()
+  ]), {
+    type: 'akamaiEdgeGrid',
+    accessToken: 'access',
+    clientToken: 'client',
+    clientSecret: 'secret',
+    nonce: 'nonce',
+    timestamp: 'timestamp',
+    baseUrl: 'https://edge.example.test',
+    headersToSign: 'x-one x-two',
+    maxBodySize: '1024'
+  });
+
+  assert.deepEqual(collect([
+    ['authTypeSelect', { value: 'jwtBearer' }],
+    ...ntlmEditorValues(),
+    ...akamaiEditorValues(),
+    ...jwtEditorValues('', {
+      AlgorithmSelect: { value: 'PS256', closest: () => null },
+      PrivateKeyInput: { value: 'private-key' },
+      PayloadInput: { value: '{"claim":true}' },
+      HeaderPrefixInput: { value: 'JWT' },
+      HeadersInput: { value: '{"kid":"jwt-kid"}' },
+      AddTokenToSelect: { value: 'query' }
+    }),
+    ...asapEditorValues()
+  ]), {
+    type: 'jwtBearer',
+    algorithm: 'PS256',
+    secret: '',
+    secretBase64Encoded: false,
+    privateKey: 'private-key',
+    keyId: '',
+    issuer: '',
+    subject: '',
+    audience: '',
+    expiresIn: '300',
+    claims: '{"claim":true}',
+    jwtHeaders: '{"kid":"jwt-kid"}',
+    headerPrefix: 'JWT',
+    addTokenTo: 'query'
+  });
+
+  assert.deepEqual(collect([
+    ['authTypeSelect', { value: 'asap' }],
+    ...ntlmEditorValues(),
+    ...akamaiEditorValues(),
+    ...jwtEditorValues(),
+    ...asapEditorValues('', {
+      AlgorithmSelect: { value: 'ES256' },
+      IssuerInput: { value: 'issuer' },
+      AudienceInput: { value: 'audience' },
+      KeyIdInput: { value: 'kid' },
+      PrivateKeyInput: { value: 'private-key' },
+      SubjectInput: { value: 'subject' },
+      AdditionalClaimsInput: { value: '{"scope":["read","write"],"tenant":"postmeter"}' },
+      ExpiresInInput: { value: '60' }
+    })
+  ]), {
+    type: 'asap',
+    algorithm: 'ES256',
+    privateKey: 'private-key',
+    secret: '',
+    issuer: 'issuer',
+    subject: 'subject',
+    audience: 'audience',
+    keyId: 'kid',
+    expiresIn: '60',
+    additionalClaims: '{"scope":["read","write"],"tenant":"postmeter"}'
+  });
+});
+
 test('request editor panels read OAuth 1.0 auth editor inputs', () => {
   const values = new Map([
     ['authTypeSelect', { value: 'oauth1' }],
@@ -459,6 +765,11 @@ test('request editor panels read OAuth 1.0 auth editor inputs', () => {
       AddEmptyParamsToSignInput: { checked: true }
       }),
       ...hawkEditorValues(),
+      ...awsEditorValues(),
+      ...ntlmEditorValues(),
+      ...akamaiEditorValues(),
+      ...jwtEditorValues(),
+      ...asapEditorValues(),
       ['authDigestUsernameInput', { value: '' }],
     ['authDigestPasswordInput', { value: '' }],
     ['authDigestDisableRetryingRequestInput', { checked: false }],
@@ -671,6 +982,11 @@ test('request editor panels can read prefixed auth editor inputs for performance
       ...oauth2EditorValues('performance'),
       ...oauth1EditorValues('performance'),
       ...hawkEditorValues('performance'),
+      ...awsEditorValues('performance'),
+      ...ntlmEditorValues('performance'),
+      ...akamaiEditorValues('performance'),
+      ...jwtEditorValues('performance'),
+      ...asapEditorValues('performance'),
       ['performanceAuthDigestUsernameInput', { value: '' }],
     ['performanceAuthDigestPasswordInput', { value: '' }],
     ['performanceAuthDigestDisableRetryingRequestInput', { checked: false }],

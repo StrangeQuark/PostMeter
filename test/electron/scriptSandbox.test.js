@@ -1014,7 +1014,9 @@ test('normalizes broader Postman pm.sendRequest inputs and commits jar side effe
             { key: 'accessKey', value: 'akid' },
             { key: 'secretKey', value: 'secret' },
             { key: 'region', value: 'us-east-1' },
-            { key: 'service', value: 'execute-api' }
+            { key: 'service', value: 'execute-api' },
+            { key: 'sessionToken', value: 'session-token' },
+            { key: 'addAuthDataTo', value: 'Request URL' }
           ]
         }
       });
@@ -1074,6 +1076,8 @@ test('normalizes broader Postman pm.sendRequest inputs and commits jar side effe
   assert.match(sent[1].request.body, /query Ok/);
   assert.equal(sent[2].request.auth.type, 'aws');
   assert.equal(sent[2].request.auth.region, 'us-east-1');
+  assert.equal(sent[2].request.auth.sessionToken, 'session-token');
+  assert.equal(sent[2].request.auth.addAuthDataToQuery, true);
   assert.equal(sent[2].request.proxy.host, 'proxy.example.test');
   assert.equal(sent[2].request.proxy.port, '8080');
   assert.equal(execution.cookies.find((item) => item.name === 'sendSide').value, 'effect');
