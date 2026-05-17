@@ -221,8 +221,12 @@
         : { enabled: false, storeResponses: true },
       autoHeaders: normalizeRequestAutoHeaders(request.autoHeaders)
     };
-    if (normalized.auth?.type === 'autoRefresh' && request.refreshingAuthOriginalAuth && typeof request.refreshingAuthOriginalAuth === 'object') {
+    if ((normalized.auth?.type === 'autoRefresh' || request.useRefreshingAuthCookie === true)
+      && request.refreshingAuthOriginalAuth && typeof request.refreshingAuthOriginalAuth === 'object') {
       normalized.refreshingAuthOriginalAuth = cloneJson(request.refreshingAuthOriginalAuth) || { type: 'none' };
+    }
+    if (request.useRefreshingAuthCookie === true) {
+      normalized.useRefreshingAuthCookie = true;
     }
     return normalized;
   }

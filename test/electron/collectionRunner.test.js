@@ -291,27 +291,137 @@ test('runner auth refresh injects refreshed cookies only into requests using ref
     },
     requests: [
       { ...requestModel({ id: 'cookie-resource', name: 'Cookie Resource', url: 'https://api.example.test/cookie', auth: { type: 'cookie', value: 'sid=stale' } }), iterations: 1 },
-      { ...requestModel({ id: 'auto-cookie-resource', name: 'Auto Cookie Resource', url: 'https://api.example.test/auto-cookie', auth: { type: 'autoRefresh' } }), iterations: 1 }
+      {
+        ...requestModel({
+          id: 'auto-cookie-resource',
+          name: 'Auto Cookie Resource',
+          url: 'https://api.example.test/auto-cookie',
+          auth: { type: 'none' },
+          cookieJar: { enabled: true, storeResponses: true },
+          useRefreshingAuthCookie: true,
+          refreshingAuthOriginalAuth: { type: 'none' }
+        }),
+        iterations: 1
+      }
     ]
   };
   const observed = [];
   const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
-    sendRequest: async (request) => {
+    sendRequest: async (request, _environment, options = {}) => {
       if (request.id === 'refresh-cookie') {
         return {
           ...response(200, '{}'),
           updatedCookies: [{ enabled: true, name: 'sid', value: 'fresh-cookie', domain: 'example.test', path: '/' }]
         };
       }
-      observed.push({ id: request.id, auth: request.auth });
+      observed.push({
+        id: request.id,
+        auth: request.auth,
+        cookieJar: (options.cookieJar || []).map((cookie) => `${cookie.name}=${cookie.value}`),
+        cookieJarEnabled: request.cookieJar?.enabled === true
+      });
       return response(200, '{}');
     }
   });
 
   assert.equal(result.passed, true);
   assert.deepEqual(observed, [
-    { id: 'cookie-resource', auth: { type: 'cookie', value: 'sid=stale' } },
-    { id: 'auto-cookie-resource', auth: { type: 'cookie', value: 'sid=fresh-cookie' } }
+    { id: 'cookie-resource', auth: { type: 'cookie', value: 'sid=stale' }, cookieJar: ['sid=fresh-cookie', 'sid=fresh-cookie'], cookieJarEnabled: false },
+    { id: 'auto-cookie-resource', auth: { type: 'none' }, cookieJar: ['sid=fresh-cookie', 'sid=fresh-cookie'], cookieJarEnabled: true }
+  ]);
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
+test('runner auth refresh can rotate refresh cookies before getting access cookies', async () => {
+  const runner = {
+    id: 'runner-cookie-refresh-token-request',
+    name: 'Runner Cookie Refresh Token Request',
+    environmentId: 'env',
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'cookie',
+      refreshBeforeRun: true,
+      outputs: [
+        { slot: 'refreshToken', source: 'cookie', path: 'refresh_sid', variable: '' },
+        { slot: 'cookie', source: 'cookie', path: 'access_sid', variable: '' }
+      ],
+      refreshTokenRequest: {
+        id: 'rotate-refresh-cookie',
+        name: 'Rotate Refresh Cookie',
+        method: 'POST',
+        url: 'https://auth.example.test/refresh-cookie'
+      },
+      request: {
+        id: 'get-access-cookie',
+        name: 'Get Access Cookie',
+        method: 'POST',
+        url: 'https://auth.example.test/access-cookie',
+        auth: { type: 'none' },
+        cookieJar: { enabled: true, storeResponses: true },
+        useRefreshingAuthCookie: true,
+        refreshingAuthOriginalAuth: { type: 'none' }
+      }
+    },
+    requests: [
+      {
+        ...requestModel({
+          id: 'resource',
+          name: 'Resource',
+          url: 'https://api.example.test/resource',
+          auth: { type: 'none' },
+          cookieJar: { enabled: true, storeResponses: true },
+          useRefreshingAuthCookie: true,
+          refreshingAuthOriginalAuth: { type: 'none' }
+        }),
+        iterations: 1
+      }
+    ]
+  };
+  const sends = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, _environment, options = {}) => {
+      sends.push({
+        id: request.id,
+        auth: request.auth,
+        cookieJar: (options.cookieJar || []).map((cookie) => `${cookie.name}=${cookie.value}`),
+        cookieJarEnabled: request.cookieJar?.enabled === true
+      });
+      if (request.id === 'rotate-refresh-cookie') {
+        return {
+          ...response(200, '{}'),
+          updatedCookies: [{ enabled: true, name: 'refresh_sid', value: 'refresh-cookie-2', domain: 'example.test', path: '/' }]
+        };
+      }
+      if (request.id === 'get-access-cookie') {
+        return {
+          ...response(200, '{}'),
+          updatedCookies: [
+            { enabled: true, name: 'refresh_sid', value: 'refresh-cookie-2', domain: 'example.test', path: '/' },
+            { enabled: true, name: 'access_sid', value: 'access-cookie-2', domain: 'example.test', path: '/' }
+          ]
+        };
+      }
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sends, [
+    { id: 'rotate-refresh-cookie', auth: { type: 'none' }, cookieJar: [], cookieJarEnabled: false },
+    {
+      id: 'get-access-cookie',
+      auth: { type: 'none' },
+      cookieJar: ['refresh_sid=refresh-cookie-2', 'refresh_sid=refresh-cookie-2'],
+      cookieJarEnabled: true
+    },
+    {
+      id: 'resource',
+      auth: { type: 'none' },
+      cookieJar: ['refresh_sid=refresh-cookie-2', 'access_sid=access-cookie-2', 'access_sid=access-cookie-2'],
+      cookieJarEnabled: true
+    }
   ]);
   assert.equal(result.authRefresh.refreshCount, 1);
 });

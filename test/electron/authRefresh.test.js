@@ -154,6 +154,71 @@ test('refresh manager can inject refreshed refresh tokens into the access-token 
   assert.deepEqual(result.autoRefreshAuth, { type: 'bearer', token: 'access-2' });
 });
 
+test('refresh manager can inject refreshed refresh cookies into the access-cookie auth request', async () => {
+  const sends = [];
+  const manager = createAuthRefreshManager({
+    enabled: true,
+    mode: 'interval',
+    authType: 'cookie',
+    refreshBeforeRun: true,
+    outputs: [
+      { slot: 'refreshToken', source: 'cookie', path: 'refresh_sid', variable: '' },
+      { slot: 'cookie', source: 'cookie', path: 'access_sid', variable: '' }
+    ],
+    refreshTokenRequest: {
+      id: 'refresh-cookie-request',
+      name: 'Rotate Refresh Cookie',
+      method: 'POST',
+      url: 'https://auth.example.test/refresh-cookie'
+    },
+    request: {
+      id: 'access-cookie-request',
+      name: 'Get Access Cookie',
+      method: 'POST',
+      url: 'https://auth.example.test/access-cookie',
+      auth: { type: 'autoRefreshRefreshToken' }
+    }
+  }, {
+    sendRequest: async (request, _environment, options = {}) => {
+      sends.push({
+        id: request.id,
+        auth: request.auth,
+        cookieJar: (options.cookieJar || []).map((cookie) => `${cookie.name}=${cookie.value}`),
+        cookieJarEnabled: request.cookieJar?.enabled === true
+      });
+      if (request.id === 'refresh-cookie-request') {
+        return {
+          ...response(200, {}),
+          updatedCookies: [{ enabled: true, name: 'refresh_sid', value: 'refresh-cookie-2', domain: 'example.test', path: '/' }]
+        };
+      }
+      return {
+        ...response(200, {}),
+        updatedCookies: [
+          { enabled: true, name: 'refresh_sid', value: 'refresh-cookie-2', domain: 'example.test', path: '/' },
+          { enabled: true, name: 'access_sid', value: 'access-cookie-2', domain: 'example.test', path: '/' }
+        ]
+      };
+    }
+  });
+
+  const result = await manager.beforeRun({
+    environment: { id: 'env', name: 'Env', variables: [] },
+    cookies: []
+  });
+
+  assert.deepEqual(sends, [
+    { id: 'refresh-cookie-request', auth: { type: 'none' }, cookieJar: [], cookieJarEnabled: false },
+    {
+      id: 'access-cookie-request',
+      auth: { type: 'none' },
+      cookieJar: ['refresh_sid=refresh-cookie-2', 'refresh_sid=refresh-cookie-2'],
+      cookieJarEnabled: true
+    }
+  ]);
+  assert.deepEqual(result.autoRefreshAuth, { type: 'cookie', value: 'access_sid=access-cookie-2' });
+});
+
 test('refresh manager saves typed outputs from body headers and cookies', async () => {
   const environment = { id: 'env', name: 'Env', variables: [] };
   const manager = createAuthRefreshManager({
@@ -230,7 +295,11 @@ test('refresh manager exposes bearer and cookie values for automatic auth inject
     { id: 'resource', auth: { type: 'cookie', value: 'sid=stale' } },
     { enabled: true, authType: 'cookie' },
     cookieSnapshot.autoRefreshAuth
-  ).auth, { type: 'cookie', value: 'sid=cookie-auto-token' });
+  ), {
+    id: 'resource',
+    auth: { type: 'none' },
+    cookieJar: { enabled: true, storeResponses: true }
+  });
 });
 
 test('refresh manager can read refreshed tokens from the entire response body', async () => {

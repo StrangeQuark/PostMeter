@@ -79,6 +79,8 @@ const AUTO_REFRESH_AUTH_TYPE = 'autoRefresh';
 const AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE = 'autoRefreshRefreshToken';
 const REFRESHING_AUTH_ACCESS_TOKEN_LABEL = 'Use Refreshing Access Token';
 const REFRESHING_AUTH_REFRESH_TOKEN_LABEL = 'Refreshing Auth Refresh Token';
+const REFRESHING_AUTH_ACCESS_COOKIE_LABEL = 'Use Refreshing Access Cookie';
+const REFRESHING_AUTH_REFRESH_COOKIE_LABEL = 'Refreshing Auth Refresh Cookie';
 const AUTO_REFRESH_SUPPORTED_AUTH_TYPES = new Set(['bearer', 'cookie']);
 const AUTH_REFRESH_OUTPUT_SOURCE_VALUES = new Set(['body', 'rawBody', 'header', 'cookie']);
 const AUTH_REFRESH_RAW_BODY_PATH = '$body';
@@ -397,7 +399,8 @@ const {
   isExpiredCookie,
   newWorkspaceCookie,
   parseCookieHeaderForJar,
-  postmanCookieMetadataByName
+  postmanCookieMetadataByName,
+  rendererCookieMatchesHost
 } = PostMeterCookieModel;
 const {
   bindUi: bindRendererUi,
@@ -7886,6 +7889,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     renderPerformanceRequestHeaderControls(null);
     setChecked('performanceRequestCookieJarEnabledInput', false);
     setChecked('performanceRequestCookieJarStoreInput', true);
+    setManagedCookieJarToggleState('performance', false);
     for (const id of [
       'performanceParamsTable',
       'performanceHeadersTable',
@@ -7913,6 +7917,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   request.cookieJar ||= { enabled: false, storeResponses: true };
   request.auth ||= { type: 'none' };
   ensureRequestAutoHeaders(request);
+  const managedCookieRequest = applyPerformanceRefreshingCookieState(test);
 
   setValue('performanceMethodSelect', METHODS.includes(request.method) ? request.method : 'GET');
   updatePerformanceMethodSelectClass();
@@ -7923,6 +7928,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   setValue('performanceDocsInput', request.docs || '');
   setChecked('performanceRequestCookieJarEnabledInput', request.cookieJar.enabled === true);
   setChecked('performanceRequestCookieJarStoreInput', request.cookieJar.storeResponses !== false);
+  setManagedCookieJarToggleState('performance', managedCookieRequest);
 
   renderPerformancePairs('performanceParamsTable', request.queryParams);
   renderPerformanceHeaderPairs('performanceHeadersTable', request);
@@ -8041,10 +8047,29 @@ function renderPerformanceCookieJarEditor() {
     filterInputId: 'performanceFilterCookiesToRequestHostInput',
     filterLabelId: 'performanceCookieHostFilterLabel',
     activeRequestUrl: activePerformanceTest()?.request?.url || '',
+    managedCookieNames: performanceManagedRefreshingCookieNames(),
     onDirty: markCookieJarDirty,
     rerender: renderPerformanceCookieJarEditor,
     setStatus
   });
+}
+
+function setManagedCookieJarToggleState(prefix, managed) {
+  const enabledInput = prefix
+    ? $(`${prefix}RequestCookieJarEnabledInput`)
+    : $('requestCookieJarEnabledInput');
+  const storeInput = prefix
+    ? $(`${prefix}RequestCookieJarStoreInput`)
+    : $('requestCookieJarStoreInput');
+  for (const input of [enabledInput, storeInput]) {
+    if (!input) {
+      continue;
+    }
+    input.disabled = managed === true;
+    input.title = managed === true
+      ? 'Refreshing Auth manages the cookie jar for this request.'
+      : '';
+  }
 }
 
 function performanceSelectedEnvironment(test = activePerformanceTest()) {
@@ -8727,12 +8752,12 @@ function collectAuthRefreshFromControls(prefix, fallback = {}) {
     authType,
     targetScope: 'environment',
     accessTokenVariable: primaryOutput?.variable || '',
-    refreshTokenVariable: authType === 'bearer' || authType === 'oauth2'
+    refreshTokenVariable: authType === 'bearer' || authType === 'oauth2' || authType === 'cookie'
       ? ($(`${prefix}AuthRefreshRefreshTokenVariableInput`)?.value || '')
       : '',
     expiresAtVariable: '',
     accessTokenPath: primaryOutput?.path || '',
-    refreshTokenPath: authType === 'bearer' || authType === 'oauth2'
+    refreshTokenPath: authType === 'bearer' || authType === 'oauth2' || authType === 'cookie'
       ? ($(`${prefix}AuthRefreshRefreshTokenPathInput`)?.value || '')
       : '',
     expiresInPath: '',
@@ -8835,7 +8860,10 @@ function collectAuthRefreshOutputsFromControls(prefix, authType) {
     return [authRefreshOutputFromControls(prefix, 'apiKey', 'ApiKey', 'ApiKeyVariableInput', 'ApiKeyPathInput')];
   }
   if (authType === 'cookie') {
-    return [authRefreshOutputFromControls(prefix, 'cookie', '', 'CookieVariableInput', 'CookieNameInput', 'cookie')];
+    return [
+      authRefreshOutputFromControls(prefix, 'cookie', '', 'CookieVariableInput', 'CookieNameInput', 'cookie'),
+      authRefreshOutputFromControls(prefix, 'refreshToken', 'RefreshToken', 'RefreshTokenVariableInput', 'RefreshTokenPathInput')
+    ];
   }
   if (authType === 'aws') {
     return [
@@ -9191,10 +9219,16 @@ function runnerRequestRefreshingAuthField(runner, request) {
   field.className = 'runner-row-refresh-auth';
   const input = document.createElement('input');
   input.type = 'checkbox';
-  input.checked = request?.auth?.type === AUTO_REFRESH_AUTH_TYPE;
-  input.setAttribute('aria-label', `Use refreshing access token for ${request.name || 'runner request'}`);
+  const cookieMode = runnerAuthRefreshIsCookie(runner);
+  input.checked = cookieMode
+    ? request?.useRefreshingAuthCookie === true
+    : request?.auth?.type === AUTO_REFRESH_AUTH_TYPE;
+  const label = cookieMode
+    ? 'Use refreshing access cookie'
+    : 'Use refreshing access token';
+  input.setAttribute('aria-label', `${label} for ${request.name || 'runner request'}`);
   const text = document.createElement('span');
-  text.textContent = 'Use refreshing access token';
+  text.textContent = label;
   input.addEventListener('change', () => setRunnerRequestRefreshingAccessToken(runner, request, input.checked));
   for (const eventName of ['click', 'mousedown', 'dragstart']) {
     input.addEventListener(eventName, (event) => event.stopPropagation());
@@ -9208,6 +9242,29 @@ function setRunnerRequestRefreshingAccessToken(runner, request, enabled) {
     return false;
   }
   const target = (runner.requests || []).find((candidate) => candidate?.id === request.id) || request;
+  if (runnerAuthRefreshIsCookie(runner)) {
+    if (enabled === true) {
+      if (target.useRefreshingAuthCookie !== true) {
+        target.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(target.auth);
+      }
+      target.auth = { type: 'none' };
+      target.cookieJar = {
+        ...(target.cookieJar || {}),
+        enabled: true,
+        storeResponses: true
+      };
+      target.useRefreshingAuthCookie = true;
+    } else {
+      const restoredAuth = normalizeRefreshingAuthOriginalAuth(target.refreshingAuthOriginalAuth);
+      target.auth = restoredAuth;
+      delete target.refreshingAuthOriginalAuth;
+      delete target.useRefreshingAuthCookie;
+    }
+    markActiveRunnerDirty();
+    renderRunnerEditor();
+    renderRequestTabs();
+    return true;
+  }
   if (enabled === true) {
     if (target.auth?.type !== AUTO_REFRESH_AUTH_TYPE) {
       target.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(target.auth);
@@ -9222,6 +9279,10 @@ function setRunnerRequestRefreshingAccessToken(runner, request, enabled) {
   renderRunnerEditor();
   renderRequestTabs();
   return true;
+}
+
+function runnerAuthRefreshIsCookie(runner) {
+  return String(runner?.authRefresh?.authType || '').trim() === 'cookie';
 }
 
 function normalizeRefreshingAuthOriginalAuth(auth = {}) {
@@ -9914,6 +9975,11 @@ function removeAuthRefreshRequest(ownerType, requestKind = 'access') {
   if (requestKind === 'refreshToken' && owner.authRefresh.request?.auth?.type === AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE) {
     owner.authRefresh.request.auth = { type: 'none' };
   }
+  if (requestKind === 'refreshToken' && owner.authRefresh.request?.useRefreshingAuthCookie === true) {
+    owner.authRefresh.request.auth = normalizeRefreshingAuthOriginalAuth(owner.authRefresh.request.refreshingAuthOriginalAuth);
+    delete owner.authRefresh.request.refreshingAuthOriginalAuth;
+    delete owner.authRefresh.request.useRefreshingAuthCookie;
+  }
   markAuthRefreshOwnerDirty(ownerType);
   removeOpenAuthRefreshRequestTab(ownerType, owner.id, requestId);
   const wasActiveRequest = activeAuthRefreshRequestOwnerType === ownerType
@@ -10004,7 +10070,10 @@ async function autoDetectAuthRefreshRequest(ownerType, requestKind = 'access') {
 
 async function sendAuthRefreshAutoDetectRequest(sendRequest, authRefresh, requestKind, request, environment) {
   const environmentSnapshot = cloneJson(environment);
-  if (requestKind !== 'access' || request?.auth?.type !== AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE) {
+  const cookieRefreshTokenAuth = String(authRefresh?.authType || '').trim() === 'cookie'
+    && request?.useRefreshingAuthCookie === true;
+  if (requestKind !== 'access'
+    || (request?.auth?.type !== AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE && !cookieRefreshTokenAuth)) {
     return sendRequest(cloneJson(request) || request, environmentSnapshot);
   }
   const refreshRequest = authRefresh?.refreshTokenRequest || null;
@@ -10017,10 +10086,58 @@ async function sendAuthRefreshAutoDetectRequest(sendRequest, authRefresh, reques
     const refreshOutput = authRefreshAutoDetectRefreshTokenOutput(authRefresh);
     throw new Error(`Auto-Detect could not read a refresh token from ${authRefreshOutputDescription(refreshOutput)}.`);
   }
+  if (cookieRefreshTokenAuth) {
+    upsertAuthRefreshAutoDetectCookie(request, authRefreshRefreshCookieName(authRefresh), refreshToken);
+    return sendRequest({
+      ...(cloneJson(request) || request),
+      auth: { type: 'none' },
+      cookieJar: {
+        ...(request.cookieJar || {}),
+        enabled: true,
+        storeResponses: true
+      }
+    }, environmentSnapshot);
+  }
   return sendRequest({
     ...(cloneJson(request) || request),
-    auth: { type: 'bearer', token: refreshToken }
+    auth: authRefreshAutoDetectRefreshTokenAuth(authRefresh, refreshToken)
   }, environmentSnapshot);
+}
+
+function upsertAuthRefreshAutoDetectCookie(request = {}, name = '', value = '') {
+  const cookieName = String(name || '').trim();
+  const domain = domainFromRequestUrl(request?.url || '');
+  if (!cookieName || !domain) {
+    return;
+  }
+  workspace.cookies ||= [];
+  const existing = workspace.cookies.find((cookie) => String(cookie?.name || '').trim() === cookieName
+    && rendererCookieMatchesHost(cookie, domain));
+  if (existing) {
+    existing.enabled = true;
+    existing.value = String(value ?? '');
+    return;
+  }
+  workspace.cookies.push(newWorkspaceCookie({
+    name: cookieName,
+    value: String(value ?? ''),
+    domain,
+    path: '/',
+    hostOnly: true,
+    httpOnly: true,
+    sameSite: 'Lax',
+    source: 'auth-refresh'
+  }));
+}
+
+function authRefreshAutoDetectRefreshTokenAuth(authRefresh = {}, refreshToken = '') {
+  if (String(authRefresh.authType || '').trim() === 'cookie') {
+    return {
+      type: 'cookie',
+      value: `${authRefreshRefreshTokenCookieName(authRefresh)}=${refreshToken}`
+    };
+  }
+  return { type: 'bearer', token: refreshToken };
 }
 
 function extractAuthRefreshAutoDetectRefreshToken(authRefresh = {}, response = {}) {
@@ -10029,6 +10146,12 @@ function extractAuthRefreshAutoDetectRefreshToken(authRefresh = {}, response = {
 
 function authRefreshAutoDetectRefreshTokenOutput(authRefresh = {}) {
   return authRefreshOutputForSlot(authRefresh, 'refreshToken', authRefreshDefaultOutput('refreshToken'));
+}
+
+function authRefreshRefreshTokenCookieName(authRefresh = {}) {
+  const output = authRefreshAutoDetectRefreshTokenOutput(authRefresh);
+  const name = String(output?.path || authRefresh.refreshTokenPath || authRefresh.refreshTokenVariable || '').trim();
+  return name && name !== AUTH_REFRESH_RAW_BODY_PATH ? name : 'refresh_token';
 }
 
 function extractAuthRefreshAutoDetectOutput(output = {}, response = {}) {
@@ -10333,13 +10456,35 @@ function autoSelectRefreshingAuthRefreshTokenForAccessRequest(ownerType, owner) 
   if (!refreshingAuthRefreshTokenAvailable(owner.authRefresh)) {
     return false;
   }
-  owner.authRefresh.request.auth = { type: AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE };
+  const cookieMode = String(owner.authRefresh.authType || '').trim() === 'cookie';
+  if (cookieMode) {
+    if (owner.authRefresh.request.useRefreshingAuthCookie !== true) {
+      owner.authRefresh.request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(owner.authRefresh.request.auth);
+    }
+    owner.authRefresh.request.auth = { type: 'none' };
+    owner.authRefresh.request.cookieJar = {
+      ...(owner.authRefresh.request.cookieJar || {}),
+      enabled: true,
+      storeResponses: true
+    };
+    owner.authRefresh.request.useRefreshingAuthCookie = true;
+  } else {
+    owner.authRefresh.request.auth = { type: AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE };
+    delete owner.authRefresh.request.useRefreshingAuthCookie;
+  }
   if (activeAuthRefreshRequestOwnerType === ownerType
     && activeAuthRefreshRequestOwnerId === owner.id
     && activeRequestId === owner.authRefresh.request.id) {
-    showRefreshingAuthRefreshTokenOption($('authTypeSelect'));
-    setValue('authTypeSelect', AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE);
-    showAuthSection(AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE);
+    if (cookieMode) {
+      syncActiveRequestAutoRefreshAuthTypeOptionWithConfig(owner.authRefresh.request.auth, owner.authRefresh);
+      setValue('authTypeSelect', 'none');
+      showAuthSection('none');
+      syncRunnerRequestRefreshingAuthTypeLock(owner.authRefresh.request.auth);
+    } else {
+      showRefreshingAuthRefreshTokenOption($('authTypeSelect'), owner.authRefresh);
+      setValue('authTypeSelect', AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE);
+      showAuthSection(AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE);
+    }
   }
   return true;
 }
@@ -12994,10 +13139,16 @@ function normalizeRunnerRequest(request) {
   normalized.docs = normalized.docs == null ? '' : String(normalized.docs);
   normalized.scripts = normalized.scripts && typeof normalized.scripts === 'object' ? normalized.scripts : { preRequest: '', tests: '' };
   normalized.auth = normalized.auth && typeof normalized.auth === 'object' ? normalized.auth : { type: 'none' };
-  if (normalized.auth?.type === AUTO_REFRESH_AUTH_TYPE && request.refreshingAuthOriginalAuth && typeof request.refreshingAuthOriginalAuth === 'object') {
+  if ((normalized.auth?.type === AUTO_REFRESH_AUTH_TYPE || request.useRefreshingAuthCookie === true)
+    && request.refreshingAuthOriginalAuth && typeof request.refreshingAuthOriginalAuth === 'object') {
     normalized.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(request.refreshingAuthOriginalAuth);
   } else {
     delete normalized.refreshingAuthOriginalAuth;
+  }
+  if (request.useRefreshingAuthCookie === true) {
+    normalized.useRefreshingAuthCookie = true;
+  } else {
+    delete normalized.useRefreshingAuthCookie;
   }
   normalized.iterations = normalizeRunnerRequestIterations(normalized.iterations);
   return normalized;
@@ -15713,6 +15864,7 @@ function renderRequestEditor() {
     renderRequestHeaderControls(null);
     $('requestCookieJarEnabledInput').checked = false;
     $('requestCookieJarStoreInput').checked = true;
+    setManagedCookieJarToggleState('', false);
     renderRequestTlsSettings(null);
     $('addRequestVariableButton').disabled = true;
     renderAuthEditor({ type: 'none' });
@@ -15738,9 +15890,12 @@ function renderRequestEditor() {
   setValue('docsInput', request.docs);
   renderMarkdownPane('requestDocs');
   request.cookieJar ||= { enabled: false, storeResponses: true };
+  request.auth ||= { type: 'none' };
   ensureRequestAutoHeaders(request);
+  const managedCookieRequest = applyActiveRequestRefreshingCookieState(request);
   $('requestCookieJarEnabledInput').checked = request.cookieJar.enabled === true;
   $('requestCookieJarStoreInput').checked = request.cookieJar.storeResponses !== false;
+  setManagedCookieJarToggleState('', managedCookieRequest);
   renderPairs('paramsTable', request.queryParams || [], 'queryParams');
   renderHeaderPairs('headersTable', request);
   renderRequestVariablePairs(request.variables || []);
@@ -15931,6 +16086,14 @@ function syncRunnerRequestRefreshingAuthTypeLock(auth = activeRequest()?.auth ||
   if (!select) {
     return;
   }
+  const managedCookie = activeRequestUsesRefreshingAuthCookie();
+  if (managedCookie) {
+    select.value = 'none';
+    select.disabled = true;
+    select.setAttribute('aria-disabled', 'true');
+    select.title = 'Cookie refreshing auth uses the cookie jar, so request auth stays None.';
+    return;
+  }
   const locked = Boolean(activeRunnerRequestRunnerId) && auth?.type === AUTO_REFRESH_AUTH_TYPE;
   select.disabled = locked;
   select.setAttribute('aria-disabled', locked ? 'true' : 'false');
@@ -15940,8 +16103,10 @@ function syncRunnerRequestRefreshingAuthTypeLock(auth = activeRequest()?.auth ||
 }
 
 function syncPerformanceAutoRefreshAuthTypeOption(auth = activePerformanceTest()?.request?.auth || { type: 'none' }, authRefresh = activePerformanceTest()?.authRefresh) {
+  const cookieMode = String(authRefresh?.authType || '').trim() === 'cookie';
   syncRefreshingAuthTypeOptions($('performanceAuthTypeSelect'), {
-    accessTokenAvailable: performanceRefreshingAuthAccessTokenAvailable(auth, authRefresh),
+    authType: authRefresh?.authType,
+    accessTokenAvailable: !cookieMode && performanceRefreshingAuthAccessTokenAvailable(auth, authRefresh),
     refreshTokenAvailable: false
   });
   syncPerformanceRefreshingAuthTypeLock(auth, authRefresh);
@@ -15968,6 +16133,13 @@ function syncPerformanceRefreshingAuthTypeLock(auth = activePerformanceTest()?.r
     return;
   }
   const refreshType = String(authRefresh?.authType || '').trim();
+  if (activePerformanceUsesRefreshingAuthCookie(authRefresh)) {
+    select.value = 'none';
+    select.disabled = true;
+    select.setAttribute('aria-disabled', 'true');
+    select.title = 'Cookie refreshing auth uses the cookie jar, so request auth stays None.';
+    return;
+  }
   const locked = authRefresh?.enabled === true
     && AUTO_REFRESH_SUPPORTED_AUTH_TYPES.has(refreshType)
     && auth?.type === AUTO_REFRESH_AUTH_TYPE;
@@ -15994,35 +16166,58 @@ function syncVisibleRefreshingAuthTypeOptionsForOwner(ownerType, authRefresh = n
 }
 
 function syncRefreshingAuthTypeOptions(select, options = {}) {
+  const authType = String(options.authType || '').trim();
   syncRefreshingAuthSelectOptions(select, {
     accessTokenValue: AUTO_REFRESH_AUTH_TYPE,
-    accessTokenLabel: REFRESHING_AUTH_ACCESS_TOKEN_LABEL,
+    accessTokenLabel: options.accessTokenLabel || refreshingAuthAccessTokenLabel(authType),
     accessTokenAvailable: options.accessTokenAvailable === true,
     refreshTokenValue: AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE,
-    refreshTokenLabel: REFRESHING_AUTH_REFRESH_TOKEN_LABEL,
+    refreshTokenLabel: options.refreshTokenLabel || refreshingAuthRefreshTokenLabel(authType),
     refreshTokenAvailable: options.refreshTokenAvailable === true
   });
 }
 
-function showRefreshingAuthAccessTokenOption(select) {
+function showRefreshingAuthAccessTokenOption(select, authRefresh = null) {
   syncRefreshingAuthTypeOptions(select, {
+    authType: authRefresh?.authType,
     accessTokenAvailable: true,
     refreshTokenAvailable: false
   });
 }
 
-function showRefreshingAuthRefreshTokenOption(select) {
+function showRefreshingAuthRefreshTokenOption(select, authRefresh = null) {
   syncRefreshingAuthTypeOptions(select, {
+    authType: authRefresh?.authType,
     accessTokenAvailable: false,
     refreshTokenAvailable: true
   });
+}
+
+function refreshingAuthAccessTokenLabel(authType = '') {
+  return String(authType || '').trim() === 'cookie'
+    ? REFRESHING_AUTH_ACCESS_COOKIE_LABEL
+    : REFRESHING_AUTH_ACCESS_TOKEN_LABEL;
+}
+
+function refreshingAuthRefreshTokenLabel(authType = '') {
+  return String(authType || '').trim() === 'cookie'
+    ? REFRESHING_AUTH_REFRESH_COOKIE_LABEL
+    : REFRESHING_AUTH_REFRESH_TOKEN_LABEL;
 }
 
 function activeRequestRefreshingAuthOptions(auth = {}, authRefreshOverride = null) {
   if (activeRunnerRequestRunnerId) {
     const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
     const authRefresh = authRefreshOverride || runner?.authRefresh;
+    if (String(authRefresh?.authType || '').trim() === 'cookie') {
+      return {
+        authType: authRefresh?.authType,
+        accessTokenAvailable: false,
+        refreshTokenAvailable: false
+      };
+    }
     return {
+      authType: authRefresh?.authType,
       accessTokenAvailable: refreshingAuthAccessTokenAvailable(auth, authRefresh),
       refreshTokenAvailable: false
     };
@@ -16031,7 +16226,15 @@ function activeRequestRefreshingAuthOptions(auth = {}, authRefreshOverride = nul
     const owner = authRefreshOwner(activeAuthRefreshRequestOwnerType, activeAuthRefreshRequestOwnerId);
     const authRefresh = authRefreshOverride || owner?.authRefresh;
     const property = authRefreshRequestPropertyForId(authRefresh, activeRequestId);
+    if (String(authRefresh?.authType || '').trim() === 'cookie') {
+      return {
+        authType: authRefresh?.authType,
+        accessTokenAvailable: false,
+        refreshTokenAvailable: false
+      };
+    }
     return {
+      authType: authRefresh?.authType,
       accessTokenAvailable: false,
       refreshTokenAvailable: property === 'request'
         && (refreshingAuthRefreshTokenAvailable(authRefresh) || auth?.type === AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE)
@@ -16054,6 +16257,82 @@ function refreshingAuthAccessTokenAvailable(auth = {}, authRefresh = {}) {
 
 function refreshingAuthRefreshTokenAvailable(authRefresh = {}) {
   return authRefresh?.enabled === true && authRefreshRequestConfigured(authRefresh?.refreshTokenRequest);
+}
+
+function activeRequestUsesRefreshingAuthCookie(request = activeRequest()) {
+  if (!request) {
+    return false;
+  }
+  if (activeRunnerRequestRunnerId) {
+    const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
+    return runner?.authRefresh?.enabled === true
+      && runnerAuthRefreshIsCookie(runner)
+      && request.useRefreshingAuthCookie === true;
+  }
+  if (activeAuthRefreshRequestOwnerType && activeAuthRefreshRequestOwnerId) {
+    const owner = authRefreshOwner(activeAuthRefreshRequestOwnerType, activeAuthRefreshRequestOwnerId);
+    const authRefresh = owner?.authRefresh;
+    return authRefresh?.enabled === true
+      && String(authRefresh.authType || '').trim() === 'cookie'
+      && authRefreshRequestPropertyForId(authRefresh, activeRequestId) === 'request'
+      && refreshingAuthRefreshTokenAvailable(authRefresh)
+      && request.useRefreshingAuthCookie === true;
+  }
+  return false;
+}
+
+function applyActiveRequestRefreshingCookieState(request = activeRequest()) {
+  if (!request) {
+    return false;
+  }
+  if (activeRunnerRequestRunnerId && !activeRequestUsesRefreshingAuthCookie(request)) {
+    return false;
+  }
+  if (activeAuthRefreshRequestOwnerType && activeAuthRefreshRequestOwnerId) {
+    const owner = authRefreshOwner(activeAuthRefreshRequestOwnerType, activeAuthRefreshRequestOwnerId);
+    const authRefresh = owner?.authRefresh;
+    const shouldManage = authRefresh?.enabled === true
+      && String(authRefresh.authType || '').trim() === 'cookie'
+      && authRefreshRequestPropertyForId(authRefresh, activeRequestId) === 'request'
+      && refreshingAuthRefreshTokenAvailable(authRefresh);
+    if (!shouldManage) {
+      return false;
+    }
+    if (request.useRefreshingAuthCookie !== true) {
+      request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(request.auth);
+      request.useRefreshingAuthCookie = true;
+    }
+  } else if (!activeRequestUsesRefreshingAuthCookie(request)) {
+    return false;
+  }
+  request.auth = { type: 'none' };
+  request.cookieJar = {
+    ...(request.cookieJar || {}),
+    enabled: true,
+    storeResponses: true
+  };
+  return true;
+}
+
+function applyPerformanceRefreshingCookieState(test = activePerformanceTest()) {
+  if (!test?.request || !activePerformanceUsesRefreshingAuthCookie(test.authRefresh)) {
+    return false;
+  }
+  if (test.request.useRefreshingAuthCookie !== true) {
+    test.request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(test.request.auth);
+    test.request.useRefreshingAuthCookie = true;
+  }
+  test.request.auth = { type: 'none' };
+  test.request.cookieJar = {
+    ...(test.request.cookieJar || {}),
+    enabled: true,
+    storeResponses: true
+  };
+  return true;
+}
+
+function activePerformanceUsesRefreshingAuthCookie(authRefresh = activePerformanceTest()?.authRefresh) {
+  return authRefresh?.enabled === true && String(authRefresh.authType || '').trim() === 'cookie';
 }
 
 function renderPairs(containerId, pairs, fieldName) {
@@ -16499,10 +16778,60 @@ function renderCookieJarEditor() {
     doc: document,
     workspace,
     activeRequestUrl: activeRequest()?.url || '',
+    managedCookieNames: activeRequestManagedRefreshingCookieNames(),
     onDirty: markCookieJarDirty,
     rerender: renderCookieJarEditor,
     setStatus
   });
+}
+
+function activeRequestManagedRefreshingCookieNames() {
+  const request = activeRequest();
+  if (!request) {
+    return [];
+  }
+  if (activeRunnerRequestRunnerId) {
+    const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
+    if (runner?.authRefresh?.enabled === true && runnerAuthRefreshIsCookie(runner) && request.useRefreshingAuthCookie === true) {
+      return compactCookieNames([authRefreshAccessCookieName(runner.authRefresh)]);
+    }
+    return [];
+  }
+  if (activeAuthRefreshRequestOwnerType && activeAuthRefreshRequestOwnerId) {
+    const owner = authRefreshOwner(activeAuthRefreshRequestOwnerType, activeAuthRefreshRequestOwnerId);
+    const authRefresh = owner?.authRefresh;
+    if (authRefresh?.enabled === true
+      && String(authRefresh.authType || '').trim() === 'cookie'
+      && authRefreshRequestPropertyForId(authRefresh, activeRequestId) === 'request'
+      && refreshingAuthRefreshTokenAvailable(authRefresh)) {
+      return compactCookieNames([authRefreshRefreshCookieName(authRefresh)]);
+    }
+  }
+  return [];
+}
+
+function performanceManagedRefreshingCookieNames(test = activePerformanceTest()) {
+  if (!test?.request || !activePerformanceUsesRefreshingAuthCookie(test.authRefresh)) {
+    return [];
+  }
+  return compactCookieNames([authRefreshAccessCookieName(test.authRefresh)]);
+}
+
+function authRefreshAccessCookieName(authRefresh = {}) {
+  return String(authRefreshOutputForSlot(authRefresh, 'cookie', authRefreshDefaultOutput('cookie')).path || '').trim();
+}
+
+function authRefreshRefreshCookieName(authRefresh = {}) {
+  const output = authRefreshOutputForSlot(authRefresh, 'refreshToken', authRefreshDefaultOutput('refreshToken'));
+  const path = String(output.path || '').trim();
+  if (path && path !== AUTH_REFRESH_RAW_BODY_PATH) {
+    return path;
+  }
+  return String(output.variable || authRefresh.refreshTokenVariable || 'refresh_token').trim() || 'refresh_token';
+}
+
+function compactCookieNames(names = []) {
+  return [...new Set(names.map((name) => String(name || '').trim()).filter(Boolean))];
 }
 
 function variableValue(pair) {
@@ -19731,6 +20060,9 @@ function collectRequestFromEditor() {
   request.url = $('urlInput').value.trim();
   syncRequestBodyFieldsFromEditor('', request);
   request.auth = collectAuthFromEditor();
+  if (activeRequestUsesRefreshingAuthCookie(request)) {
+    request.auth = { type: 'none' };
+  }
   request.scripts = {
     preRequest: $('preRequestScriptInput').value,
     tests: $('testScriptInput').value
@@ -19739,6 +20071,7 @@ function collectRequestFromEditor() {
     enabled: $('requestCookieJarEnabledInput').checked,
     storeResponses: $('requestCookieJarStoreInput').checked
   };
+  applyActiveRequestRefreshingCookieState(request);
   request.autoHeaders = {
     sendPostMeterToken: $('sendPostMeterTokenInput')?.checked === true,
     showGeneratedHeaders: $('showGeneratedHeadersInput')?.checked === true
@@ -19930,6 +20263,17 @@ function autoSelectRefreshingAuthAccessTokenForRequest(request, authRefresh = {}
   if (!AUTO_REFRESH_SUPPORTED_AUTH_TYPES.has(authType)) {
     return false;
   }
+  if (authType === 'cookie' && String(request.auth?.type || 'none').trim() === 'cookie') {
+    request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(request.auth);
+    request.auth = { type: 'none' };
+    request.cookieJar = {
+      ...(request.cookieJar || {}),
+      enabled: true,
+      storeResponses: true
+    };
+    request.useRefreshingAuthCookie = true;
+    return true;
+  }
   if (String(request.auth?.type || 'none').trim() !== authType) {
     return false;
   }
@@ -19951,19 +20295,59 @@ function syncPerformanceRefreshingAuthAccessToken(test, authRefresh = test?.auth
       delete test.request.refreshingAuthOriginalAuth;
       restored = true;
     }
+    if (test.request.useRefreshingAuthCookie === true) {
+      test.request.auth = normalizeRefreshingAuthOriginalAuth(test.request.refreshingAuthOriginalAuth);
+      delete test.request.refreshingAuthOriginalAuth;
+      delete test.request.useRefreshingAuthCookie;
+      restored = true;
+    }
     syncPerformanceAutoRefreshAuthTypeOption(test.request.auth, authRefresh);
     setValue('performanceAuthTypeSelect', test.request.auth?.type || 'none');
     showPerformanceAuthSection(test.request.auth?.type || 'none');
+    setManagedCookieJarToggleState('performance', false);
     return restored;
   }
+  if (refreshType === 'cookie') {
+    let changed = false;
+    if (test.request.useRefreshingAuthCookie !== true) {
+      test.request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(test.request.auth);
+      test.request.useRefreshingAuthCookie = true;
+      changed = true;
+    }
+    if (test.request.auth?.type !== 'none') {
+      test.request.auth = { type: 'none' };
+      changed = true;
+    }
+    test.request.cookieJar = {
+      ...(test.request.cookieJar || {}),
+      enabled: true,
+      storeResponses: true
+    };
+    syncPerformanceAutoRefreshAuthTypeOption(test.request.auth, authRefresh);
+    setValue('performanceAuthTypeSelect', 'none');
+    showPerformanceAuthSection('none');
+    setChecked('performanceRequestCookieJarEnabledInput', true);
+    setChecked('performanceRequestCookieJarStoreInput', true);
+    setManagedCookieJarToggleState('performance', true);
+    renderPerformanceCookieJarEditor();
+    return changed;
+  }
   let changed = false;
+  if (test.request.useRefreshingAuthCookie === true) {
+    test.request.auth = normalizeRefreshingAuthOriginalAuth(test.request.refreshingAuthOriginalAuth);
+    delete test.request.refreshingAuthOriginalAuth;
+    delete test.request.useRefreshingAuthCookie;
+    changed = true;
+  }
   if (test.request.auth?.type !== AUTO_REFRESH_AUTH_TYPE) {
     test.request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(test.request.auth);
     test.request.auth = { type: AUTO_REFRESH_AUTH_TYPE };
     changed = true;
   }
+  delete test.request.useRefreshingAuthCookie;
   syncPerformanceAutoRefreshAuthTypeOption(test.request.auth, authRefresh);
-  showRefreshingAuthAccessTokenOption($('performanceAuthTypeSelect'));
+  setManagedCookieJarToggleState('performance', false);
+  showRefreshingAuthAccessTokenOption($('performanceAuthTypeSelect'), authRefresh);
   setValue('performanceAuthTypeSelect', AUTO_REFRESH_AUTH_TYPE);
   showPerformanceAuthSection(AUTO_REFRESH_AUTH_TYPE);
   return changed;
@@ -20016,6 +20400,7 @@ function collectRunnerFromEditor() {
     return;
   }
   const previousShowRefreshingAuthToggle = runnerRefreshingAuthToggleVisible(runner);
+  const previousRefreshingAuthType = String(runner.authRefresh?.authType || '').trim();
   runner.name = runnerTitleInputValue() || 'Untitled Runner';
   runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
@@ -20023,15 +20408,17 @@ function collectRunnerFromEditor() {
   runner.capturePolicy = collectCapturePolicyFromControls('runner', runner.capturePolicy || {});
   runner.authRefresh = collectAuthRefreshFromControls('runner', runner.authRefresh || {});
   const refreshTokenAuthAutoSelected = autoSelectRefreshingAuthRefreshTokenForAccessRequest('runner', runner);
+  const restoredCookieRequests = restoreRunnerRefreshingCookieRequestsIfInactive(runner);
   syncAuthRefreshButton('runner', runner.authRefresh, true);
   runner.csvVariables = normalizeCsvVariableDataDefaultOff(runner.csvVariables);
   const iterationsChanged = collectRunnerRequestIterationsFromEditor(runner);
   runner.requests = normalizeRunnerRequests(runner.requests);
   const showRefreshingAuthToggle = runnerRefreshingAuthToggleVisible(runner);
-  if (iterationsChanged || refreshTokenAuthAutoSelected) {
+  const refreshingAuthTypeChanged = previousRefreshingAuthType !== String(runner.authRefresh?.authType || '').trim();
+  if (iterationsChanged || refreshTokenAuthAutoSelected || restoredCookieRequests) {
     markActiveRunnerDirty();
   }
-  if (showRefreshingAuthToggle !== previousShowRefreshingAuthToggle) {
+  if (showRefreshingAuthToggle !== previousShowRefreshingAuthToggle || (showRefreshingAuthToggle && refreshingAuthTypeChanged)) {
     renderRunnerRequestList(runner);
   }
   renderCapturePolicyControls('runner', runner.capturePolicy, true);
@@ -20040,6 +20427,23 @@ function collectRunnerFromEditor() {
     title.textContent = runnerDisplayName(runner);
   }
   renderRunners();
+}
+
+function restoreRunnerRefreshingCookieRequestsIfInactive(runner) {
+  if (!runner || (runner.authRefresh?.enabled === true && runnerAuthRefreshIsCookie(runner))) {
+    return false;
+  }
+  let changed = false;
+  for (const request of runner.requests || []) {
+    if (request?.useRefreshingAuthCookie !== true) {
+      continue;
+    }
+    request.auth = normalizeRefreshingAuthOriginalAuth(request.refreshingAuthOriginalAuth);
+    delete request.refreshingAuthOriginalAuth;
+    delete request.useRefreshingAuthCookie;
+    changed = true;
+  }
+  return changed;
 }
 
 function collectPerformanceTestFromEditor(editedElement = null) {
@@ -20082,6 +20486,7 @@ function collectPerformanceTestFromEditor(editedElement = null) {
     enabled: $('performanceRequestCookieJarEnabledInput')?.checked === true,
     storeResponses: $('performanceRequestCookieJarStoreInput')?.checked !== false
   };
+  applyPerformanceRefreshingCookieState(test);
   test.request.autoHeaders = {
     sendPostMeterToken: $('performanceSendPostMeterTokenInput')?.checked === true,
     showGeneratedHeaders: $('performanceShowGeneratedHeadersInput')?.checked === true

@@ -235,6 +235,20 @@ test('request editor panels keep dynamic refreshing auth selections when availab
   assert.equal(select.value, 'autoRefreshRefreshToken');
 });
 
+test('request editor panels can label dynamic refreshing auth options for cookies', () => {
+  const select = fakeSelect('none');
+
+  syncRefreshingAuthSelectOptions(select, {
+    accessTokenLabel: 'Use Refreshing Access Cookie',
+    accessTokenAvailable: true,
+    refreshTokenLabel: 'Refreshing Auth Refresh Cookie',
+    refreshTokenAvailable: true
+  });
+
+  assert.equal(select.querySelector('option[value="autoRefresh"]').textContent, 'Use Refreshing Access Cookie');
+  assert.equal(select.querySelector('option[value="autoRefreshRefreshToken"]').textContent, 'Refreshing Auth Refresh Cookie');
+});
+
 test('request editor panels clear dynamic refreshing auth selections when options are unavailable', () => {
   const select = fakeSelect('autoRefresh');
 
