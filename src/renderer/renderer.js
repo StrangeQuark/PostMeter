@@ -7735,8 +7735,47 @@ function runnerNode(runner) {
 
 function ensureWorkspacePerformanceTests() {
   workspace ||= {};
-  workspace.performanceTests = normalizeWorkspacePerformanceTests(workspace.performanceTests, workspace);
+  if (!Array.isArray(workspace.performanceTests)) {
+    workspace.performanceTests = [];
+    return workspace.performanceTests;
+  }
+  const tests = workspace.performanceTests.filter((test) => test && typeof test === 'object');
+  workspace.performanceTests = tests.some(performanceTestNeedsNormalization)
+    ? normalizeWorkspacePerformanceTests(tests, workspace)
+    : tests;
   return workspace.performanceTests;
+}
+
+function performanceTestNeedsNormalization(test) {
+  if (!test || typeof test !== 'object') {
+    return true;
+  }
+  const request = test.request;
+  const method = String(request?.method || '').toUpperCase();
+  return !test.id
+    || !test.type
+    || !RENDERER_PERFORMANCE_TEST_TYPES.includes(String(test.type || ''))
+    || !test.typeSettings
+    || !test.config
+    || !test.safetyLimits
+    || !test.capturePolicy
+    || !test.authRefresh
+    || !test.csvVariables
+    || !request
+    || typeof request !== 'object'
+    || !request.id
+    || !METHODS.includes(method)
+    || !Array.isArray(request.headers)
+    || !Array.isArray(request.queryParams)
+    || !Array.isArray(request.variables)
+    || !BODY_TYPES.includes(request.bodyType || 'NONE')
+    || !request.scripts
+    || typeof request.scripts !== 'object'
+    || !request.cookieJar
+    || typeof request.cookieJar !== 'object'
+    || !request.settings
+    || typeof request.settings !== 'object'
+    || !request.autoHeaders;
 }
 
 function renderPerformanceTests() {
@@ -7993,67 +8032,9 @@ function syncPerformanceResultExportButtons(test = activePerformanceTest()) {
 function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   const request = test?.request || null;
   setPerformanceRequestSectionDisabled(!test);
-  if (!request) {
-    setValue('performanceMethodSelect', 'GET');
-    updatePerformanceMethodSelectClass();
-    setValue('performanceUrlInput', '');
-    renderRequestBodyEditor('performance', null);
-    setValue('performancePreRequestScriptInput', '');
-    setValue('performanceTestScriptInput', '');
-    setValue('performanceDocsInput', '');
-    renderPerformanceRequestHeaderControls(null);
-    setChecked('performanceRequestCookieJarEnabledInput', false);
-    setChecked('performanceRequestCookieJarStoreInput', true);
-    setManagedCookieJarToggleState('performance', false);
-    renderPerformanceRequestTlsSettings(null);
-    for (const id of [
-      'performanceParamsTable',
-      'performanceHeadersTable',
-      'performanceRequestVariablesTable'
-    ]) {
-      const container = $(id);
-      if (container) {
-        container.textContent = '';
-      }
-    }
-    renderPerformanceAuthEditor({ type: 'none' });
-    renderPerformanceVariablePreview();
-    updatePerformanceRequestEditorLanguages();
-    refreshVariableHighlights($('performanceRequestSection'));
-    return;
-  }
-
-  ensureRequestQueryEditorMirror(request);
-  request.queryParams ||= [];
-  request.headers ||= [];
-  request.variables ||= [];
-  request.docs = request.docs == null ? '' : String(request.docs);
-  request.scripts ||= { preRequest: '', tests: '' };
-  request.cookieJar ||= { enabled: false, storeResponses: true };
-  request.auth ||= { type: 'none' };
-  ensureRequestAutoHeaders(request);
-  const managedCookieRequest = applyPerformanceRefreshingCookieState(test);
-
-  setValue('performanceMethodSelect', METHODS.includes(request.method) ? request.method : 'GET');
-  updatePerformanceMethodSelectClass();
-  setValue('performanceUrlInput', request.url || '');
-  renderRequestBodyEditor('performance', request);
-  setValue('performancePreRequestScriptInput', request.scripts.preRequest || '');
-  setValue('performanceTestScriptInput', request.scripts.tests || '');
-  setValue('performanceDocsInput', request.docs || '');
-  setChecked('performanceRequestCookieJarEnabledInput', request.cookieJar.enabled === true);
-  setChecked('performanceRequestCookieJarStoreInput', request.cookieJar.storeResponses !== false);
-  setManagedCookieJarToggleState('performance', managedCookieRequest);
-  renderPerformanceRequestTlsSettings(request);
-
-  renderPerformancePairs('performanceParamsTable', request.queryParams);
-  renderPerformanceHeaderPairs('performanceHeadersTable', request);
-  renderPerformanceRequestVariablePairs(request.variables);
-  renderPerformanceCookieJarEditor();
-  renderPerformanceAuthEditor(request.auth);
-  renderPerformanceVariablePreview();
-  updatePerformanceRequestEditorLanguages();
-  refreshVariableHighlights($('performanceRequestSection'));
+  renderRequestEditorForContext('performance', request, {
+    applyRefreshingCookieState: () => applyPerformanceRefreshingCookieState(test)
+  });
 }
 
 function setPerformanceRequestSectionDisabled(disabled) {
@@ -8074,60 +8055,15 @@ function setPerformanceRequestSectionDisabled(disabled) {
 }
 
 function renderPerformancePairs(containerId, pairs) {
-  renderEditorRequestPairs({
-    doc: document,
-    containerId,
-    pairs,
-    onDirty: () => {
-      if (containerId === 'performanceParamsTable') {
-        syncPerformanceUrlInputFromParams();
-      }
-      collectPerformanceTestFromEditor();
-      markActivePerformanceDirty();
-    },
-    onRemove: () => {
-      renderPerformanceRequestEditor();
-    }
-  });
+  renderRequestPairsForContext('performance', containerId, pairs, containerId === 'performanceParamsTable' ? 'queryParams' : '');
 }
 
 function renderPerformanceHeaderPairs(containerId, request) {
-  renderEditorRequestPairs({
-    doc: document,
-    containerId,
-    pairs: request?.headers || [],
-    onDirty: () => {
-      collectPerformanceTestFromEditor();
-      markActivePerformanceDirty();
-      renderGeneratedHeaderRows(containerId, request);
-      renderPerformanceRequestHeaderControls(request);
-    },
-    onRemove: () => {
-      renderPerformanceRequestEditor();
-    }
-  });
-  renderGeneratedHeaderRows(containerId, request);
-  renderPerformanceRequestHeaderControls(request);
+  renderRequestHeaderPairsForContext('performance', containerId, request);
 }
 
 function renderPerformanceRequestVariablePairs(pairs) {
-  renderEditorVariablePairs({
-    doc: document,
-    containerId: 'performanceRequestVariablesTable',
-    pairs,
-    onChange: () => {
-      collectPerformanceTestFromEditor();
-      markActivePerformanceDirty();
-      renderPerformanceVariablePreview();
-      refreshVariableHighlights();
-    },
-    onRemove: () => {
-      collectPerformanceTestFromEditor();
-      markActivePerformanceDirty();
-      renderPerformanceRequestEditor();
-      refreshVariableHighlights();
-    }
-  });
+  renderRequestVariablePairsForContext('performance', pairs);
 }
 
 function renderPerformanceVariablePreview() {
@@ -15481,6 +15417,35 @@ function bodyElement(prefix, id) {
   return $(bodyControlId(prefix, id));
 }
 
+function requestEditorContext(scope = 'request') {
+  const isPerformance = scope === 'performance';
+  return {
+    scope: isPerformance ? 'performance' : 'request',
+    bodyPrefix: isPerformance ? 'performance' : '',
+    rootId: isPerformance ? 'performanceRequestSection' : 'requestEditorPanel',
+    methodSelectId: isPerformance ? 'performanceMethodSelect' : 'methodSelect',
+    urlInputId: isPerformance ? 'performanceUrlInput' : 'urlInput',
+    paramsTableId: isPerformance ? 'performanceParamsTable' : 'paramsTable',
+    headersTableId: isPerformance ? 'performanceHeadersTable' : 'headersTable',
+    variablesTableId: isPerformance ? 'performanceRequestVariablesTable' : 'requestVariablesTable',
+    preRequestScriptInputId: isPerformance ? 'performancePreRequestScriptInput' : 'preRequestScriptInput',
+    testScriptInputId: isPerformance ? 'performanceTestScriptInput' : 'testScriptInput',
+    docsInputId: isPerformance ? 'performanceDocsInput' : 'docsInput',
+    docsPane: isPerformance ? '' : 'requestDocs',
+    cookieJarEnabledInputId: isPerformance ? 'performanceRequestCookieJarEnabledInput' : 'requestCookieJarEnabledInput',
+    cookieJarStoreInputId: isPerformance ? 'performanceRequestCookieJarStoreInput' : 'requestCookieJarStoreInput',
+    addVariableButtonId: isPerformance ? 'addPerformanceRequestVariableButton' : 'addRequestVariableButton',
+    autoHeaderTokenInputId: isPerformance ? 'performanceSendPostMeterTokenInput' : 'sendPostMeterTokenInput',
+    autoHeaderShowInputId: isPerformance ? 'performanceShowGeneratedHeadersInput' : 'showGeneratedHeadersInput',
+    autoHeaderLabelId: isPerformance ? 'performanceShowGeneratedHeadersLabel' : 'showGeneratedHeadersLabel'
+  };
+}
+
+function activeRequestForEditorContext(contextOrScope = 'request') {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  return context.scope === 'performance' ? activePerformanceTest()?.request || null : activeRequest();
+}
+
 function bodyModeForRequest(request) {
   const mode = String(request?.postmanBody?.mode || '').toLowerCase();
   if (mode === 'graphql' || request?.protocol === 'graphql' || hasGraphqlBody(request)) {
@@ -16113,118 +16078,171 @@ function ensureRequestQueryEditorMirror(request) {
 }
 
 function syncRequestParamsFromUrlInput() {
-  const request = activeRequest();
-  const input = $('urlInput');
-  if (!request || !input) {
-    return;
-  }
-  request.queryParams = queryParamsFromEditorUrl(input.value);
-  renderPairs('paramsTable', request.queryParams, 'queryParams');
+  syncRequestParamsFromUrlInputForContext('request');
 }
 
 function syncRequestUrlInputFromParams() {
-  const request = activeRequest();
-  const input = $('urlInput');
-  if (!request || !input) {
-    return;
-  }
-  request.queryParams = collectKeyValueRowsFromTable('paramsTable', request.queryParams || []);
-  const nextUrl = editorUrlWithQueryParams(input.value, request.queryParams);
-  if (input.value !== nextUrl) {
-    input.value = nextUrl;
-  }
-  request.url = nextUrl.trim();
-  refreshVariableHighlights(input);
+  syncRequestUrlInputFromParamsForContext('request');
 }
 
 function syncPerformanceParamsFromUrlInput() {
-  const request = activePerformanceTest()?.request;
-  const input = $('performanceUrlInput');
+  syncRequestParamsFromUrlInputForContext('performance');
+}
+
+function syncPerformanceUrlInputFromParams() {
+  syncRequestUrlInputFromParamsForContext('performance');
+}
+
+function syncRequestParamsFromUrlInputForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
+  const input = $(context.urlInputId);
   if (!request || !input) {
     return;
   }
   request.queryParams = queryParamsFromEditorUrl(input.value);
-  renderPerformancePairs('performanceParamsTable', request.queryParams);
+  renderRequestPairsForContext(context, context.paramsTableId, request.queryParams, 'queryParams');
 }
 
-function syncPerformanceUrlInputFromParams() {
-  const request = activePerformanceTest()?.request;
-  const input = $('performanceUrlInput');
+function syncRequestUrlInputFromParamsForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
+  const input = $(context.urlInputId);
   if (!request || !input) {
     return;
   }
-  request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', request.queryParams || []);
+  request.queryParams = collectKeyValueRowsFromTable(context.paramsTableId, request.queryParams || []);
   const nextUrl = editorUrlWithQueryParams(input.value, request.queryParams);
   if (input.value !== nextUrl) {
     input.value = nextUrl;
   }
   request.url = nextUrl.trim();
   refreshVariableHighlights(input);
+}
+
+function renderRequestEditorForContext(contextOrScope, request, options = {}) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  if (!request) {
+    setValue(context.methodSelectId, 'GET');
+    updateMethodSelectClassFor(context.methodSelectId);
+    setValue(context.urlInputId, '');
+    renderRequestBodyEditor(context.bodyPrefix, null);
+    setValue(context.preRequestScriptInputId, '');
+    setValue(context.testScriptInputId, '');
+    setValue(context.docsInputId, '');
+    if (context.docsPane) {
+      renderMarkdownPane(context.docsPane);
+    }
+    for (const id of [context.paramsTableId, context.headersTableId, context.variablesTableId]) {
+      const container = $(id);
+      if (container) {
+        container.textContent = '';
+      }
+    }
+    renderRequestHeaderControlsForContext(context, null);
+    setChecked(context.cookieJarEnabledInputId, false);
+    setChecked(context.cookieJarStoreInputId, true);
+    setManagedCookieJarToggleState(context.bodyPrefix, false);
+    renderRequestSettingsControls(null, context.scope);
+    const addVariableButton = $(context.addVariableButtonId);
+    if (addVariableButton) {
+      addVariableButton.disabled = true;
+    }
+    renderRequestAuthEditorForContext(context, { type: 'none' });
+    renderRequestVariablePreviewForContext(context);
+    updateRequestEditorLanguagesForContext(context);
+    refreshVariableHighlights($(context.rootId));
+    return;
+  }
+
+  ensureRequestQueryEditorMirror(request);
+  request.queryParams ||= [];
+  request.headers ||= [];
+  request.variables ||= [];
+  request.scripts ||= { preRequest: '', tests: '' };
+  request.docs = request.docs == null ? '' : String(request.docs);
+  request.cookieJar ||= { enabled: false, storeResponses: true };
+  request.auth ||= { type: 'none' };
+  ensureRequestAutoHeaders(request);
+  const managedCookieRequest = typeof options.applyRefreshingCookieState === 'function'
+    ? options.applyRefreshingCookieState(request) === true
+    : false;
+
+  const addVariableButton = $(context.addVariableButtonId);
+  if (addVariableButton) {
+    addVariableButton.disabled = false;
+  }
+  const method = METHODS.includes(String(request.method || '').toUpperCase())
+    ? String(request.method || '').toUpperCase()
+    : 'GET';
+  request.method = method;
+  setValue(context.methodSelectId, method);
+  updateMethodSelectClassFor(context.methodSelectId);
+  setValue(context.urlInputId, request.url || '');
+  renderRequestBodyEditor(context.bodyPrefix, request);
+  setValue(context.preRequestScriptInputId, request.scripts.preRequest || '');
+  setValue(context.testScriptInputId, request.scripts.tests || '');
+  setValue(context.docsInputId, request.docs || '');
+  if (context.docsPane) {
+    renderMarkdownPane(context.docsPane);
+  }
+  setChecked(context.cookieJarEnabledInputId, request.cookieJar.enabled === true);
+  setChecked(context.cookieJarStoreInputId, request.cookieJar.storeResponses !== false);
+  setManagedCookieJarToggleState(context.bodyPrefix, managedCookieRequest);
+  renderRequestSettingsControls(request, context.scope);
+  renderRequestPairsForContext(context, context.paramsTableId, request.queryParams, 'queryParams');
+  renderRequestHeaderPairsForContext(context, context.headersTableId, request);
+  renderRequestVariablePairsForContext(context, request.variables);
+  renderRequestCookieJarEditorForContext(context);
+  renderRequestAuthEditorForContext(context, request.auth || { type: 'none' });
+  renderRequestVariablePreviewForContext(context);
+  updateRequestEditorLanguagesForContext(context);
+  refreshVariableHighlights($(context.rootId));
+}
+
+function renderRequestAuthEditorForContext(context, auth) {
+  if (context.scope === 'performance') {
+    renderPerformanceAuthEditor(auth);
+    return;
+  }
+  renderAuthEditor(auth);
+}
+
+function renderRequestCookieJarEditorForContext(context) {
+  if (context.scope === 'performance') {
+    renderPerformanceCookieJarEditor();
+    return;
+  }
+  renderCookieJarEditor();
+}
+
+function renderRequestVariablePreviewForContext(context) {
+  if (context.scope === 'performance') {
+    renderPerformanceVariablePreview();
+    return;
+  }
+  renderVariablePreview();
+}
+
+function updateRequestEditorLanguagesForContext(context) {
+  if (context.scope === 'performance') {
+    updatePerformanceRequestEditorLanguages();
+    return;
+  }
+  updateRequestEditorLanguages();
 }
 
 function renderRequestEditor() {
   resetRequestEditorTransientStateOnContextChange();
   const request = activeRequest();
-  if (!request) {
-    renderRequestTitle(null);
-    $('saveRequestButton').disabled = true;
-    $('exportRequestPanelButton').disabled = true;
-    $('exportRequestPanelPostmeterButton').disabled = true;
-    $('exportRequestPanelCurlButton').disabled = true;
-    $('methodSelect').value = 'GET';
-    updateMethodSelectClass();
-    $('urlInput').value = '';
-    renderRequestBodyEditor('', null);
-    $('preRequestScriptInput').value = '';
-    $('testScriptInput').value = '';
-    setValue('docsInput', '');
-    renderMarkdownPane('requestDocs');
-    $('paramsTable').textContent = '';
-    $('headersTable').textContent = '';
-    $('requestVariablesTable').textContent = '';
-    renderRequestHeaderControls(null);
-    $('requestCookieJarEnabledInput').checked = false;
-    $('requestCookieJarStoreInput').checked = true;
-    setManagedCookieJarToggleState('', false);
-    renderRequestTlsSettings(null);
-    $('addRequestVariableButton').disabled = true;
-    renderAuthEditor({ type: 'none' });
-    updateRequestEditorLanguages();
-    refreshVariableHighlights($('requestEditorPanel'));
-    return;
-  }
-  ensureRequestQueryEditorMirror(request);
-  $('saveRequestButton').disabled = false;
-  $('exportRequestPanelButton').disabled = false;
-  $('exportRequestPanelPostmeterButton').disabled = false;
-  $('exportRequestPanelCurlButton').disabled = false;
-  $('addRequestVariableButton').disabled = false;
   renderRequestTitle(request);
-  $('methodSelect').value = request.method;
-  updateMethodSelectClass();
-  $('urlInput').value = request.url;
-  renderRequestBodyEditor('', request);
-  request.scripts ||= { preRequest: '', tests: '' };
-  $('preRequestScriptInput').value = request.scripts.preRequest || '';
-  $('testScriptInput').value = request.scripts.tests || '';
-  request.docs = request.docs == null ? '' : String(request.docs);
-  setValue('docsInput', request.docs);
-  renderMarkdownPane('requestDocs');
-  request.cookieJar ||= { enabled: false, storeResponses: true };
-  request.auth ||= { type: 'none' };
-  ensureRequestAutoHeaders(request);
-  const managedCookieRequest = applyActiveRequestRefreshingCookieState(request);
-  $('requestCookieJarEnabledInput').checked = request.cookieJar.enabled === true;
-  $('requestCookieJarStoreInput').checked = request.cookieJar.storeResponses !== false;
-  setManagedCookieJarToggleState('', managedCookieRequest);
-  renderPairs('paramsTable', request.queryParams || [], 'queryParams');
-  renderHeaderPairs('headersTable', request);
-  renderRequestVariablePairs(request.variables || []);
-  renderCookieJarEditor();
-  renderRequestTlsSettings(request);
-  renderAuthEditor(request.auth || { type: 'none' });
-  updateRequestEditorLanguages();
-  refreshVariableHighlights($('requestEditorPanel'));
+  $('saveRequestButton').disabled = !request;
+  $('exportRequestPanelButton').disabled = !request;
+  $('exportRequestPanelPostmeterButton').disabled = !request;
+  $('exportRequestPanelCurlButton').disabled = !request;
+  renderRequestEditorForContext('request', request, {
+    applyRefreshingCookieState: () => applyActiveRequestRefreshingCookieState(request)
+  });
 }
 
 function renderCollectionEditor() {
@@ -16661,50 +16679,116 @@ function activePerformanceUsesRefreshingAuthCookie(authRefresh = activePerforman
   return authRefresh?.enabled === true && String(authRefresh.authType || '').trim() === 'cookie';
 }
 
-function renderPairs(containerId, pairs, fieldName) {
+function renderRequestPairsForContext(contextOrScope, containerId, pairs, fieldName) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
   renderEditorRequestPairs({
     doc: document,
     containerId,
     pairs,
     onDirty: () => {
       if (fieldName === 'queryParams') {
-        syncRequestUrlInputFromParams();
+        syncRequestUrlInputFromParamsForContext(context);
       }
-      collectRequestFromEditor();
-      markActiveRequestDirty();
+      collectRequestEditorAndMarkDirtyForContext(context);
     },
     onRemove: () => {
-      renderRequestEditor();
+      renderRequestEditorForContextScope(context);
     }
   });
+  bindRequestPairTableSync(context, containerId, fieldName);
 }
 
-function renderHeaderPairs(containerId, request) {
+function renderPairs(containerId, pairs, fieldName) {
+  renderRequestPairsForContext('request', containerId, pairs, fieldName);
+}
+
+function renderRequestHeaderPairsForContext(contextOrScope, containerId, request) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
   renderEditorRequestPairs({
     doc: document,
     containerId,
     pairs: request?.headers || [],
     onDirty: () => {
-      collectRequestFromEditor();
-      markActiveRequestDirty();
+      collectRequestEditorAndMarkDirtyForContext(context);
       renderGeneratedHeaderRows(containerId, request);
-      renderRequestHeaderControls(request);
+      renderRequestHeaderControlsForContext(context, request);
     },
     onRemove: () => {
-      renderRequestEditor();
+      renderRequestEditorForContextScope(context);
     }
   });
   renderGeneratedHeaderRows(containerId, request);
-  renderRequestHeaderControls(request);
+  renderRequestHeaderControlsForContext(context, request);
+  bindRequestPairTableSync(context, containerId, 'headers');
+}
+
+function renderHeaderPairs(containerId, request) {
+  renderRequestHeaderPairsForContext('request', containerId, request);
+}
+
+function collectRequestEditorAndMarkDirtyForContext(context) {
+  if (context.scope === 'performance') {
+    collectPerformanceTestFromEditor();
+    markRequestEditorContextDirty(context);
+    return;
+  }
+  collectRequestFromEditor();
+  markRequestEditorContextDirty(context);
+}
+
+function renderRequestEditorForContextScope(context) {
+  if (context.scope === 'performance') {
+    renderPerformanceRequestEditor();
+    return;
+  }
+  renderRequestEditor();
+}
+
+function renderRequestHeaderControlsForContext(contextOrScope, request) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  renderAutoHeaderControls({
+    request,
+    tokenInputId: context.autoHeaderTokenInputId,
+    showInputId: context.autoHeaderShowInputId,
+    labelId: context.autoHeaderLabelId
+  });
+}
+
+function bindRequestPairTableSync(context, containerId, fieldName) {
+  const container = $(containerId);
+  if (!container) {
+    return;
+  }
+  const sync = (event) => {
+    if (!event?.target?.matches?.('input')) {
+      return;
+    }
+    syncRequestPairsFromTableForContext(context, containerId, fieldName);
+  };
+  container.oninput = sync;
+  container.onchange = sync;
+}
+
+function syncRequestPairsFromTableForContext(context, containerId, fieldName) {
+  const request = activeRequestForEditorContext(context);
+  if (!request) {
+    return;
+  }
+  if (fieldName === 'queryParams') {
+    syncRequestUrlInputFromParamsForContext(context);
+  } else if (fieldName) {
+    request[fieldName] = collectKeyValueRowsFromTable(containerId, request[fieldName]);
+  }
+  markRequestEditorContextDirty(context);
+  if (fieldName === 'headers') {
+    renderGeneratedHeaderRows(containerId, request);
+    renderRequestHeaderControlsForContext(context, request);
+  }
+  refreshVariableHighlights();
 }
 
 function renderRequestHeaderControls(request) {
-  renderAutoHeaderControls({
-    request,
-    tokenInputId: 'sendPostMeterTokenInput',
-    showInputId: 'showGeneratedHeadersInput',
-    labelId: 'showGeneratedHeadersLabel'
-  });
+  renderRequestHeaderControlsForContext('request', request);
 }
 
 function renderRequestTlsSettings(request) {
@@ -16799,12 +16883,7 @@ function setTextInputValue(id, value, disabled = false) {
 }
 
 function renderPerformanceRequestHeaderControls(request) {
-  renderAutoHeaderControls({
-    request,
-    tokenInputId: 'performanceSendPostMeterTokenInput',
-    showInputId: 'performanceShowGeneratedHeadersInput',
-    labelId: 'performanceShowGeneratedHeadersLabel'
-  });
+  renderRequestHeaderControlsForContext('performance', request);
 }
 
 function renderAutoHeaderControls({ request, tokenInputId, showInputId, labelId }) {
@@ -17156,22 +17235,51 @@ function renderFolderVariablePreview() {
 }
 
 function renderRequestVariablePairs(pairs) {
+  renderRequestVariablePairsForContext('request', pairs);
+}
+
+function renderRequestVariablePairsForContext(contextOrScope, pairs) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
   renderEditorVariablePairs({
     doc: document,
-    containerId: 'requestVariablesTable',
+    containerId: context.variablesTableId,
     pairs,
     onChange: () => {
-      markActiveRequestDirty();
-      renderVariablePreview();
+      markRequestEditorContextDirty(context);
+      renderRequestVariablePreviewForContext(context);
       refreshVariableHighlights();
     },
     onRemove: () => {
-      markActiveRequestDirty();
-      renderRequestEditor();
-      renderVariablePreview();
-      refreshVariableHighlights();
+      syncRequestVariablesFromTableForContext(context);
     }
   });
+  bindRequestVariableTableSync(context);
+}
+
+function bindRequestVariableTableSync(context) {
+  const container = $(context.variablesTableId);
+  if (!container) {
+    return;
+  }
+  const sync = (event) => {
+    if (!event?.target?.matches?.('input')) {
+      return;
+    }
+    syncRequestVariablesFromTableForContext(context);
+  };
+  container.oninput = sync;
+  container.onchange = sync;
+}
+
+function syncRequestVariablesFromTableForContext(context) {
+  const request = activeRequestForEditorContext(context);
+  if (!request) {
+    return;
+  }
+  request.variables = collectKeyValueRowsFromTable(context.variablesTableId, request.variables);
+  markRequestEditorContextDirty(context);
+  renderRequestVariablePreviewForContext(context);
+  refreshVariableHighlights();
 }
 
 function renderVariablePreview() {
@@ -20703,27 +20811,23 @@ function addFolderVariable() {
 }
 
 function addRequestVariable() {
-  const request = activeRequest();
-  if (request) {
-    request.variables ||= [];
-    request.variables.push({ enabled: true, key: '', value: '' });
-    markActiveRequestDirty();
-    renderRequestEditor();
-  }
+  addRequestVariableForContext('request');
 }
 
 function addPerformanceRequestVariable() {
-  const test = activePerformanceTest();
-  if (test?.request) {
-    const draftAuth = collectPerformanceAuthFromEditor();
-    collectPerformanceTestFromEditor();
-    const request = activePerformanceTest()?.request || test.request;
-    request.auth = draftAuth;
-    request.variables ||= [];
-    request.variables.push({ enabled: true, key: '', value: '' });
-    markActivePerformanceDirty();
-    renderPerformanceRequestEditor();
+  addRequestVariableForContext('performance');
+}
+
+function addRequestVariableForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = prepareRequestForEditorMutation(context);
+  if (!request) {
+    return;
   }
+  request.variables ||= [];
+  request.variables.push({ enabled: true, key: '', value: '' });
+  markRequestEditorContextDirty(context);
+  renderRequestEditorForContextScope(context);
 }
 
 function addCookieDomainFromInput() {
@@ -20800,26 +20904,51 @@ async function clearAllWorkspaceCookies() {
 }
 
 function addPair(fieldName) {
-  const request = activeRequest();
-  if (request) {
-    request[fieldName].push({ enabled: true, key: '', value: '' });
-    markActiveRequestDirty();
-    renderRequestEditor();
-  }
+  addRequestPairForContext('request', fieldName);
 }
 
 function addPerformancePair(fieldName) {
-  const test = activePerformanceTest();
-  if (test?.request) {
+  addRequestPairForContext('performance', fieldName);
+}
+
+function addRequestPairForContext(contextOrScope, fieldName) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = prepareRequestForEditorMutation(context);
+  if (!request) {
+    return;
+  }
+  request[fieldName] ||= [];
+  request[fieldName].push({ enabled: true, key: '', value: '' });
+  markRequestEditorContextDirty(context);
+  renderRequestEditorForContextScope(context);
+}
+
+function prepareRequestForEditorMutation(context) {
+  if (context.scope === 'performance') {
+    const test = activePerformanceTest();
+    if (!test?.request) {
+      return null;
+    }
     const draftAuth = collectPerformanceAuthFromEditor();
     collectPerformanceTestFromEditor();
     const request = activePerformanceTest()?.request || test.request;
     request.auth = draftAuth;
-    request[fieldName] ||= [];
-    request[fieldName].push({ enabled: true, key: '', value: '' });
-    markActivePerformanceDirty();
-    renderPerformanceRequestEditor();
+    return request;
   }
+  const request = activeRequest();
+  if (!request) {
+    return null;
+  }
+  collectRequestFromEditor();
+  return request;
+}
+
+function markRequestEditorContextDirty(context) {
+  if (context.scope === 'performance') {
+    markActivePerformanceDirty();
+    return;
+  }
+  markActiveRequestDirty();
 }
 
 async function renameCollection(collection) {
@@ -21103,51 +21232,79 @@ async function deleteRequest(collection, folder, request) {
   restoreTreeFocus(null, activeCollectionTreeFocusTargets());
 }
 
+function collectRequestFieldsFromEditorContext(contextOrScope, request, options = {}) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  if (!request) {
+    return;
+  }
+  const method = String($(context.methodSelectId)?.value || '').toUpperCase();
+  request.method = METHODS.includes(method) ? method : 'GET';
+  request.url = $(context.urlInputId)?.value.trim() || '';
+  syncRequestBodyFieldsFromEditor(context.bodyPrefix, request);
+  request.auth = options.auth || collectRequestAuthFromEditorForContext(context);
+  if (typeof options.afterAuth === 'function') {
+    options.afterAuth(request);
+  }
+  request.scripts = {
+    preRequest: $(context.preRequestScriptInputId)?.value || '',
+    tests: $(context.testScriptInputId)?.value || ''
+  };
+  if (options.collectDocs === true || context.scope === 'performance') {
+    request.docs = $(context.docsInputId)?.value || '';
+  }
+  request.cookieJar = {
+    enabled: $(context.cookieJarEnabledInputId)?.checked === true,
+    storeResponses: $(context.cookieJarStoreInputId)?.checked !== false
+  };
+  if (typeof options.applyRefreshingCookieState === 'function') {
+    options.applyRefreshingCookieState(request);
+  }
+  request.autoHeaders = {
+    sendPostMeterToken: $(context.autoHeaderTokenInputId)?.checked === true,
+    showGeneratedHeaders: $(context.autoHeaderShowInputId)?.checked === true
+  };
+  request.settings = requestTlsSettingsFromInputs(request.settings, context.scope);
+  request.queryParams = collectKeyValueRowsFromTable(context.paramsTableId, request.queryParams);
+  request.headers = collectKeyValueRowsFromTable(context.headersTableId, request.headers);
+}
+
+function collectRequestAuthFromEditorForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  return context.scope === 'performance' ? collectPerformanceAuthFromEditor() : collectAuthFromEditor();
+}
+
 function collectRequestFromEditor() {
   const request = activeRequest();
   if (!request) {
     return;
   }
   collectRequestNameFromTitle({ render: false });
-  request.method = METHODS.includes($('methodSelect').value) ? $('methodSelect').value : 'GET';
-  request.url = $('urlInput').value.trim();
-  syncRequestBodyFieldsFromEditor('', request);
-  request.auth = collectAuthFromEditor();
-  if (activeRequestUsesRefreshingAuthCookie(request)) {
-    request.auth = { type: 'none' };
-  }
-  request.scripts = {
-    preRequest: $('preRequestScriptInput').value,
-    tests: $('testScriptInput').value
-  };
-  request.cookieJar = {
-    enabled: $('requestCookieJarEnabledInput').checked,
-    storeResponses: $('requestCookieJarStoreInput').checked
-  };
-  applyActiveRequestRefreshingCookieState(request);
-  request.autoHeaders = {
-    sendPostMeterToken: $('sendPostMeterTokenInput')?.checked === true,
-    showGeneratedHeaders: $('showGeneratedHeadersInput')?.checked === true
-  };
-  request.settings = requestTlsSettingsFromInputs(request.settings);
+  collectRequestFieldsFromEditorContext('request', request, {
+    afterAuth: () => {
+      if (activeRequestUsesRefreshingAuthCookie(request)) {
+        request.auth = { type: 'none' };
+      }
+    },
+    applyRefreshingCookieState: () => applyActiveRequestRefreshingCookieState(request)
+  });
 }
 
 function setActiveRequestTlsSettingsFromInputs(event = null) {
-  const request = activeRequest();
-  if (!request) {
-    return;
-  }
-  setRequestTlsSettingsFromInput(request, event?.currentTarget?.id || '');
-  markActiveRequestDirty();
+  setActiveRequestTlsSettingsFromInputsForContext('request', event);
 }
 
 function setActivePerformanceRequestTlsSettingsFromInputs(event = null) {
-  const test = activePerformanceTest();
-  if (!test?.request) {
+  setActiveRequestTlsSettingsFromInputsForContext('performance', event);
+}
+
+function setActiveRequestTlsSettingsFromInputsForContext(contextOrScope, event = null) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
+  if (!request) {
     return;
   }
-  setRequestTlsSettingsFromInput(test.request, event?.currentTarget?.id || 'performance');
-  markActivePerformanceDirty();
+  setRequestTlsSettingsFromInput(request, event?.currentTarget?.id || context.scope);
+  markRequestEditorContextDirty(context);
 }
 
 function setRequestTlsSettingsFromInput(request, inputId) {
@@ -21246,15 +21403,7 @@ function collectFolderFromEditor(options = {}) {
 }
 
 function setActiveRequestAutoHeaderOption(option, value) {
-  const request = activeRequest();
-  if (!request) {
-    return;
-  }
-  collectRequestFromEditor();
-  const autoHeaders = ensureRequestAutoHeaders(request);
-  autoHeaders[option] = value === true;
-  markActiveRequestDirty();
-  renderRequestEditor();
+  setActiveRequestAutoHeaderOptionForContext('request', option, value);
 }
 
 function collectRequestNameFromTitle(options = {}) {
@@ -21552,35 +21701,20 @@ function collectPerformanceTestFromEditor(editedElement = null) {
   test.request ||= {};
   test.request.id ||= crypto.randomUUID();
   test.request.name ||= 'Performance Request';
-  test.request.method = METHODS.includes(String($('performanceMethodSelect')?.value || '').toUpperCase())
-    ? String($('performanceMethodSelect').value).toUpperCase()
-    : 'GET';
-  test.request.url = $('performanceUrlInput')?.value.trim() || '';
-  syncRequestBodyFieldsFromEditor('performance', test.request);
-  test.request.auth = collectedPerformanceAuth;
-  const authAutoSelected = autoSelectRefreshingAuthAccessTokenForOwner('performance', test, previousAuthRefresh, test.authRefresh);
-  const performanceRequestAuthAutoSelected = syncPerformanceRefreshingAuthAccessToken(test, test.authRefresh);
-  if (authAutoSelected || performanceRequestAuthAutoSelected || refreshTokenAuthAutoSelected) {
+  let authSelectionChanged = false;
+  collectRequestFieldsFromEditorContext('performance', test.request, {
+    auth: collectedPerformanceAuth,
+    collectDocs: true,
+    afterAuth: () => {
+      const authAutoSelected = autoSelectRefreshingAuthAccessTokenForOwner('performance', test, previousAuthRefresh, test.authRefresh);
+      const performanceRequestAuthAutoSelected = syncPerformanceRefreshingAuthAccessToken(test, test.authRefresh);
+      authSelectionChanged = authAutoSelected || performanceRequestAuthAutoSelected;
+    },
+    applyRefreshingCookieState: () => applyPerformanceRefreshingCookieState(test)
+  });
+  if (authSelectionChanged || refreshTokenAuthAutoSelected) {
     markActivePerformanceDirty();
   }
-  test.request.scripts = {
-    preRequest: $('performancePreRequestScriptInput')?.value || '',
-    tests: $('performanceTestScriptInput')?.value || ''
-  };
-  test.request.docs = $('performanceDocsInput')?.value || '';
-  test.request.cookieJar = {
-    enabled: $('performanceRequestCookieJarEnabledInput')?.checked === true,
-    storeResponses: $('performanceRequestCookieJarStoreInput')?.checked !== false
-  };
-  applyPerformanceRefreshingCookieState(test);
-  test.request.autoHeaders = {
-    sendPostMeterToken: $('performanceSendPostMeterTokenInput')?.checked === true,
-    showGeneratedHeaders: $('performanceShowGeneratedHeadersInput')?.checked === true
-  };
-  test.request.settings = requestTlsSettingsFromInputs(test.request.settings, 'performance');
-  test.request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', test.request.queryParams);
-  test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
-  test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);
   test.source ||= { sourceType: 'manual' };
   renderCapturePolicyControls('performance', test.capturePolicy, true);
   const title = $('performanceMainTitle');
@@ -21591,15 +21725,25 @@ function collectPerformanceTestFromEditor(editedElement = null) {
 }
 
 function setActivePerformanceRequestAutoHeaderOption(option, value) {
-  const test = activePerformanceTest();
-  if (!test?.request) {
+  setActiveRequestAutoHeaderOptionForContext('performance', option, value);
+}
+
+function setActiveRequestAutoHeaderOptionForContext(contextOrScope, option, value) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
+  if (!request) {
     return;
   }
-  collectPerformanceTestFromEditor();
-  const autoHeaders = ensureRequestAutoHeaders(test.request);
+  if (context.scope === 'performance') {
+    collectPerformanceTestFromEditor();
+  } else {
+    collectRequestFromEditor();
+  }
+  const updatedRequest = activeRequestForEditorContext(context) || request;
+  const autoHeaders = ensureRequestAutoHeaders(updatedRequest);
   autoHeaders[option] = value === true;
-  markActivePerformanceDirty();
-  renderPerformanceRequestEditor(test);
+  markRequestEditorContextDirty(context);
+  renderRequestEditorForContextScope(context);
 }
 
 function collectKeyValueRowsFromTable(containerId, fallback = []) {
