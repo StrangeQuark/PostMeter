@@ -3808,13 +3808,16 @@
       assertUiSmoke(activeMainPanel === 'performance', 'Creating a performance test should switch the main pane to performance mode.');
       assertUiSmoke(!$('performanceMainPanel').hidden, 'Creating a performance test should show the performance editor.');
       assertUiSmoke($('requestEditorPanel').hidden, 'Performance editor should not render inside the request editor pane.');
-      assertUiSmoke(!$('performanceTypeSelect'), 'Performance editor should use type tabs instead of a type dropdown.');
+      assertUiSmoke($('performanceTypeSelect')?.closest('#performanceEditorSection'), 'Performance type selector should live with the active performance test controls.');
       assertUiSmoke($('performanceMethodSelect').closest('.performance-request-line'), 'Performance request method should live in the request-style line.');
       assertUiSmoke($('performanceUrlInput').closest('.performance-request-line'), 'Performance request URL should live in the request-style line.');
-      assertUiSmoke($('runPerformanceTestButton').closest('.performance-request-line'), 'Performance Run action should live next to the request URL.');
+      assertUiSmoke($('runPerformanceTestButton').closest('.performance-run-actions'), 'Performance Run action should live in the top action row.');
       assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
-      assertUiSmoke($('importPerformanceRequestButton').closest('.performance-actions'), 'Performance import request action should live with the performance pane actions.');
+      assertUiSmoke($('importPerformanceRequestButton').closest('.performance-request-header'), 'Performance import request action should live with the request section header.');
       assertUiSmoke($('deletePerformanceTestButton').classList.contains('danger-button'), 'Performance delete button should use danger styling.');
+      assertUiSmoke(!document.getElementById('performanceMoreActionsButton'), 'Performance editor should not render a page-level More menu.');
+      assertUiSmoke(!document.getElementById('exportPerformanceTestButton'), 'Performance editor should not render a page-level export test action.');
+      assertUiSmoke($('performanceAllowEnvironmentMutationInput').closest('#performanceAdvancedSettingsPanel'), 'Performance environment mutation should live in Advanced settings.');
       assertUiSmoke(!document.getElementById('performanceUseCsvVariablesInput'), 'Performance editor should not render a separate Use CSV variables checkbox.');
       assertUiSmoke($('performanceCsvVariablesButton').textContent.trim() === 'CSV Variables: Off', 'Performance CSV button should default to the disabled state.');
       assertUiSmoke(!$('performanceCsvVariablesButton').classList.contains('csv-variables-active'), 'Performance CSV button should not use the active color by default.');
@@ -3854,8 +3857,8 @@
       assertUiSmoke($('cancelPerformanceTestButton').previousElementSibling === $('runPerformanceTestButton'), 'Performance Cancel action should sit immediately after Run.');
       assertUiSmoke($('cancelPerformanceTestButton').classList.contains('danger-button'), 'Performance Cancel action should use danger styling.');
       assertUiSmoke(
-        $('performanceSettingsResize').getAttribute('aria-orientation') === 'horizontal',
-        'Performance request/settings splitter should expose horizontal separator semantics.'
+        $('performanceResultsResize').getAttribute('aria-orientation') === 'horizontal',
+        'Performance request/results splitter should expose horizontal separator semantics.'
       );
       $('performanceUrlInput').value = '{{perfHost}}/run';
       dispatchInput($('performanceUrlInput'));
@@ -4146,49 +4149,137 @@
       $('closeCookiesModalButton').click();
       await nextPaint();
       $('performanceRequestParamsTabButton').click();
-      for (const [tabId, type, label] of [
-        ['performanceDiagnosisTabButton', 'diagnosis', 'Full Endpoint Diagnosis'],
-        ['performanceLatencyTabButton', 'latency', 'Latency'],
-        ['performanceThroughputTabButton', 'throughput', 'RPS / Throughput'],
-        ['performanceConcurrencyTabButton', 'concurrency', 'Concurrency'],
-        ['performanceStressTabButton', 'stress', 'Stress'],
-        ['performanceSpikeTabButton', 'spike', 'Spike'],
-        ['performanceSoakTabButton', 'soak', 'Soak'],
-        ['performanceRampTabButton', 'ramp', 'Ramp']
-      ]) {
-        assertUiSmoke($(tabId).getAttribute('role') === 'tab', `${label} performance tab should expose role=tab.`);
-        assertUiSmoke($(tabId).dataset.tab === type, `${label} performance tab should target ${type}.`);
-      }
-      activateTab('performance', 'spike');
-      assertUiSmoke(performanceTest.type === 'spike', 'Selecting a Performance type tab should update the active performance test type.');
-      assertUiSmoke($('performanceSpikeTabButton').getAttribute('aria-selected') === 'true', 'Active Performance type tab should update aria-selected.');
+      const performanceTypeOptions = Array.from($('performanceTypeSelect').options).map((option) => `${option.value}:${option.textContent.trim()}`);
+      assertUiSmoke(
+        performanceTypeOptions.join('|') === 'diagnosis:Full Endpoint Diagnosis|latency:Latency|throughput:RPS / Throughput|concurrency:Concurrency|stress:Stress|spike:Spike|soak:Soak|ramp:Ramp',
+        `Performance type selector should expose every test type. options=${performanceTypeOptions.join('|')}`
+      );
+      $('performanceTypeSelect').value = 'diagnosis';
+      dispatchChange($('performanceTypeSelect'));
+      const diagnosisScopeSelect = $('diagnosisTab').querySelector('[data-performance-config="diagnosisScope"]');
+      const diagnosisMaxDurationInput = $('diagnosisTab').querySelector('[data-performance-safety="maxDurationSeconds"]');
+      diagnosisScopeSelect.value = 'extended';
+      dispatchChange(diagnosisScopeSelect);
+      assertUiSmoke(
+        diagnosisMaxDurationInput.value === '900',
+        `Increasing diagnosis scope to Extended should set Max Duration to 900, got ${diagnosisMaxDurationInput.value}.`
+      );
+      diagnosisScopeSelect.value = 'medium';
+      dispatchChange(diagnosisScopeSelect);
+      assertUiSmoke(
+        diagnosisMaxDurationInput.value === '300',
+        `Decreasing diagnosis scope to Medium should set Max Duration to 300, got ${diagnosisMaxDurationInput.value}.`
+      );
+      diagnosisScopeSelect.value = 'quick';
+      dispatchChange(diagnosisScopeSelect);
+      assertUiSmoke(
+        diagnosisMaxDurationInput.value === '60',
+        `Decreasing diagnosis scope to Quick should set Max Duration to 60, got ${diagnosisMaxDurationInput.value}.`
+      );
+      $('performanceTypeSelect').value = 'spike';
+      dispatchChange($('performanceTypeSelect'));
+      assertUiSmoke(performanceTest.type === 'spike', 'Selecting a Performance type should update the active performance test type.');
+      assertUiSmoke($('performanceTypeSelect').value === 'spike', 'Active Performance type selector should show the selected type.');
       assertUiSmoke($('spikeTab').getAttribute('aria-hidden') === 'false', 'Active Performance type pane should update aria-hidden.');
       assertUiSmoke($('spikeTab').querySelector('[data-performance-config="spikeMultiplier"]'), 'Spike pane should expose spike-specific controls.');
-      activateTab('performance', 'latency');
+      $('performanceTypeSelect').value = 'latency';
+      dispatchChange($('performanceTypeSelect'));
       const latencyIterationsInput = $('latencyTab').querySelector('[data-performance-config="iterations"]');
       latencyIterationsInput.value = '7';
       dispatchInput(latencyIterationsInput);
-      activateTab('performance', 'throughput');
+      $('performanceTypeSelect').value = 'throughput';
+      dispatchChange($('performanceTypeSelect'));
       assertUiSmoke(
         $('throughputTab').querySelector('[data-performance-config="iterations"]').value !== '7',
         'Performance type panes should keep independent config values.'
       );
-      activateTab('performance', 'latency');
+      $('performanceTypeSelect').value = 'latency';
+      dispatchChange($('performanceTypeSelect'));
       assertUiSmoke(
         $('latencyTab').querySelector('[data-performance-config="iterations"]').value === '7',
         'Returning to a Performance type pane should preserve that pane-specific config value.'
       );
-      const latencyEnvironmentRect = $('latencyTab').querySelector('.performance-environment-field').getBoundingClientRect();
-      const latencyIterationsRect = latencyIterationsInput.closest('.field').getBoundingClientRect();
-      const latencyMutationRect = $('latencyTab').querySelector('.performance-mutation-option').getBoundingClientRect();
+      const originalPerformanceUiFontSize = document.documentElement.style.getPropertyValue('--ui-font-size');
+      try {
+        document.documentElement.style.setProperty('--ui-font-size', '19px');
+        latencyIterationsInput.value = '1000000';
+        await nextPaint();
+        const activePerformanceInputs = Array.from($('latencyTab').querySelectorAll('.compact-number-field input'));
+        const activePerformanceInputWidths = activePerformanceInputs.map((input) => Math.round(input.getBoundingClientRect().width));
+        assertUiSmoke(
+          activePerformanceInputWidths.length >= 2
+            && activePerformanceInputWidths.every((width) => Math.abs(width - activePerformanceInputWidths[0]) <= 1),
+          `Performance test numeric inputs should share one width. widths=${activePerformanceInputWidths.join(',')}`
+        );
+        const inputStyle = getComputedStyle(latencyIterationsInput);
+        const performanceTextProbe = document.createElement('span');
+        performanceTextProbe.style.position = 'absolute';
+        performanceTextProbe.style.visibility = 'hidden';
+        performanceTextProbe.style.whiteSpace = 'pre';
+        performanceTextProbe.style.fontFamily = inputStyle.fontFamily;
+        performanceTextProbe.style.fontSize = inputStyle.fontSize;
+        performanceTextProbe.style.fontWeight = inputStyle.fontWeight;
+        performanceTextProbe.style.letterSpacing = inputStyle.letterSpacing;
+        performanceTextProbe.textContent = '1000000';
+        document.body.appendChild(performanceTextProbe);
+        const performanceTextWidth = performanceTextProbe.getBoundingClientRect().width;
+        performanceTextProbe.remove();
+        const inputPadding = (Number.parseFloat(inputStyle.paddingLeft) || 0)
+          + (Number.parseFloat(inputStyle.paddingRight) || 0);
+        const inputTextCapacity = latencyIterationsInput.getBoundingClientRect().width
+          - inputPadding
+          - 24;
+        assertUiSmoke(
+          inputTextCapacity >= performanceTextWidth,
+          'Performance test numeric inputs should fit 1000000 at the largest interface font size.'
+        );
+      } finally {
+        if (originalPerformanceUiFontSize) {
+          document.documentElement.style.setProperty('--ui-font-size', originalPerformanceUiFontSize);
+        } else {
+          document.documentElement.style.removeProperty('--ui-font-size');
+        }
+        latencyIterationsInput.value = '7';
+        await nextPaint();
+      }
       assertUiSmoke(
-        latencyEnvironmentRect.left > latencyIterationsRect.left,
-        'Performance Environment control should move to the right side of the settings row.'
+        $('performanceEnvironmentSelect').closest('.performance-settings'),
+        'Performance Environment control should live in the settings row.'
+      );
+      const performanceAuthRefreshRect = $('performanceAuthRefreshButton').getBoundingClientRect();
+      const performanceCaptureSettingsRect = $('performanceCaptureSettingsButton').getBoundingClientRect();
+      assertUiSmoke(
+        performanceAuthRefreshRect.top < performanceCaptureSettingsRect.top
+          || (
+            Math.abs(performanceAuthRefreshRect.top - performanceCaptureSettingsRect.top) <= 2
+            && performanceAuthRefreshRect.right <= performanceCaptureSettingsRect.left
+          ),
+        'Performance Refreshing Auth should appear before Capture Settings in the settings row.'
+      );
+      $('performanceAdvancedSettingsButton').click();
+      assertUiSmoke(
+        !$('performanceAdvancedSettingsPanel').hidden
+          && $('performanceAllowEnvironmentMutationInput').closest('#performanceAdvancedSettingsPanel'),
+        'Performance environment mutation control should open inside the Advanced dropdown.'
+      );
+      const performanceAdvancedPanelStyle = getComputedStyle($('performanceAdvancedSettingsPanel'));
+      const performanceAdvancedOptionRect = $('performanceAllowEnvironmentMutationInput').closest('.performance-mutation-option')?.getBoundingClientRect();
+      const performanceAdvancedInputRect = $('performanceAllowEnvironmentMutationInput').getBoundingClientRect();
+      const performanceAdvancedLabelRect = $('performanceAllowEnvironmentMutationInput').closest('.performance-mutation-option')?.querySelector('span')?.getBoundingClientRect();
+      assertUiSmoke(
+        performanceAdvancedPanelStyle.gridTemplateColumns.split(' ').length === 1,
+        'Performance Advanced dropdown should use a compact one-column panel.'
       );
       assertUiSmoke(
-        latencyMutationRect.left >= latencyEnvironmentRect.left,
-        'Performance environment mutation control should sit next to the Environment control.'
+        performanceAdvancedOptionRect
+          && performanceAdvancedInputRect
+          && performanceAdvancedLabelRect
+          && Math.abs(performanceAdvancedInputRect.top - performanceAdvancedLabelRect.top) <= 8
+          && performanceAdvancedLabelRect.height <= 24
+          && performanceAdvancedLabelRect.right <= performanceAdvancedOptionRect.right + 1,
+        'Performance Advanced checkbox and label should stay aligned in one clean row.'
       );
+      $('performanceAdvancedSettingsButton').click();
       assertUiSmoke(
         $('performanceResultsResize').getAttribute('aria-orientation') === 'horizontal',
         'Performance results splitter should expose horizontal separator semantics.'
@@ -4433,31 +4524,31 @@
       const performanceRequestRect = $('performanceRequestSection').getBoundingClientRect();
       const performanceEditorRect = $('performanceEditorSection').getBoundingClientRect();
       const performanceResultsRect = $('performanceResults').getBoundingClientRect();
-      const performanceTabsRect = document.querySelector('.performance-type-tabs').getBoundingClientRect();
-      const performanceSettingsSplitterRect = $('performanceSettingsResize').getBoundingClientRect();
+      const performanceTypeSelectorRect = $('performanceTypeSelect').getBoundingClientRect();
+      const performanceTypeFieldRect = $('performanceTypeSelect').closest('.field')?.getBoundingClientRect();
+      const activePerformanceControlRect = $('latencyTab').querySelector('[data-performance-config="iterations"]')?.closest('.field')?.getBoundingClientRect();
       const performanceSplitterRect = $('performanceResultsResize').getBoundingClientRect();
       const performanceRequestStyle = getComputedStyle($('performanceRequestSection'));
       const performanceEditorStyle = getComputedStyle($('performanceEditorSection'));
       const performanceResultsStyle = getComputedStyle($('performanceResults'));
       assertUiSmoke(
-        performanceRequestStyle.backgroundColor === performanceEditorStyle.backgroundColor
-          && performanceEditorStyle.backgroundColor === performanceResultsStyle.backgroundColor
+        performanceRequestStyle.backgroundColor === performanceResultsStyle.backgroundColor
           && performanceRequestStyle.borderTopStyle !== 'none'
-          && performanceEditorStyle.borderTopStyle !== 'none'
-          && performanceResultsStyle.borderTopStyle !== 'none',
-        'Performance request builder, settings, and results should render as separate boxed sections.'
+          && performanceResultsStyle.borderTopStyle !== 'none'
+          && performanceEditorStyle.borderTopStyle === 'none',
+        'Performance request builder and results should render as boxed sections while the plan controls stay embedded.'
       );
       assertUiSmoke(
         $('performanceEditorSection').scrollWidth <= $('performanceEditorSection').clientWidth + 2,
-        'Performance settings section should not need a horizontal scrollbar at the default size.'
+        'Performance plan controls should not need a horizontal scrollbar at the default size.'
       );
       assertUiSmoke(
         $('performanceEditorSection').scrollHeight <= $('performanceEditorSection').clientHeight + 2,
-        'Performance settings section should be compact enough to avoid a default vertical scrollbar.'
+        'Performance plan controls should be compact enough to avoid a default vertical scrollbar.'
       );
       assertUiSmoke(
         performancePanelRect.bottom - performanceResultsRect.bottom <= 12,
-        'Performance results should fill the available pane space below the settings.'
+        'Performance results should fill the available pane space below the request builder.'
       );
       $('performanceOutputRequestsTabButton').click();
       await nextPaint();
@@ -4466,55 +4557,40 @@
         'Long Performance output should scroll inside the execution list.'
       );
       assertUiSmoke(
-        performanceRequestRect.bottom <= performanceSettingsSplitterRect.top + 8
-          && performanceSettingsSplitterRect.bottom <= performanceEditorRect.top + 8,
-        'Performance request/settings splitter should sit between the boxed request builder and settings panes.'
+        performanceEditorRect.top >= performanceRequestRect.top
+          && performanceEditorRect.bottom <= performanceRequestRect.bottom,
+        'Performance plan controls should stay inside the request builder section.'
       );
       assertUiSmoke(
-        performanceEditorRect.bottom <= performanceSplitterRect.top + 8
+        performanceRequestRect.bottom <= performanceSplitterRect.top + 8
           && performanceSplitterRect.bottom <= performanceResultsRect.top + 8,
-        'Performance results splitter should sit between the boxed editor and results panes.'
+        'Performance results splitter should sit between the request builder and results panes.'
       );
       assertUiSmoke(
-        performanceTabsRect.bottom <= performanceSplitterRect.top + 8,
-        'Performance type tabs should remain visible above long Performance output.'
+        performanceTypeSelectorRect.bottom <= performanceSplitterRect.top + 8,
+        'Performance type selector should remain visible above long Performance output.'
       );
-      const performanceSettingsStartY = Math.round(performanceSettingsSplitterRect.top + (performanceSettingsSplitterRect.height / 2));
-      const performanceRequestStartValue = Math.round($('performanceRequestSection').getBoundingClientRect().height);
-      $('performanceSettingsResize').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientY: performanceSettingsStartY }));
-      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: performanceSettingsStartY }));
-      const performanceSettingsSamePositionValue = Number($('performanceSettingsResize').getAttribute('aria-valuenow'));
       assertUiSmoke(
-        Math.abs(performanceSettingsSamePositionValue - performanceRequestStartValue) <= 1,
-        `Performance request/settings resize should not jump on first mouse move. start=${performanceRequestStartValue} same=${performanceSettingsSamePositionValue}.`
+        performanceTypeFieldRect && activePerformanceControlRect && Math.abs(performanceTypeFieldRect.top - activePerformanceControlRect.top) <= 4,
+        'Performance type selector should sit on the same row as the active test-specific controls.'
       );
-      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: performanceSettingsStartY + 24 }));
-      const performanceSettingsMovedValue = Number($('performanceSettingsResize').getAttribute('aria-valuenow'));
-      assertUiSmoke(
-        Math.abs(performanceSettingsMovedValue - (performanceRequestStartValue + 24)) <= 2,
-        `Performance request/settings resize should track pointer delta. start=${performanceRequestStartValue} moved=${performanceSettingsMovedValue}.`
-      );
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-      assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Performance request/settings resize did not exit resizing state.');
-      $('performanceSettingsResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-      const performanceResultsSplitterRectAfterRequestResize = $('performanceResultsResize').getBoundingClientRect();
-      const performanceStartY = Math.round(performanceResultsSplitterRectAfterRequestResize.top + (performanceResultsSplitterRectAfterRequestResize.height / 2));
-      const performanceStartValue = Math.round($('performanceEditorSection').getBoundingClientRect().height);
+      const performanceStartY = Math.round(performanceSplitterRect.top + (performanceSplitterRect.height / 2));
+      const performanceStartValue = Math.round($('performanceRequestSection').getBoundingClientRect().height);
       $('performanceResultsResize').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientY: performanceStartY }));
       document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: performanceStartY }));
       const performanceSamePositionValue = Number($('performanceResultsResize').getAttribute('aria-valuenow'));
       assertUiSmoke(
         Math.abs(performanceSamePositionValue - performanceStartValue) <= 1,
-        `Performance results resize should not jump on first mouse move. start=${performanceStartValue} same=${performanceSamePositionValue}.`
+        `Performance request/results resize should not jump on first mouse move. start=${performanceStartValue} same=${performanceSamePositionValue}.`
       );
       document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: performanceStartY + 24 }));
       const performanceMovedValue = Number($('performanceResultsResize').getAttribute('aria-valuenow'));
       assertUiSmoke(
         Math.abs(performanceMovedValue - (performanceStartValue + 24)) <= 2,
-        `Performance results resize should track pointer delta. start=${performanceStartValue} moved=${performanceMovedValue}.`
+        `Performance request/results resize should track pointer delta. start=${performanceStartValue} moved=${performanceMovedValue}.`
       );
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-      assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Performance results resize did not exit resizing state.');
+      assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Performance request/results resize did not exit resizing state.');
       $('performanceResultsResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
       workspace.performanceTests = [];
       openPerformanceTabs = [];
@@ -4722,6 +4798,16 @@
       assertUiSmoke($('runnerCsvVariablesButton').closest('.runner-settings'), 'Runner CSV controls should live in the settings row.');
       assertUiSmoke($('runnerCaptureSettingsButton').closest('.runner-settings'), 'Runner Capture Settings should live in the settings row.');
       assertUiSmoke($('runnerAuthRefreshButton').closest('.runner-settings'), 'Runner Refreshing Auth should live in the settings row.');
+      const runnerAuthRefreshRect = $('runnerAuthRefreshButton').getBoundingClientRect();
+      const runnerCaptureSettingsRect = $('runnerCaptureSettingsButton').getBoundingClientRect();
+      assertUiSmoke(
+        runnerAuthRefreshRect.top < runnerCaptureSettingsRect.top
+          || (
+            Math.abs(runnerAuthRefreshRect.top - runnerCaptureSettingsRect.top) <= 2
+            && runnerAuthRefreshRect.right <= runnerCaptureSettingsRect.left
+          ),
+        'Runner Refreshing Auth should appear before Capture Settings in the settings row.'
+      );
       assertUiSmoke($('runnerAdvancedSettingsButton').closest('.runner-settings'), 'Runner Advanced control should live in the settings row.');
       assertUiSmoke($('runnerStopOnFailure').closest('#runnerAdvancedSettingsPanel'), 'Runner stop-on-failure should live in the Advanced dropdown.');
       assertUiSmoke($('runnerAllowEnvironmentMutation').closest('#runnerAdvancedSettingsPanel'), 'Runner environment mutation should live in the Advanced dropdown.');

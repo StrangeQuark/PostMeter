@@ -301,6 +301,7 @@
     bindClick(doc, 'performanceToggleCsvVariablesButton', options.onTogglePerformanceCsvVariables);
     bindClick(doc, 'performanceEditCsvVariablesButton', options.onEditPerformanceCsvVariables);
     bindClick(doc, 'performanceCaptureSettingsButton', options.onTogglePerformanceCaptureSettings);
+    bindClick(doc, 'performanceAdvancedSettingsButton', options.onTogglePerformanceAdvancedSettings);
     bindClick(doc, 'performanceToggleAuthRefreshButton', options.onTogglePerformanceAuthRefresh);
     bindClick(doc, 'performanceEditAuthRefreshButton', options.onEditPerformanceAuthRefresh);
     bindClick(doc, 'performanceAuthRefreshOpenRequestButton', options.onOpenPerformanceAuthRefreshRequest);
@@ -317,7 +318,6 @@
     bindClick(doc, 'deletePerformanceTestButton', options.onDeletePerformanceTest);
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
-    bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
     bindClick(doc, 'exportPerformanceResultHtmlButton', options.onExportPerformanceResultHtml);
     bindClick(doc, 'exportPerformanceResultJsonButton', options.onExportPerformanceResultJson);
     bindClick(doc, 'exportPerformanceResultCsvButton', options.onExportPerformanceResultCsv);
@@ -359,6 +359,7 @@
     bindAll(doc, '#runnerCaptureSettingsPanel input', 'input', options.onRunnerConfigChange);
     bindAll(doc, '#runnerAuthRefreshPanel input, #runnerAuthRefreshPanel select, #runnerAuthRefreshPanel textarea', 'change', options.onRunnerConfigChange);
     bindAll(doc, '#runnerAuthRefreshPanel input, #runnerAuthRefreshPanel textarea', 'input', options.onRunnerConfigChange);
+    bindChange(doc, 'performanceTypeSelect', options.onPerformanceTypeChange || options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-environment]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-mutation]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-config]', 'input', options.onPerformanceConfigChange);

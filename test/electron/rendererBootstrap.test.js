@@ -1764,8 +1764,12 @@ test('renderer bootstrap binds performance creation import export run and config
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
-    'exportPerformanceTestButton',
+    'performanceTypeSelect',
+    'performanceEnvironmentSelect',
     'performanceCaptureSettingsButton',
+    'performanceAdvancedSettingsButton',
+    'performanceAdvancedSettingsPanel',
+    'performanceAllowEnvironmentMutationInput',
     'performanceAuthRefreshButton',
     'performanceAuthRefreshMenu',
     'performanceToggleAuthRefreshButton',
@@ -1797,8 +1801,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceBinaryBodySourceInput'
   ];
   const elements = new Map(controlIds.map((id) => [id, createElement({ tagName: id.endsWith('Select') ? 'SELECT' : 'INPUT' })]));
-  const performanceEnvironmentControls = [createElement({ tagName: 'SELECT' })];
-  const performanceMutationControls = [createElement({ tagName: 'INPUT' })];
+  const performanceEnvironmentControls = [elements.get('performanceEnvironmentSelect')];
+  const performanceMutationControls = [elements.get('performanceAllowEnvironmentMutationInput')];
   const performanceConfigControls = Array.from({ length: 5 }, () => createElement({ tagName: 'INPUT' }));
   const performanceSafetyControls = Array.from({ length: 3 }, () => createElement({ tagName: 'INPUT' }));
   const performanceTab = createElement();
@@ -1846,7 +1850,9 @@ test('renderer bootstrap binds performance creation import export run and config
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
+    onPerformanceTypeChange: () => calls.push('type'),
     onTogglePerformanceCaptureSettings: () => calls.push('capture-settings'),
+    onTogglePerformanceAdvancedSettings: () => calls.push('advanced-settings'),
     onTogglePerformanceAuthRefresh: () => calls.push('auth-refresh-toggle'),
     onEditPerformanceAuthRefresh: () => calls.push('auth-refresh-edit'),
     onExportPerformanceResultHtml: () => calls.push('export-result-html'),
@@ -1880,8 +1886,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
-    'exportPerformanceTestButton',
     'performanceCaptureSettingsButton',
+    'performanceAdvancedSettingsButton',
     'performanceAuthRefreshButton',
     'performanceToggleAuthRefreshButton',
     'performanceEditAuthRefreshButton',
@@ -1902,6 +1908,7 @@ test('renderer bootstrap binds performance creation import export run and config
   ]) {
     elements.get(id).dispatch('click');
   }
+  elements.get('performanceTypeSelect').dispatch('change');
   for (const control of [...performanceEnvironmentControls, ...performanceMutationControls]) {
     control.dispatch('change');
   }
@@ -1932,8 +1939,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'delete',
     'run',
     'cancel',
-    'export-test',
     'capture-settings',
+    'advanced-settings',
     'auth-refresh-toggle',
     'auth-refresh-edit',
     'export-result-html',
@@ -1947,6 +1954,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'calibrate',
     'close-calibration'
   ]);
+  assert.ok(calls.includes('type'));
   assert.equal(calls.filter((call) => call === 'config').length, 11);
   assert.ok(calls.includes('beautify-performance'));
   assert.ok(calls.includes('add-form-data'));

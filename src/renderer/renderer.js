@@ -899,6 +899,7 @@ function bindUi() {
     onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
     onTogglePerformanceCsvVariables: toggleActivePerformanceCsvVariables,
     onTogglePerformanceCaptureSettings: (event) => toggleCaptureSettingsPanel('performance', event),
+    onTogglePerformanceAdvancedSettings: (event) => togglePerformanceAdvancedSettingsPanel(event),
     onTogglePerformanceAuthRefresh: toggleActivePerformanceAuthRefresh,
     onEditPerformanceAuthRefresh: (event) => toggleAuthRefreshPanel('performance', event),
     onOpenPerformanceAuthRefreshRequest: () => openExistingAuthRefreshRequest('performance'),
@@ -952,6 +953,7 @@ function bindUi() {
     },
     onRunnerConfigChange: collectRunnerAndMarkDirty,
     onEditRunnerCsvVariables: () => { void editActiveRunnerCsvVariables(); },
+    onPerformanceTypeChange: setActivePerformanceTypeFromControl,
     onPerformanceConfigChange: collectPerformanceTestAndMarkDirty,
     onPerformanceRequestChange: collectPerformanceTestAndMarkDirty,
     onEditPerformanceCsvVariables: () => { void editActivePerformanceCsvVariables(); },
@@ -7957,7 +7959,7 @@ function renderPerformanceEditor() {
     title.setAttribute('aria-disabled', test ? 'false' : 'true');
     title.setAttribute('aria-label', 'Performance test name');
   }
-  for (const id of ['performanceCsvVariablesButton', 'performanceToggleCsvVariablesButton', 'performanceEditCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
+  for (const id of ['performanceCsvVariablesButton', 'performanceToggleCsvVariablesButton', 'performanceEditCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'importPerformanceRequestButton', 'performanceAdvancedSettingsButton']) {
     const button = $(id);
     if (button) {
       button.disabled = !test;
@@ -7979,6 +7981,9 @@ function renderPerformanceEditor() {
   renderCapturePolicyControls('performance', test?.capturePolicy, Boolean(test));
   renderPerformanceRequestEditor(test);
   renderAuthRefreshControls('performance', test?.authRefresh, Boolean(test));
+  if (!test) {
+    closePerformanceAdvancedSettingsPanel();
+  }
   syncPerformanceResultExportButtons(test);
 }
 
@@ -8196,6 +8201,14 @@ function performanceSelectedEnvironment(test = activePerformanceTest()) {
 
 function renderPerformanceTypeTabs(test) {
   const type = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
+  const select = $('performanceTypeSelect');
+  if (select) {
+    select.value = type;
+    if (select.value !== type) {
+      select.value = 'diagnosis';
+    }
+    select.disabled = !test;
+  }
   for (const button of document.querySelectorAll('.tab[data-tab-group="performance"]')) {
     const isActive = button.dataset.tab === type;
     button.classList.toggle('active', isActive);
@@ -8215,8 +8228,9 @@ function renderPerformanceTypeTabs(test) {
 }
 
 function renderPerformanceEnvironmentControls(test) {
+  const activeType = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
   for (const select of document.querySelectorAll('[data-performance-environment]')) {
-    const type = performanceTypeForElement(select);
+    const type = performanceTypeForElement(select) || activeType;
     const settings = performanceTypeSettings(test, type);
     const selectedEnvironmentId = settings.environmentId || 'none';
     select.textContent = '';
@@ -8265,11 +8279,38 @@ function renderPerformanceSafetyControls(test) {
 }
 
 function renderPerformanceMutationControls(test) {
+  const activeType = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
   for (const input of document.querySelectorAll('[data-performance-mutation]')) {
-    const type = performanceTypeForElement(input);
+    const type = performanceTypeForElement(input) || activeType;
     input.checked = performanceTypeSettings(test, type).allowEnvironmentMutation === true;
     input.disabled = !test;
   }
+}
+
+function setActivePerformanceTypeFromControl() {
+  const test = activePerformanceTest();
+  if (!test) {
+    return;
+  }
+  const previousType = RENDERER_PERFORMANCE_TEST_TYPES.includes(test.type) ? test.type : 'diagnosis';
+  collectPerformanceTypeSettingsFromPanel(test, previousType, $(`${previousType}Tab`) || activePerformanceTypePanel());
+  const nextType = RENDERER_PERFORMANCE_TEST_TYPES.includes($('performanceTypeSelect')?.value)
+    ? $('performanceTypeSelect').value
+    : 'diagnosis';
+  const changed = test.type !== nextType;
+  test.type = nextType;
+  syncPerformanceActiveTypeSettings(test);
+  renderPerformanceTypeTabs(test);
+  renderPerformanceEnvironmentControls(test);
+  renderPerformanceConfigControls(test);
+  renderPerformanceSafetyControls(test);
+  renderPerformanceMutationControls(test);
+  renderCapturePolicyControls('performance', test.capturePolicy, true);
+  if (changed) {
+    markActivePerformanceDirty();
+  }
+  refreshVariableHighlights();
+  scheduleSessionSave();
 }
 
 function capturePolicyKind(prefix) {
@@ -8643,6 +8684,60 @@ function toggleRunnerAdvancedSettingsPanel(event) {
   button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
   if (shouldOpen) {
     positionRunnerAdvancedSettingsPanel();
+    panel.querySelector('input, select, button, textarea')?.focus?.();
+  }
+}
+
+function closePerformanceAdvancedSettingsPanel() {
+  const panel = $('performanceAdvancedSettingsPanel');
+  const button = $('performanceAdvancedSettingsButton');
+  if (!panel || !button) {
+    return;
+  }
+  panel.hidden = true;
+  panel.style.left = '';
+  panel.style.top = '';
+  button.setAttribute('aria-expanded', 'false');
+}
+
+function positionPerformanceAdvancedSettingsPanel() {
+  const panel = $('performanceAdvancedSettingsPanel');
+  const button = $('performanceAdvancedSettingsButton');
+  if (!panel || !button || panel.hidden) {
+    return;
+  }
+  const margin = 12;
+  const gap = 6;
+  const buttonRect = button.getBoundingClientRect();
+  const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
+  const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  const panelWidth = Math.min(panel.offsetWidth || 320, Math.max(0, viewportWidth - margin * 2));
+  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  const left = Math.min(Math.max(margin, buttonRect.left), maxLeft);
+  const preferredTop = buttonRect.bottom + gap;
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+  const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function togglePerformanceAdvancedSettingsPanel(event) {
+  event?.stopPropagation?.();
+  const panel = $('performanceAdvancedSettingsPanel');
+  const button = $('performanceAdvancedSettingsButton');
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  const shouldOpen = panel.hidden !== false;
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: shouldOpen ? panel : null });
+  panel.hidden = !shouldOpen;
+  button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    positionPerformanceAdvancedSettingsPanel();
     panel.querySelector('input, select, button, textarea')?.focus?.();
   }
 }
@@ -11533,6 +11628,65 @@ function ensurePerformanceResultsStructure() {
   }
   root.textContent = '';
 
+  const header = document.createElement('div');
+  header.className = 'runner-results-header performance-results-header';
+  const heading = document.createElement('div');
+  heading.className = 'runner-results-heading performance-results-heading';
+  const headerTitle = document.createElement('h3');
+  headerTitle.textContent = 'Results';
+  const summary = document.createElement('div');
+  summary.id = 'performanceResultsSummary';
+  summary.className = 'test-results-summary';
+  summary.textContent = 'No performance run yet.';
+  heading.append(headerTitle, summary);
+  const exportGroup = document.createElement('div');
+  exportGroup.className = 'toolbar-group menu-group result-export-menu-group';
+  exportGroup.setAttribute('aria-label', 'Performance result export');
+  const exportButton = document.createElement('button');
+  exportButton.id = 'exportPerformanceResultsButton';
+  exportButton.className = 'menu-trigger';
+  exportButton.type = 'button';
+  exportButton.disabled = true;
+  exportButton.setAttribute('aria-haspopup', 'menu');
+  exportButton.setAttribute('aria-expanded', 'false');
+  exportButton.textContent = 'Export Results';
+  exportButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shouldOpen = exportMenu.hidden !== false;
+    closeToolbarMenus();
+    closeCaptureSettingsPanels();
+    exportMenu.hidden = !shouldOpen;
+    exportButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  });
+  const exportMenu = document.createElement('div');
+  exportMenu.id = 'exportPerformanceResultsMenu';
+  exportMenu.className = 'toolbar-menu';
+  exportMenu.role = 'menu';
+  exportMenu.setAttribute('aria-labelledby', 'exportPerformanceResultsButton');
+  exportMenu.hidden = true;
+  for (const [id, label] of [
+    ['exportPerformanceResultHtmlButton', 'HTML Report'],
+    ['exportPerformanceResultJsonButton', 'JSON'],
+    ['exportPerformanceResultCsvButton', 'CSV']
+  ]) {
+    const button = document.createElement('button');
+    button.id = id;
+    button.type = 'button';
+    button.role = 'menuitem';
+    button.disabled = true;
+    button.textContent = label;
+    if (id === 'exportPerformanceResultHtmlButton') {
+      button.addEventListener('click', () => openHtmlReportOptionsModal('performance'));
+    } else if (id === 'exportPerformanceResultJsonButton') {
+      button.addEventListener('click', () => { void exportActivePerformanceResult('json'); });
+    } else if (id === 'exportPerformanceResultCsvButton') {
+      button.addEventListener('click', () => { void exportActivePerformanceResult('csv'); });
+    }
+    exportMenu.append(button);
+  }
+  exportGroup.append(exportButton, exportMenu);
+  header.append(heading, exportGroup);
+
   const tabs = document.createElement('div');
   tabs.className = 'tabs performance-output-tabs';
   tabs.setAttribute('role', 'tablist');
@@ -11582,17 +11736,12 @@ function ensurePerformanceResultsStructure() {
   resultsPanel.setAttribute('role', 'tabpanel');
   resultsPanel.setAttribute('aria-labelledby', 'performanceOutputResultsTabButton');
 
-  const summary = document.createElement('div');
-  summary.id = 'performanceResultsSummary';
-  summary.className = 'test-results-summary';
-  summary.textContent = 'No performance run yet.';
-
   const runDetails = document.createElement('div');
   runDetails.id = 'performanceRunDetails';
   runDetails.className = 'runner-execution-details performance-run-details';
   appendEmptyTestResult(runDetails, 'No performance run yet.');
 
-  resultsPanel.append(summary, runDetails);
+  resultsPanel.append(runDetails);
 
   const requestsPanel = document.createElement('div');
   requestsPanel.id = 'performanceOutputRequestsTab';
@@ -11615,7 +11764,7 @@ function ensurePerformanceResultsStructure() {
   graphsPanel.setAttribute('aria-labelledby', 'performanceOutputGraphsTabButton');
   appendEmptyTestResult(graphsPanel, 'No graphs yet.');
 
-  root.append(tabs, resultsPanel, requestsPanel, graphsPanel);
+  root.append(header, tabs, resultsPanel, requestsPanel, graphsPanel);
   return root;
 }
 
@@ -21493,6 +21642,7 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel, editedElemen
   if (type === 'diagnosis') {
     const profile = diagnosisProfileForScope(config.diagnosisScope);
     config.iterations = profile.totalRequests;
+    syncDiagnosisScopeDurationSafety(panel, previous, config, editedElement || document.activeElement);
   }
   const safetyLimits = {
     maxTotalRequests: clampPerformanceSafetyInput('maxTotalRequests', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.safetyLimits?.maxTotalRequests || 100, panel),
@@ -21517,12 +21667,39 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel, editedElemen
       performanceEffectiveConcurrency(type, config)
     );
   }
+  const panelIsActive = panel.classList.contains('active');
+  const environmentControl = panelIsActive
+    ? $('performanceEnvironmentSelect') || panel.querySelector('[data-performance-environment]')
+    : panel.querySelector('[data-performance-environment]');
+  const mutationControl = panelIsActive
+    ? $('performanceAllowEnvironmentMutationInput') || panel.querySelector('[data-performance-mutation]')
+    : panel.querySelector('[data-performance-mutation]');
   test.typeSettings[type] = {
-    environmentId: panel.querySelector('[data-performance-environment]')?.value || previous.environmentId || 'none',
-    allowEnvironmentMutation: panel.querySelector('[data-performance-mutation]')?.checked === true,
+    environmentId: environmentControl?.value || previous.environmentId || 'none',
+    allowEnvironmentMutation: mutationControl?.checked === true,
     config,
     safetyLimits
   };
+}
+
+function syncDiagnosisScopeDurationSafety(panel, previous = {}, config = {}, editedElement = document.activeElement) {
+  const edited = activePerformancePanelField(panel, editedElement);
+  if (edited.kind !== 'config' || edited.name !== 'diagnosisScope') {
+    return;
+  }
+  const durationInput = performancePanelInput(panel, 'safety', 'maxDurationSeconds');
+  if (!durationInput) {
+    return;
+  }
+  const previousProfile = diagnosisProfileForScope(previous.config?.diagnosisScope);
+  const nextProfile = diagnosisProfileForScope(config.diagnosisScope);
+  const parsedDuration = Number.parseInt(durationInput.value || '', 10);
+  const currentDuration = Number.isFinite(parsedDuration)
+    ? parsedDuration
+    : Number(previous.safetyLimits?.maxDurationSeconds || previousProfile.maxDurationSeconds);
+  if (currentDuration <= previousProfile.maxDurationSeconds) {
+    setPerformancePanelControlValue(panel, 'safety', 'maxDurationSeconds', nextProfile.maxDurationSeconds);
+  }
 }
 
 function performancePlannedRequestCount(type, config, safetyLimits) {
@@ -21765,11 +21942,19 @@ function collectPerformanceDiagnosisScope(panel, fallback = 'quick') {
 }
 
 function activePerformanceType() {
+  const selectedType = $('performanceTypeSelect')?.value || '';
+  if (RENDERER_PERFORMANCE_TEST_TYPES.includes(selectedType)) {
+    return selectedType;
+  }
   const type = document.querySelector('.tab[data-tab-group="performance"].active')?.dataset.tab || '';
   return RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : '';
 }
 
 function activePerformanceTypePanel() {
+  const type = activePerformanceType();
+  if (type) {
+    return $(`${type}Tab`) || document.querySelector('.performance-type-panel.active');
+  }
   return document.querySelector('.performance-type-panel.active');
 }
 
@@ -21993,10 +22178,16 @@ function activateTab(groupName, tabName) {
   }
   if (groupName === 'performance' && RENDERER_PERFORMANCE_TEST_TYPES.includes(tabName)) {
     const test = activePerformanceTest();
+    if ($('performanceTypeSelect')) {
+      $('performanceTypeSelect').value = tabName;
+    }
     if (test) {
       const changed = test.type !== tabName;
       test.type = tabName;
       syncPerformanceActiveTypeSettings(test);
+      renderPerformanceTypeTabs(test);
+      renderPerformanceEnvironmentControls(test);
+      renderPerformanceMutationControls(test);
       if (changed) {
         markActivePerformanceDirty();
       }

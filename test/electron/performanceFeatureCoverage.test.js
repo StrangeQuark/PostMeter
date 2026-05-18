@@ -82,7 +82,7 @@ test('Performance docs track model, UI, import/export, safety, and environment g
 
 test('Performance UI keeps type-specific input fields scoped to applicable test types', async () => {
   const html = await readProjectFile('src/renderer/index.html');
-  const performanceRequest = htmlPanel(html, 'performanceRequestSection', 'performanceSettingsResize');
+  const performanceRequest = htmlPanel(html, 'performanceRequestSection', 'performanceResultsResize');
   const diagnosis = htmlPanel(html, 'diagnosisTab', 'latencyTab');
   const latency = htmlPanel(html, 'latencyTab', 'throughputTab');
   const throughput = htmlPanel(html, 'throughputTab', 'concurrencyTab');
@@ -98,6 +98,12 @@ test('Performance UI keeps type-specific input fields scoped to applicable test 
   }
   assert.doesNotMatch(performanceRequest, /performanceRequestCookiesTabButton/);
   assert.match(performanceRequest, /id="performanceMethodSelect"/);
+  assert.match(performanceRequest, /id="performanceTypeSelect"/);
+  assert.match(performanceRequest, />Full Endpoint Diagnosis</);
+  assert.match(performanceRequest, />RPS \/ Throughput</);
+  assert.match(performanceRequest, /id="performanceEnvironmentSelect"/);
+  assert.match(performanceRequest, /id="performanceAllowEnvironmentMutationInput"/);
+  assert.doesNotMatch(performanceRequest, /performance-type-tabs/);
   assert.match(performanceRequest, /class="method-get">GET/);
   assert.match(performanceRequest, /id="performanceBodyTypeSelect"/);
   assert.match(performanceRequest, /id="performanceAuthTypeSelect"/);
