@@ -8141,6 +8141,7 @@ function renderPerformanceRequestVariablePairs(pairs) {
       refreshVariableHighlights();
     },
     onRemove: () => {
+      markActivePerformanceDirty();
       renderPerformanceRequestEditor();
       refreshVariableHighlights();
     }
@@ -17173,6 +17174,7 @@ function renderCollectionVariablePairs(pairs) {
     onRemove: () => {
       markActiveCollectionTabDirty();
       renderCollectionEditor();
+      renderVariablePreview();
       refreshVariableHighlights();
     }
   });
@@ -17201,6 +17203,7 @@ function renderFolderVariablePairs(pairs) {
     onRemove: () => {
       markActiveFolderTabDirty();
       renderFolderEditor();
+      renderVariablePreview();
       refreshVariableHighlights();
     }
   });
@@ -17227,7 +17230,9 @@ function renderRequestVariablePairs(pairs) {
       refreshVariableHighlights();
     },
     onRemove: () => {
+      markActiveRequestDirty();
       renderRequestEditor();
+      renderVariablePreview();
       refreshVariableHighlights();
     }
   });

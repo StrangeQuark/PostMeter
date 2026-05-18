@@ -1111,15 +1111,116 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .variable-preview {
   margin: 10px 0 0;
-  padding: 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface-muted);
   color: var(--muted);
+  overflow: hidden;
+}
+
+.variable-preview-empty {
+  padding: 10px;
+  color: var(--muted);
   font-family: var(--mono);
   font-size: var(--editor-font-size);
-  line-height: 1.45;
-  white-space: pre-wrap;
+}
+
+.variable-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.variable-preview-title {
+  color: var(--text);
+  font-size: var(--ui-font-size);
+}
+
+.variable-preview-table-wrap {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.variable-preview-table {
+  min-width: 680px;
+}
+
+.variable-preview-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(220px, 2fr) minmax(110px, 0.65fr) minmax(92px, 0.45fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.variable-preview-row:first-child {
+  border-top: 0;
+}
+
+.variable-preview-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 32px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.86em;
+  font-weight: 800;
+}
+
+.variable-preview-data {
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+}
+
+.variable-preview-shadowed {
+  color: color-mix(in srgb, var(--muted) 68%, transparent);
+}
+
+.variable-preview-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.variable-preview-key,
+.variable-preview-value {
+  font-family: var(--mono);
+}
+
+.variable-preview-key {
+  font-weight: 700;
+}
+
+.variable-preview-shadowed .variable-preview-value {
+  color: inherit;
+}
+
+.variable-preview-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.84em;
+  font-weight: 800;
+}
+
+.variable-preview-status-active {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 18%, var(--surface));
+  border-color: var(--green);
+}
+
+.variable-preview-status-shadowed {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
 }
 
 @media (max-width: 900px) {

@@ -3,6 +3,7 @@ const test = require('node:test');
 const {
   beautifyBodyText,
   bodyTypeCodeLanguage,
+  buildAvailableVariableRows,
   buildVariablePreviewText,
   collectAuthFromEditor,
   syncOauth1SignatureFields,
@@ -250,6 +251,55 @@ test('request editor panels build variable preview text using request-over-folde
       'folderOnly = present (Folder)',
       'shared = request (Request)'
     ].join('\n')
+  );
+});
+
+test('request editor panels expose environment collection folder and request variables in preview rows', () => {
+  const rows = buildAvailableVariableRows(
+    {
+      name: 'Collection',
+      variables: [
+        { enabled: true, key: 'collectionToken', value: 'from-collection' },
+        { enabled: true, key: 'shared', value: 'collection' }
+      ]
+    },
+    {
+      name: 'Environment',
+      variables: [
+        { enabled: true, key: 'environmentToken', value: 'from-environment' },
+        { enabled: true, key: 'shared', value: 'environment' }
+      ]
+    },
+    {
+      name: 'Request',
+      variables: [
+        { enabled: true, key: 'requestToken', value: 'from-request' },
+        { enabled: true, key: 'shared', value: 'request' },
+        { enabled: false, key: 'disabled', value: 'ignored' }
+      ]
+    },
+    null,
+    [{
+      name: 'Folder',
+      variables: [
+        { enabled: true, key: 'folderToken', value: 'from-folder' },
+        { enabled: true, key: 'shared', value: 'folder' }
+      ]
+    }]
+  );
+
+  assert.deepEqual(
+    rows.map((row) => [row.key, row.value, row.source, row.status]),
+    [
+      ['collectionToken', 'from-collection', 'Collection', 'Active'],
+      ['environmentToken', 'from-environment', 'Environment', 'Active'],
+      ['folderToken', 'from-folder', 'Folder', 'Active'],
+      ['requestToken', 'from-request', 'Request', 'Active'],
+      ['shared', 'request', 'Request', 'Active'],
+      ['shared', 'folder', 'Folder', 'Shadowed'],
+      ['shared', 'collection', 'Collection', 'Shadowed'],
+      ['shared', 'environment', 'Environment', 'Shadowed']
+    ]
   );
 });
 
