@@ -3226,10 +3226,6 @@ async function openTutorialsModal() {
 }
 
 async function openCookiesModal() {
-  const activeHost = domainFromRequestUrl(activeCookieManagerRequestUrl());
-  if (activeHost) {
-    cookieManagerExtraDomains.add(activeHost);
-  }
   renderWorkspaceCookieManager();
   await showModal('cookiesModal', true);
   renderCookieJarEditor();

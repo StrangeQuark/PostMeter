@@ -374,9 +374,14 @@
     assertUiSmoke($('openRequestCookiesButton'), 'Request Cookies tab should expose the cookie manager shortcut.');
     $('openRequestCookiesButton').click();
     await nextPaint();
+    assertUiSmoke($('cookiesDomainList').textContent.includes('No cookie domains.'), 'Cookie manager should not auto-add the active request host as an empty domain.');
+    $('cookiesDomainInput').value = 'api.example.test';
+    dispatchInput($('cookiesDomainInput'));
+    $('cookiesAddDomainButton').click();
+    await nextPaint();
     const cookieDomain = $('cookiesDomainList').querySelector('.cookie-domain-section');
-    assertUiSmoke(cookieDomain, 'Cookie manager should render domain sections.');
-    assertUiSmoke(cookieDomain.querySelector('.cookie-domain-name')?.textContent.includes('api.example.test'), 'Cookie manager should include the active request host.');
+    assertUiSmoke(cookieDomain, 'Cookie manager should render explicitly added domain sections.');
+    assertUiSmoke(cookieDomain.querySelector('.cookie-domain-name')?.textContent.includes('api.example.test'), 'Cookie manager should include manually added domains.');
     cookieDomain.querySelector('.cookie-add-inline-button').click();
     await nextPaint();
     const cookieEditor = $('cookiesDomainList').querySelector('.cookie-text-editor textarea');
@@ -395,6 +400,11 @@
     removeDomainButton.click();
     await nextPaint();
     assertUiSmoke(!$('cookiesDomainList').querySelector('.cookie-domain-section'), 'Removing a domain should remove the domain section and its cookies.');
+    $('closeCookiesModalButton').click();
+    await nextPaint();
+    $('openRequestCookiesButton').click();
+    await nextPaint();
+    assertUiSmoke(!$('cookiesDomainList').querySelector('[aria-label="Remove domain api.example.test"]'), 'Removed active request host domains should not reappear when reopening the cookie manager.');
     $('cookiesDomainInput').value = 'youtube.com';
     dispatchInput($('cookiesDomainInput'));
     $('cookiesAddDomainButton').click();

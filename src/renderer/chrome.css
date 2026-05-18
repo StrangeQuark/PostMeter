@@ -209,7 +209,9 @@
 }
 
 .environment-control select {
+  height: 30px;
   min-width: 138px;
+  padding: 5px 28px 5px 10px;
 }
 
 .topbar button {
