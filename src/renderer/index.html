@@ -1056,7 +1056,7 @@
             <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
               <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
               <label class="settings-toggle">
-                <input id="requestSslCertificateVerificationInput" type="checkbox">
+                <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting>
                 <span>Enable SSL certificate verification</span>
               </label>
             </section>
@@ -1077,6 +1077,58 @@
                 </label>
                 <button id="openRequestCookiesButton" type="button">Open Cookies</button>
               </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestProtocolSettingsTitle">
+              <h3 id="requestProtocolSettingsTitle" class="request-settings-title">Protocol</h3>
+              <div class="request-settings-columns">
+                <label class="field"><span>HTTP version</span><select id="requestHttpVersionSelect" data-request-setting>
+                  <option value="auto">Auto</option>
+                  <option value="http1">HTTP/1.x</option>
+                  <option value="http2">HTTP/2</option>
+                </select></label>
+                <label class="settings-toggle">
+                  <input id="requestStrictHttpParserInput" type="checkbox" data-request-setting>
+                  <span>Enable strict HTTP parser</span>
+                </label>
+              </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestRedirectSettingsTitle">
+              <h3 id="requestRedirectSettingsTitle" class="request-settings-title">Redirects</h3>
+              <div class="request-settings-columns">
+                <label class="settings-toggle">
+                  <input id="requestFollowRedirectsInput" type="checkbox" data-request-setting>
+                  <span>Automatically follow redirects</span>
+                </label>
+                <label class="field compact-number-field"><span>Maximum number of redirects</span><input id="requestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-request-setting></label>
+                <label class="settings-toggle">
+                  <input id="requestFollowOriginalHttpMethodInput" type="checkbox" data-request-setting>
+                  <span>Follow original HTTP method</span>
+                </label>
+                <label class="settings-toggle">
+                  <input id="requestFollowAuthorizationHeaderInput" type="checkbox" data-request-setting>
+                  <span>Follow Authorization header</span>
+                </label>
+                <label class="settings-toggle">
+                  <input id="requestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-request-setting>
+                  <span>Remove referer header on redirect</span>
+                </label>
+              </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestUrlSettingsTitle">
+              <h3 id="requestUrlSettingsTitle" class="request-settings-title">URL</h3>
+              <label class="settings-toggle">
+                <input id="requestEncodeUrlAutomaticallyInput" type="checkbox" data-request-setting>
+                <span>Encode URL automatically</span>
+              </label>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestTlsHandshakeSettingsTitle">
+              <h3 id="requestTlsHandshakeSettingsTitle" class="request-settings-title">TLS handshake</h3>
+              <label class="settings-toggle">
+                <input id="requestUseServerCipherSuiteInput" type="checkbox" data-request-setting>
+                <span>Use server cipher suite during handshake</span>
+              </label>
+              <label class="field"><span>TLS/SSL protocols disabled during handshake</span><input id="requestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-request-setting></label>
+              <label class="field"><span>Cipher suite selection</span><textarea id="requestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-request-setting></textarea></label>
             </section>
           </div>
         </div>
@@ -2295,7 +2347,7 @@
                 <section class="request-settings-section" aria-labelledby="performanceCertificatesSettingsTitle">
                   <h3 id="performanceCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
                   <label class="settings-toggle">
-                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox">
+                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox" data-performance-request-setting>
                     <span>Enable SSL certificate verification</span>
                   </label>
                 </section>
@@ -2316,6 +2368,58 @@
                     </label>
                     <button id="openPerformanceCookiesButton" type="button">Open Cookies</button>
                   </div>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceProtocolSettingsTitle">
+                  <h3 id="performanceProtocolSettingsTitle" class="request-settings-title">Protocol</h3>
+                  <div class="request-settings-columns">
+                    <label class="field"><span>HTTP version</span><select id="performanceRequestHttpVersionSelect" data-performance-request-setting>
+                      <option value="auto">Auto</option>
+                      <option value="http1">HTTP/1.x</option>
+                      <option value="http2">HTTP/2</option>
+                    </select></label>
+                    <label class="settings-toggle">
+                      <input id="performanceRequestStrictHttpParserInput" type="checkbox" data-performance-request-setting>
+                      <span>Enable strict HTTP parser</span>
+                    </label>
+                  </div>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceRedirectSettingsTitle">
+                  <h3 id="performanceRedirectSettingsTitle" class="request-settings-title">Redirects</h3>
+                  <div class="request-settings-columns">
+                    <label class="settings-toggle">
+                      <input id="performanceRequestFollowRedirectsInput" type="checkbox" data-performance-request-setting>
+                      <span>Automatically follow redirects</span>
+                    </label>
+                    <label class="field compact-number-field"><span>Maximum number of redirects</span><input id="performanceRequestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-performance-request-setting></label>
+                    <label class="settings-toggle">
+                      <input id="performanceRequestFollowOriginalHttpMethodInput" type="checkbox" data-performance-request-setting>
+                      <span>Follow original HTTP method</span>
+                    </label>
+                    <label class="settings-toggle">
+                      <input id="performanceRequestFollowAuthorizationHeaderInput" type="checkbox" data-performance-request-setting>
+                      <span>Follow Authorization header</span>
+                    </label>
+                    <label class="settings-toggle">
+                      <input id="performanceRequestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-performance-request-setting>
+                      <span>Remove referer header on redirect</span>
+                    </label>
+                  </div>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceUrlSettingsTitle">
+                  <h3 id="performanceUrlSettingsTitle" class="request-settings-title">URL</h3>
+                  <label class="settings-toggle">
+                    <input id="performanceRequestEncodeUrlAutomaticallyInput" type="checkbox" data-performance-request-setting>
+                    <span>Encode URL automatically</span>
+                  </label>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceTlsHandshakeSettingsTitle">
+                  <h3 id="performanceTlsHandshakeSettingsTitle" class="request-settings-title">TLS handshake</h3>
+                  <label class="settings-toggle">
+                    <input id="performanceRequestUseServerCipherSuiteInput" type="checkbox" data-performance-request-setting>
+                    <span>Use server cipher suite during handshake</span>
+                  </label>
+                  <label class="field"><span>TLS/SSL protocols disabled during handshake</span><input id="performanceRequestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-performance-request-setting></label>
+                  <label class="field"><span>Cipher suite selection</span><textarea id="performanceRequestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-performance-request-setting></textarea></label>
                 </section>
               </div>
             </div>

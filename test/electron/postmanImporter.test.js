@@ -168,6 +168,134 @@ test('flips Postman disableCookieJar protocol setting at import and export bound
   assert.equal(exported.item[0].request.protocolProfileBehavior.disableBodyPruning, true);
 });
 
+test('imports and exports Postman request settings protocol profile controls', () => {
+  const autoCollection = importPostmanCollection({
+    info: {
+      name: 'Auto Request Settings',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'Default auto request',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/auto'
+      }
+    }, {
+      name: 'Explicit auto request',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/explicit-auto',
+        protocolProfileBehavior: {
+          httpVersion: 'auto'
+        }
+      }
+    }]
+  });
+  assert.equal(autoCollection.requests[0].settings.httpVersion, 'auto');
+  assert.equal(autoCollection.requests[1].settings.httpVersion, 'auto');
+  assert.equal(exportPostmanCollection(autoCollection).item[0].request.protocolProfileBehavior, undefined);
+
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Request Settings',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    protocolProfileBehavior: {
+      disableCookieJar: true,
+      followRedirects: false,
+      maxRedirects: 7,
+      disableUrlEncoding: true
+    },
+    item: [{
+      name: 'Folder',
+      protocolProfileBehavior: {
+        removeRefererHeaderOnRedirect: true
+      },
+      item: [{
+        name: 'Request settings',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/settings',
+          protocolProfileBehavior: {
+            disableBodyPruning: true,
+            strictSSL: false,
+            httpVersion: 'http2',
+            followOriginalHttpMethod: true,
+            followAuthorizationHeader: true,
+            strictHttpParser: true,
+            useServerCipherSuiteDuringHandshake: true,
+            disabledTlsProtocols: ['TLSv1', 'TLSv1.1'],
+            cipherSuiteSelection: 'AES128-SHA'
+          }
+        }
+      }]
+    }]
+  });
+
+  const request = collection.folders[0].requests[0];
+  assert.equal(request.cookieJar.enabled, false);
+  assert.equal(request.settings.sslCertificateVerification, 'disabled');
+  assert.equal(request.settings.httpVersion, 'http2');
+  assert.equal(request.settings.followRedirects, false);
+  assert.equal(request.settings.followOriginalHttpMethod, true);
+  assert.equal(request.settings.followAuthorizationHeader, true);
+  assert.equal(request.settings.removeRefererHeaderOnRedirect, true);
+  assert.equal(request.settings.strictHttpParser, true);
+  assert.equal(request.settings.encodeUrlAutomatically, false);
+  assert.equal(request.settings.maxRedirects, 7);
+  assert.equal(request.settings.useServerCipherSuiteDuringHandshake, true);
+  assert.deepEqual(request.settings.disabledTlsProtocols, ['TLSv1', 'TLSv1.1']);
+  assert.equal(request.settings.cipherSuiteSelection, 'AES128-SHA');
+
+  let exported = exportPostmanCollection(collection);
+  let profile = exported.item[0].item[0].request.protocolProfileBehavior;
+  assert.equal(profile.disableBodyPruning, true);
+  assert.equal(profile.disableCookieJar, true);
+  assert.equal(profile.strictSSL, false);
+  assert.equal(profile.httpVersion, 'http2');
+  assert.equal(profile.followRedirects, false);
+  assert.equal(profile.followOriginalHttpMethod, true);
+  assert.equal(profile.followAuthorizationHeader, true);
+  assert.equal(profile.removeRefererHeaderOnRedirect, true);
+  assert.equal(profile.strictHttpParser, true);
+  assert.equal(profile.disableUrlEncoding, true);
+  assert.equal(profile.maxRedirects, 7);
+  assert.equal(profile.useServerCipherSuiteDuringHandshake, true);
+  assert.deepEqual(profile.disabledTlsProtocols, ['TLSv1', 'TLSv1.1']);
+  assert.equal(profile.cipherSuiteSelection, 'AES128-SHA');
+
+  request.cookieJar.enabled = true;
+  request.settings = {
+    sslCertificateVerification: 'inherit',
+    httpVersion: 'auto',
+    followRedirects: true,
+    followOriginalHttpMethod: false,
+    followAuthorizationHeader: false,
+    removeRefererHeaderOnRedirect: false,
+    strictHttpParser: false,
+    encodeUrlAutomatically: true,
+    maxRedirects: 10,
+    useServerCipherSuiteDuringHandshake: false,
+    disabledTlsProtocols: [],
+    cipherSuiteSelection: ''
+  };
+  exported = exportPostmanCollection(collection);
+  profile = exported.item[0].item[0].request.protocolProfileBehavior;
+  assert.equal(profile.disableBodyPruning, true);
+  assert.equal(profile.disableCookieJar, undefined);
+  assert.equal(profile.strictSSL, undefined);
+  assert.equal(profile.httpVersion, undefined);
+  assert.equal(profile.followRedirects, undefined);
+  assert.equal(profile.disableUrlEncoding, undefined);
+  assert.equal(profile.maxRedirects, undefined);
+  assert.equal(profile.cipherSuiteSelection, undefined);
+
+  request.settings.httpVersion = 'http1';
+  exported = exportPostmanCollection(collection);
+  profile = exported.item[0].item[0].request.protocolProfileBehavior;
+  assert.equal(profile.httpVersion, 'http1');
+});
+
 test('imports and exports OAuth 2.0 Postman controls', () => {
   const authRequestParams = [
     { key: 'prompt', value: 'consent', enabled: true }

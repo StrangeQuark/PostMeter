@@ -849,7 +849,7 @@ function bindUi() {
     onAddHeader: () => addPair('headers'),
     onPostMeterTokenHeaderChange: () => setActiveRequestAutoHeaderOption('sendPostMeterToken', $('sendPostMeterTokenInput')?.checked === true),
     onShowGeneratedHeadersChange: () => setActiveRequestAutoHeaderOption('showGeneratedHeaders', $('showGeneratedHeadersInput')?.checked === true),
-    onRequestTlsSettingsChange: () => setActiveRequestTlsSettingsFromInputs(),
+    onRequestTlsSettingsChange: (event) => setActiveRequestTlsSettingsFromInputs(event),
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
@@ -970,7 +970,7 @@ function bindUi() {
     onAddPerformanceUrlencodedBodyRow: () => addBodyUrlencodedRow('performance'),
     onPerformanceAuthTypeChange: showPerformanceAuthSection,
     onPerformanceAuthInput: collectPerformanceTestAndMarkDirty,
-    onPerformanceRequestTlsSettingsChange: () => setActivePerformanceRequestTlsSettingsFromInputs(),
+    onPerformanceRequestTlsSettingsChange: (event) => setActivePerformanceRequestTlsSettingsFromInputs(event),
     onCollectionAuthTypeChange: showCollectionAuthSection,
     onCollectionInput: collectCollectionAndMarkDirty,
     onCollectionAuthInput: collectCollectionAndMarkDirty,
@@ -5339,16 +5339,68 @@ function normalizeRendererClientCertificates(values) {
     }));
 }
 
+const RENDERER_DEFAULT_REQUEST_SETTINGS = Object.freeze({
+  sslCertificateVerification: 'inherit',
+  httpVersion: 'auto',
+  followRedirects: true,
+  followOriginalHttpMethod: false,
+  followAuthorizationHeader: false,
+  removeRefererHeaderOnRedirect: false,
+  strictHttpParser: false,
+  encodeUrlAutomatically: true,
+  maxRedirects: 10,
+  useServerCipherSuiteDuringHandshake: false,
+  disabledTlsProtocols: '',
+  cipherSuiteSelection: ''
+});
+
 function normalizeRendererRequestTlsSettings(value = {}) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   return {
-    sslCertificateVerification: normalizeRendererRequestSslVerification(source.sslCertificateVerification)
+    sslCertificateVerification: normalizeRendererRequestSslVerification(source.sslCertificateVerification),
+    httpVersion: normalizeRendererHttpVersion(source.httpVersion),
+    followRedirects: source.followRedirects !== false,
+    followOriginalHttpMethod: source.followOriginalHttpMethod === true,
+    followAuthorizationHeader: source.followAuthorizationHeader === true,
+    removeRefererHeaderOnRedirect: source.removeRefererHeaderOnRedirect === true,
+    strictHttpParser: source.strictHttpParser === true,
+    encodeUrlAutomatically: source.encodeUrlAutomatically !== false,
+    maxRedirects: normalizeRendererMaxRedirects(source.maxRedirects),
+    useServerCipherSuiteDuringHandshake: source.useServerCipherSuiteDuringHandshake === true,
+    disabledTlsProtocols: normalizeRendererSettingsText(source.disabledTlsProtocols),
+    cipherSuiteSelection: normalizeRendererSettingsText(source.cipherSuiteSelection)
   };
 }
 
 function normalizeRendererRequestSslVerification(value) {
   const normalized = String(value || '').trim().toLowerCase();
   return ['inherit', 'enabled', 'disabled'].includes(normalized) ? normalized : 'inherit';
+}
+
+function normalizeRendererHttpVersion(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'http2') {
+    return 'http2';
+  }
+  if (normalized === 'http1') {
+    return 'http1';
+  }
+  return 'auto';
+}
+
+function normalizeRendererMaxRedirects(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return RENDERER_DEFAULT_REQUEST_SETTINGS.maxRedirects;
+  }
+  return Math.max(0, Math.min(100, Math.floor(number)));
+}
+
+function normalizeRendererSettingsText(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean).join(', ');
+  }
+  return String(value || '').trim();
 }
 
 const RENDERER_DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
@@ -16440,16 +16492,39 @@ function renderRequestHeaderControls(request) {
 }
 
 function renderRequestTlsSettings(request) {
-  renderRequestTlsSettingsControl(request, 'requestSslCertificateVerificationInput');
+  renderRequestSettingsControls(request, 'request');
 }
 
 function renderPerformanceRequestTlsSettings(request) {
-  renderRequestTlsSettingsControl(request, 'performanceRequestSslCertificateVerificationInput');
+  renderRequestSettingsControls(request, 'performance');
 }
 
-function renderRequestTlsSettingsControl(request, inputId) {
+function requestSettingsControlIds(scope = 'request') {
+  const prefix = scope === 'performance' ? 'performanceRequest' : 'request';
+  return {
+    sslCertificateVerification: `${prefix}SslCertificateVerificationInput`,
+    httpVersion: `${prefix}HttpVersionSelect`,
+    followRedirects: `${prefix}FollowRedirectsInput`,
+    maxRedirects: `${prefix}MaxRedirectsInput`,
+    followOriginalHttpMethod: `${prefix}FollowOriginalHttpMethodInput`,
+    followAuthorizationHeader: `${prefix}FollowAuthorizationHeaderInput`,
+    removeRefererHeaderOnRedirect: `${prefix}RemoveRefererHeaderOnRedirectInput`,
+    strictHttpParser: `${prefix}StrictHttpParserInput`,
+    encodeUrlAutomatically: `${prefix}EncodeUrlAutomaticallyInput`,
+    useServerCipherSuiteDuringHandshake: `${prefix}UseServerCipherSuiteInput`,
+    disabledTlsProtocols: `${prefix}DisabledTlsProtocolsInput`,
+    cipherSuiteSelection: `${prefix}CipherSuiteSelectionInput`
+  };
+}
+
+function requestSettingsScopeFromInputId(inputId = '') {
+  return String(inputId || '').startsWith('performance') ? 'performance' : 'request';
+}
+
+function renderRequestSettingsControls(request, scope = 'request') {
   const settings = request ? normalizeRendererRequestTlsSettings(request.settings) : normalizeRendererRequestTlsSettings();
-  const verification = $(inputId);
+  const ids = requestSettingsControlIds(scope);
+  const verification = $(ids.sslCertificateVerification);
   if (verification) {
     const workspaceVerification = workspace.settings?.request?.sslCertificateVerification !== false;
     verification.checked = settings.sslCertificateVerification === 'inherit'
@@ -16458,6 +16533,53 @@ function renderRequestTlsSettingsControl(request, inputId) {
     verification.dataset.verificationValue = settings.sslCertificateVerification;
     verification.disabled = !request;
   }
+  setSelectValue(ids.httpVersion, settings.httpVersion, !request);
+  setCheckboxValue(ids.followRedirects, settings.followRedirects, !request);
+  setNumberInputValue(ids.maxRedirects, settings.maxRedirects, !request);
+  setCheckboxValue(ids.followOriginalHttpMethod, settings.followOriginalHttpMethod, !request);
+  setCheckboxValue(ids.followAuthorizationHeader, settings.followAuthorizationHeader, !request);
+  setCheckboxValue(ids.removeRefererHeaderOnRedirect, settings.removeRefererHeaderOnRedirect, !request);
+  setCheckboxValue(ids.strictHttpParser, settings.strictHttpParser, !request);
+  setCheckboxValue(ids.encodeUrlAutomatically, settings.encodeUrlAutomatically, !request);
+  setCheckboxValue(ids.useServerCipherSuiteDuringHandshake, settings.useServerCipherSuiteDuringHandshake, !request);
+  setTextInputValue(ids.disabledTlsProtocols, settings.disabledTlsProtocols, !request);
+  setTextInputValue(ids.cipherSuiteSelection, settings.cipherSuiteSelection, !request);
+}
+
+function setSelectValue(id, value, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.value = value;
+  input.disabled = disabled;
+}
+
+function setCheckboxValue(id, checked, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.checked = checked === true;
+  input.disabled = disabled;
+}
+
+function setNumberInputValue(id, value, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.value = String(value ?? '');
+  input.disabled = disabled;
+}
+
+function setTextInputValue(id, value, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.value = value == null ? '' : String(value);
+  input.disabled = disabled;
 }
 
 function renderPerformanceRequestHeaderControls(request) {
@@ -20718,39 +20840,59 @@ function collectRequestFromEditor() {
   request.settings = requestTlsSettingsFromInputs(request.settings);
 }
 
-function setActiveRequestTlsSettingsFromInputs() {
+function setActiveRequestTlsSettingsFromInputs(event = null) {
   const request = activeRequest();
   if (!request) {
     return;
   }
-  setRequestTlsSettingsFromInput(request, 'requestSslCertificateVerificationInput');
+  setRequestTlsSettingsFromInput(request, event?.currentTarget?.id || '');
   markActiveRequestDirty();
 }
 
-function setActivePerformanceRequestTlsSettingsFromInputs() {
+function setActivePerformanceRequestTlsSettingsFromInputs(event = null) {
   const test = activePerformanceTest();
   if (!test?.request) {
     return;
   }
-  setRequestTlsSettingsFromInput(test.request, 'performanceRequestSslCertificateVerificationInput');
+  setRequestTlsSettingsFromInput(test.request, event?.currentTarget?.id || 'performance');
   markActivePerformanceDirty();
 }
 
 function setRequestTlsSettingsFromInput(request, inputId) {
-  const input = $(inputId);
-  request.settings = {
-    sslCertificateVerification: input?.checked === true ? 'enabled' : 'disabled'
-  };
-  if (input) {
-    input.dataset.verificationValue = request.settings.sslCertificateVerification;
+  const scope = requestSettingsScopeFromInputId(inputId);
+  const ids = requestSettingsControlIds(scope);
+  const verification = $(ids.sslCertificateVerification);
+  request.settings = requestTlsSettingsFromInputs(request.settings, inputId);
+  if (verification) {
+    verification.dataset.verificationValue = request.settings.sslCertificateVerification;
   }
 }
 
-function requestTlsSettingsFromInputs(existingSettings = {}, inputId = 'requestSslCertificateVerificationInput') {
-  const input = $(inputId);
-  const fallback = normalizeRendererRequestTlsSettings(existingSettings).sslCertificateVerification;
-  const value = normalizeRendererRequestSslVerification(input?.dataset?.verificationValue || fallback);
-  return { sslCertificateVerification: value };
+function requestTlsSettingsFromInputs(existingSettings = {}, inputId = '') {
+  const existing = normalizeRendererRequestTlsSettings(existingSettings);
+  const scope = requestSettingsScopeFromInputId(inputId);
+  const ids = requestSettingsControlIds(scope);
+  const verification = $(ids.sslCertificateVerification);
+  const sslChanged = inputId === ids.sslCertificateVerification;
+  const sslCertificateVerification = verification
+    ? (sslChanged
+      ? (verification.checked === true ? 'enabled' : 'disabled')
+      : normalizeRendererRequestSslVerification(verification.dataset.verificationValue || existing.sslCertificateVerification))
+    : existing.sslCertificateVerification;
+  return {
+    sslCertificateVerification,
+    httpVersion: normalizeRendererHttpVersion($(ids.httpVersion)?.value || existing.httpVersion),
+    followRedirects: $(ids.followRedirects) ? $(ids.followRedirects).checked === true : existing.followRedirects,
+    followOriginalHttpMethod: $(ids.followOriginalHttpMethod) ? $(ids.followOriginalHttpMethod).checked === true : existing.followOriginalHttpMethod,
+    followAuthorizationHeader: $(ids.followAuthorizationHeader) ? $(ids.followAuthorizationHeader).checked === true : existing.followAuthorizationHeader,
+    removeRefererHeaderOnRedirect: $(ids.removeRefererHeaderOnRedirect) ? $(ids.removeRefererHeaderOnRedirect).checked === true : existing.removeRefererHeaderOnRedirect,
+    strictHttpParser: $(ids.strictHttpParser) ? $(ids.strictHttpParser).checked === true : existing.strictHttpParser,
+    encodeUrlAutomatically: $(ids.encodeUrlAutomatically) ? $(ids.encodeUrlAutomatically).checked === true : existing.encodeUrlAutomatically,
+    maxRedirects: normalizeRendererMaxRedirects($(ids.maxRedirects)?.value ?? existing.maxRedirects),
+    useServerCipherSuiteDuringHandshake: $(ids.useServerCipherSuiteDuringHandshake) ? $(ids.useServerCipherSuiteDuringHandshake).checked === true : existing.useServerCipherSuiteDuringHandshake,
+    disabledTlsProtocols: normalizeRendererSettingsText($(ids.disabledTlsProtocols)?.value ?? existing.disabledTlsProtocols),
+    cipherSuiteSelection: normalizeRendererSettingsText($(ids.cipherSuiteSelection)?.value ?? existing.cipherSuiteSelection)
+  };
 }
 
 function collectCollectionAndMarkDirty(options = {}) {
@@ -21143,7 +21285,7 @@ function collectPerformanceTestFromEditor(editedElement = null) {
     sendPostMeterToken: $('performanceSendPostMeterTokenInput')?.checked === true,
     showGeneratedHeaders: $('performanceShowGeneratedHeadersInput')?.checked === true
   };
-  test.request.settings = requestTlsSettingsFromInputs(test.request.settings, 'performanceRequestSslCertificateVerificationInput');
+  test.request.settings = requestTlsSettingsFromInputs(test.request.settings, 'performance');
   test.request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', test.request.queryParams);
   test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
   test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);

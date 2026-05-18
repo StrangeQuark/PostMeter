@@ -1,8 +1,10 @@
 const assert = require('node:assert/strict');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs/promises');
+const http2 = require('node:http2');
 const http = require('node:http');
 const https = require('node:https');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -427,6 +429,343 @@ test('does not forward explicit auth or cookie headers across redirect origins',
   } finally {
     await source.close();
     await target.close();
+  }
+});
+
+test('request setting disables automatic redirects', async () => {
+  let targetHits = 0;
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/start') {
+      response.statusCode = 302;
+      response.setHeader('Location', '/target');
+      response.end('redirect');
+      return;
+    }
+    targetHits += 1;
+    response.end('target');
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/start`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: { followRedirects: false }
+    }, null);
+
+    assert.equal(result.statusCode, 302);
+    assert.equal(result.finalUrl, `${server.baseUrl}/start`);
+    assert.equal(targetHits, 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test('request setting limits the maximum number of redirects', async () => {
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/one') {
+      response.statusCode = 302;
+      response.setHeader('Location', '/two');
+      response.end('one');
+      return;
+    }
+    if (request.url === '/two') {
+      response.statusCode = 302;
+      response.setHeader('Location', '/three');
+      response.end('two');
+      return;
+    }
+    response.end('three');
+  });
+
+  try {
+    await assert.rejects(
+      () => sendRequest({
+        method: 'GET',
+        url: `${server.baseUrl}/one`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        settings: { maxRedirects: 1 }
+      }, null),
+      /exceeded 1 redirects/
+    );
+
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/one`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: { maxRedirects: 2 }
+    }, null);
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.body, 'three');
+  } finally {
+    await server.close();
+  }
+});
+
+test('request setting follows redirects with the original HTTP method', async () => {
+  let redirectedMethod = '';
+  let redirectedBody = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/submit') {
+      response.statusCode = 302;
+      response.setHeader('Location', '/target');
+      response.end('redirect');
+      return;
+    }
+    const chunks = [];
+    for await (const chunk of request) {
+      chunks.push(chunk);
+    }
+    redirectedMethod = request.method;
+    redirectedBody = Buffer.concat(chunks).toString('utf8');
+    response.end('target');
+  });
+
+  try {
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/submit`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'RAW_TEXT',
+      body: 'payload',
+      settings: { followOriginalHttpMethod: true }
+    }, null);
+
+    assert.equal(redirectedMethod, 'POST');
+    assert.equal(redirectedBody, 'payload');
+
+    redirectedMethod = '';
+    redirectedBody = '';
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/submit`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'RAW_TEXT',
+      body: 'payload'
+    }, null);
+
+    assert.equal(redirectedMethod, 'GET');
+    assert.equal(redirectedBody, '');
+  } finally {
+    await server.close();
+  }
+});
+
+test('request setting controls Authorization header forwarding across redirect origins', async () => {
+  let receivedAuthorization = '';
+  const target = await createServer(async (request, response) => {
+    receivedAuthorization = request.headers.authorization || '';
+    response.end('target');
+  });
+  const source = await createServer(async (_request, response) => {
+    response.statusCode = 302;
+    response.setHeader('Location', `${target.baseUrl}/target`);
+    response.end('redirect');
+  });
+
+  try {
+    await sendRequest({
+      method: 'GET',
+      url: `${source.baseUrl}/start`,
+      queryParams: [],
+      headers: [{ enabled: true, key: 'Authorization', value: 'Bearer keep-me' }],
+      bodyType: 'NONE',
+      body: '',
+      settings: { followAuthorizationHeader: true }
+    }, null);
+    assert.equal(receivedAuthorization, 'Bearer keep-me');
+
+    receivedAuthorization = '';
+    await sendRequest({
+      method: 'GET',
+      url: `${source.baseUrl}/start`,
+      queryParams: [],
+      headers: [{ enabled: true, key: 'Authorization', value: 'Bearer drop-me' }],
+      bodyType: 'NONE',
+      body: ''
+    }, null);
+    assert.equal(receivedAuthorization, '');
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});
+
+test('request setting removes the Referer header on redirect', async () => {
+  let receivedReferer = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/start') {
+      response.statusCode = 302;
+      response.setHeader('Location', '/target');
+      response.end('redirect');
+      return;
+    }
+    receivedReferer = request.headers.referer || '';
+    response.end('target');
+  });
+
+  try {
+    await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/start`,
+      queryParams: [],
+      headers: [{ enabled: true, key: 'Referer', value: `${server.baseUrl}/source` }],
+      bodyType: 'NONE',
+      body: '',
+      settings: { removeRefererHeaderOnRedirect: true }
+    }, null);
+    assert.equal(receivedReferer, '');
+
+    await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/start`,
+      queryParams: [],
+      headers: [{ enabled: true, key: 'Referer', value: `${server.baseUrl}/source` }],
+      bodyType: 'NONE',
+      body: ''
+    }, null);
+    assert.equal(receivedReferer, `${server.baseUrl}/source`);
+  } finally {
+    await server.close();
+  }
+});
+
+test('request setting controls automatic URL encoding for structured query params', async () => {
+  const seenUrls = [];
+  const server = await createServer(async (request, response) => {
+    seenUrls.push(request.url);
+    response.end('ok');
+  });
+
+  try {
+    await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/search`,
+      queryParams: [{ enabled: true, key: 'q', value: 'a=b&c' }],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: { encodeUrlAutomatically: true }
+    }, null);
+    await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/search`,
+      queryParams: [{ enabled: true, key: 'q', value: 'a=b&c' }],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: { encodeUrlAutomatically: false }
+    }, null);
+
+    assert.equal(seenUrls[0], '/search?q=a%3Db%26c');
+    assert.equal(seenUrls[1], '/search?q=a=b&c');
+  } finally {
+    await server.close();
+  }
+});
+
+test('request setting toggles strict HTTP response parsing', async () => {
+  const lenient = await createRawHttpServer('HTTP/1.1 200 OK\r\nX-Test: hello\x01\r\nContent-Length: 2\r\n\r\nok');
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: lenient.baseUrl,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: { strictHttpParser: false }
+    }, null);
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.body, 'ok');
+  } finally {
+    await lenient.close();
+  }
+
+  const strict = await createRawHttpServer('HTTP/1.1 200 OK\r\nX-Test: hello\x01\r\nContent-Length: 2\r\n\r\nok');
+  try {
+    await assert.rejects(
+      () => sendRequest({
+        method: 'GET',
+        url: strict.baseUrl,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        settings: { strictHttpParser: true }
+      }, null),
+      /Invalid header value char|Parse Error/
+    );
+  } finally {
+    await strict.close();
+  }
+});
+
+test('request setting sends requests with HTTP/2', async () => {
+  let streamHeaders = null;
+  const server = http2.createServer();
+  server.on('stream', (stream, headers) => {
+    streamHeaders = headers;
+    stream.respond({ ':status': 200, 'content-type': 'application/json' });
+    stream.end(JSON.stringify({ method: headers[':method'], path: headers[':path'], version: 'h2' }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `http://127.0.0.1:${address.port}/h2`,
+      queryParams: [{ enabled: true, key: 'q', value: 'ok' }],
+      headers: [{ enabled: true, key: 'X-Mode', value: 'http2' }],
+      bodyType: 'NONE',
+      body: '',
+      settings: { httpVersion: 'http2' }
+    }, null, { collectTimings: true });
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(JSON.parse(result.body).version, 'h2');
+    assert.equal(streamHeaders['x-mode'], 'http2');
+    assert.equal(result.timings.httpVersion, '2');
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test('request setting Auto uses the compatible default HTTP transport', async () => {
+  let requestHttpVersion = '';
+  const server = await createServer(async (request, response) => {
+    requestHttpVersion = request.httpVersion;
+    response.end('ok');
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/auto`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: { httpVersion: 'auto' }
+    }, null, { collectTimings: true });
+
+    assert.equal(result.statusCode, 200);
+    assert.match(requestHttpVersion, /^1\./);
+    assert.match(result.timings.httpVersion, /^1\./);
+  } finally {
+    await server.close();
   }
 });
 
@@ -1010,6 +1349,92 @@ test('applies SSL verification settings, custom CA bundles, and TLS response dia
   }
 });
 
+test('request TLS handshake settings disable protocols and select cipher suites', async (t) => {
+  const opensslPath = await findOpenSsl();
+  if (!opensslPath) {
+    t.skip('OpenSSL is required to generate TLS test certificates.');
+    return;
+  }
+  const fixtures = await createMtlsFixtures(opensslPath);
+  const protocolServer = await createCustomTlsServer(fixtures, {
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.2'
+  });
+  try {
+    const allowed = await sendRequest({
+      method: 'GET',
+      url: `${protocolServer.baseUrl}/tls`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: { sslCertificateVerification: 'disabled' }
+    }, null, { collectTimings: true });
+    assert.equal(allowed.statusCode, 200);
+    assert.equal(allowed.tls.protocol, 'TLSv1.2');
+
+    await assert.rejects(
+      () => sendRequest({
+        method: 'GET',
+        url: `${protocolServer.baseUrl}/tls`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        settings: {
+          sslCertificateVerification: 'disabled',
+          disabledTlsProtocols: ['TLSv1.2']
+        }
+      }, null),
+      /unsupported protocol|protocol version|alert protocol|EPROTO/i
+    );
+  } finally {
+    await protocolServer.close();
+  }
+
+  const cipherServer = await createCustomTlsServer(fixtures, {
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.2',
+    ciphers: 'AES128-SHA:@SECLEVEL=0',
+    honorCipherOrder: true
+  });
+  try {
+    const cipherResult = await sendRequest({
+      method: 'GET',
+      url: `${cipherServer.baseUrl}/cipher`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      settings: {
+        sslCertificateVerification: 'disabled',
+        cipherSuiteSelection: 'AES128-SHA:@SECLEVEL=0',
+        useServerCipherSuiteDuringHandshake: true
+      }
+    }, null, { collectTimings: true });
+    assert.equal(cipherResult.statusCode, 200);
+    assert.equal(cipherResult.tls.cipher.name, 'AES128-SHA');
+
+    await assert.rejects(
+      () => sendRequest({
+        method: 'GET',
+        url: `${cipherServer.baseUrl}/cipher`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        settings: {
+          sslCertificateVerification: 'disabled',
+          cipherSuiteSelection: 'AES256-SHA:@SECLEVEL=0'
+        }
+      }, null),
+      /handshake failure|no shared cipher|EPROTO/i
+    );
+  } finally {
+    await cipherServer.close();
+  }
+});
+
 test('matches managed client certificates by HTTPS host and port', async (t) => {
   const opensslPath = await findOpenSsl();
   if (!opensslPath) {
@@ -1236,6 +1661,21 @@ async function createServer(handler) {
   };
 }
 
+async function createRawHttpServer(rawResponse) {
+  const server = net.createServer((socket) => {
+    socket.once('data', () => {
+      socket.end(rawResponse);
+    });
+    socket.on('error', () => {});
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/raw`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}
+
 async function findOpenSsl() {
   try {
     await execFileAsync('openssl', ['version']);
@@ -1339,6 +1779,27 @@ async function createTlsServer(fixtures) {
   }, (_request, response) => {
     response.setHeader('Content-Type', 'application/json');
     response.end(JSON.stringify({ ok: true }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `https://127.0.0.1:${address.port}`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}
+
+async function createCustomTlsServer(fixtures, options = {}) {
+  const server = https.createServer({
+    key: await fs.readFile(fixtures.serverKeyPath),
+    cert: await fs.readFile(fixtures.serverCertPath),
+    ...options
+  }, (request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      ok: true,
+      cipher: request.socket.getCipher(),
+      protocol: request.socket.getProtocol()
+    }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();

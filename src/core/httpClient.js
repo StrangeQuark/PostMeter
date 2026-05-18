@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
 const http = require('node:http');
+const http2 = require('node:http2');
 const https = require('node:https');
 const path = require('node:path');
 const tls = require('node:tls');
@@ -27,11 +28,16 @@ const {
   loadClientCertificateOptions,
   resolveHttpTlsPolicy
 } = require('./tlsSettings');
+const {
+  DEFAULT_REQUEST_MAX_REDIRECTS,
+  normalizeRequestSettings,
+  requestSettingsRequireNodeTransport
+} = require('./requestSettings');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
 const REQUEST_TIMEOUT_MILLIS = 3 * 60 * 1000;
-const MAX_REDIRECTS = 10;
+const MAX_REDIRECTS = DEFAULT_REQUEST_MAX_REDIRECTS;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const DEFAULT_SCHEMELESS_REQUEST_PROTOCOL = 'http:';
 const POSTMETER_USER_AGENT = 'PostMeter/0.2.0';
@@ -112,6 +118,7 @@ async function sendRequest(request, environment, options = {}) {
     throw new Error(validationErrors.join(' '));
   }
 
+  const requestSettings = normalizeRequestSettings(requestForSend.settings || {});
   const url = buildUrl(requestForSend, environment);
   const headers = {};
   let hasContentType = false;
@@ -132,11 +139,12 @@ async function sendRequest(request, environment, options = {}) {
   const method = requestForSend.method;
   const bodyType = requestForSend.bodyType || BODY_TYPES.NONE;
   const shouldSendBody = bodyType !== BODY_TYPES.NONE && BODY_METHODS.has(method);
+  const followRedirects = requestForSend.followRedirects === false ? false : requestSettings.followRedirects !== false;
   let body = null;
   const fetchOptions = {
     method,
     headers,
-    redirect: requestForSend.followRedirects === false ? 'manual' : 'follow',
+    redirect: followRedirects ? 'follow' : 'manual',
     signal: requestSignal(options.signal, options.timeoutMillis)
   };
 
@@ -177,6 +185,7 @@ async function sendRequest(request, environment, options = {}) {
     forceNode: options.forceNode,
     now: options.now,
     proxyOptions,
+    requestSettings,
     tlsOptions: tlsPolicy.tlsOptions,
     tlsPolicy,
     cookieJarState
@@ -277,13 +286,26 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
 }
 
 async function sendWithTransport(url, fetchOptions, options = {}) {
-  if (options.forceNode || options.collectTimings || options.tlsOptions || options.proxyOptions) {
+  const requestSettings = normalizeRequestSettings(options.requestSettings || {});
+  if (requestSettings.httpVersion === 'http2') {
+    if (options.proxyOptions) {
+      throw new Error('HTTP/2 requests through proxies are not supported yet.');
+    }
+    return sendHttp2Request(url, fetchOptions, options.tlsOptions, 0, url.origin, {
+      collectTimings: options.collectTimings,
+      cookieJarState: options.cookieJarState,
+      hasClientCertificate: options.tlsPolicy?.hasClientCertificate === true,
+      requestSettings
+    });
+  }
+  if (options.forceNode || options.collectTimings || options.tlsOptions || options.proxyOptions || requestSettingsRequireNodeTransport(requestSettings)) {
     return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
       agent: options.agent,
       collectTimings: options.collectTimings,
       cookieJarState: options.cookieJarState,
       hasClientCertificate: options.tlsPolicy?.hasClientCertificate === true,
-      proxyOptions: options.proxyOptions
+      proxyOptions: options.proxyOptions,
+      requestSettings
     });
   }
   if (options.cookieJarState?.storeResponses === true && fetchOptions.redirect === 'follow') {
@@ -295,13 +317,15 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
 }
 
 async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = {}) {
+  const requestSettings = normalizeRequestSettings(options.requestSettings || {});
+  const maxRedirects = requestSettings.maxRedirects;
   let currentUrl = url;
   let currentOptions = {
     ...fetchOptions,
     headers: { ...fetchOptions.headers },
     redirect: 'manual'
   };
-  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+  for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
     applyCookieJarStateHeader(currentOptions.headers, currentUrl, options.cookieJarState, {
       includeExplicit: currentOptions.includeExplicitCookies !== false
     });
@@ -313,9 +337,9 @@ async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = 
     if (!REDIRECT_STATUS_CODES.has(response.status) || !location) {
       return response;
     }
-    if (redirectCount >= MAX_REDIRECTS) {
+    if (redirectCount >= maxRedirects) {
       await response.arrayBuffer().catch(() => {});
-      throw new Error(`Request exceeded ${MAX_REDIRECTS} redirects.`);
+      throw new Error(`Request exceeded ${maxRedirects} redirects.`);
     }
     await response.arrayBuffer().catch(() => {});
     const redirectUrl = new URL(location, currentUrl);
@@ -327,10 +351,18 @@ async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = 
       headers: { ...currentOptions.headers }
     };
     if (redirectUrl.origin !== currentUrl.origin) {
-      stripCrossOriginRedirectHeaders(nextOptions.headers);
+      stripCrossOriginRedirectHeaders(nextOptions.headers, {
+        keepAuthorization: requestSettings.followAuthorizationHeader === true
+      });
       nextOptions.includeExplicitCookies = false;
     }
-    if ([301, 302, 303].includes(response.status) && nextOptions.method !== 'GET' && nextOptions.method !== 'HEAD') {
+    if (requestSettings.removeRefererHeaderOnRedirect === true) {
+      deleteHeader(nextOptions.headers, 'referer');
+    }
+    if ([301, 302, 303].includes(response.status)
+      && requestSettings.followOriginalHttpMethod !== true
+      && nextOptions.method !== 'GET'
+      && nextOptions.method !== 'HEAD') {
       nextOptions.method = 'GET';
       delete nextOptions.body;
       deleteHeader(nextOptions.headers, 'content-type');
@@ -339,7 +371,7 @@ async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = 
     currentUrl = redirectUrl;
     currentOptions = nextOptions;
   }
-  throw new Error(`Request exceeded ${MAX_REDIRECTS} redirects.`);
+  throw new Error(`Request exceeded ${maxRedirects} redirects.`);
 }
 
 function nodeAgentForUrl(url, tlsOptions = null) {
@@ -466,23 +498,27 @@ function setCookieHeader(headers, value) {
   }
 }
 
-function stripCrossOriginRedirectHeaders(headers) {
-  deleteHeader(headers, 'authorization');
+function stripCrossOriginRedirectHeaders(headers, options = {}) {
+  if (options.keepAuthorization !== true) {
+    deleteHeader(headers, 'authorization');
+  }
   deleteHeader(headers, 'proxy-authorization');
   deleteHeader(headers, 'cookie');
 }
 
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
+  const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent, {
-    collectTimings: options.collectTimings
+    collectTimings: options.collectTimings,
+    requestSettings
   });
   recordResponseCookies(response, url.toString(), options.cookieJarState);
   const location = response.headers.location?.[0];
   if (requestOptions.redirect === 'manual' || !REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
     return response;
   }
-  if (redirectCount >= MAX_REDIRECTS) {
-    throw new Error(`Request exceeded ${MAX_REDIRECTS} redirects.`);
+  if (redirectCount >= requestSettings.maxRedirects) {
+    throw new Error(`Request exceeded ${requestSettings.maxRedirects} redirects.`);
   }
 
   const redirectUrl = new URL(location, url);
@@ -500,22 +536,31 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
     ...requestOptions,
     headers: { ...requestOptions.headers }
   };
-  if ([301, 302, 303].includes(response.statusCode) && nextOptions.method !== 'GET' && nextOptions.method !== 'HEAD') {
+  if ([301, 302, 303].includes(response.statusCode)
+    && requestSettings.followOriginalHttpMethod !== true
+    && nextOptions.method !== 'GET'
+    && nextOptions.method !== 'HEAD') {
     nextOptions.method = 'GET';
     delete nextOptions.body;
     deleteHeader(nextOptions.headers, 'content-type');
     deleteHeader(nextOptions.headers, 'content-length');
   }
+  if (requestSettings.removeRefererHeaderOnRedirect === true) {
+    deleteHeader(nextOptions.headers, 'referer');
+  }
   const includeExplicitCookies = options.includeExplicitCookies !== false && redirectUrl.origin === url.origin;
   if (redirectUrl.origin !== url.origin) {
-    stripCrossOriginRedirectHeaders(nextOptions.headers);
+    stripCrossOriginRedirectHeaders(nextOptions.headers, {
+      keepAuthorization: requestSettings.followAuthorizationHeader === true
+    });
   }
   applyCookieJarStateHeader(nextOptions.headers, redirectUrl, options.cookieJarState, {
     includeExplicit: includeExplicitCookies
   });
   const redirected = await sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, {
     ...options,
-    includeExplicitCookies
+    includeExplicitCookies,
+    requestSettings
   });
   redirected.timings = combineRedirectTimings(response, redirected, {
     from: url.toString(),
@@ -525,10 +570,175 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   return redirected;
 }
 
+async function sendHttp2Request(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
+  const requestSettings = normalizeRequestSettings(options.requestSettings || {});
+  const response = await sendSingleHttp2Request(url, requestOptions, tlsOptions, {
+    collectTimings: options.collectTimings
+  });
+  recordResponseCookies(response, url.toString(), options.cookieJarState);
+  const location = response.headers.location?.[0];
+  if (requestOptions.redirect === 'manual' || !REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
+    return response;
+  }
+  if (redirectCount >= requestSettings.maxRedirects) {
+    throw new Error(`Request exceeded ${requestSettings.maxRedirects} redirects.`);
+  }
+
+  const redirectUrl = new URL(location, url);
+  if (options.hasClientCertificate === true && redirectUrl.protocol !== 'https:') {
+    throw new Error('Client certificate redirects must stay on https URLs.');
+  }
+  if (options.hasClientCertificate === true && redirectUrl.origin !== originalOrigin) {
+    throw new Error('Client certificate redirects must stay on the original origin.');
+  }
+  if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+    throw new Error('Redirect target must use http or https.');
+  }
+
+  const nextOptions = {
+    ...requestOptions,
+    headers: { ...requestOptions.headers }
+  };
+  if ([301, 302, 303].includes(response.statusCode)
+    && requestSettings.followOriginalHttpMethod !== true
+    && nextOptions.method !== 'GET'
+    && nextOptions.method !== 'HEAD') {
+    nextOptions.method = 'GET';
+    delete nextOptions.body;
+    deleteHeader(nextOptions.headers, 'content-type');
+    deleteHeader(nextOptions.headers, 'content-length');
+  }
+  if (requestSettings.removeRefererHeaderOnRedirect === true) {
+    deleteHeader(nextOptions.headers, 'referer');
+  }
+  const includeExplicitCookies = options.includeExplicitCookies !== false && redirectUrl.origin === url.origin;
+  if (redirectUrl.origin !== url.origin) {
+    stripCrossOriginRedirectHeaders(nextOptions.headers, {
+      keepAuthorization: requestSettings.followAuthorizationHeader === true
+    });
+  }
+  applyCookieJarStateHeader(nextOptions.headers, redirectUrl, options.cookieJarState, {
+    includeExplicit: includeExplicitCookies
+  });
+  const redirected = await sendHttp2Request(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, {
+    ...options,
+    includeExplicitCookies,
+    requestSettings
+  });
+  redirected.timings = combineRedirectTimings(response, redirected, {
+    from: url.toString(),
+    statusCode: response.statusCode || 0,
+    to: redirectUrl.toString()
+  });
+  return redirected;
+}
+
+function sendSingleHttp2Request(url, requestOptions, tlsOptions, options = {}) {
+  return new Promise((resolve, reject) => {
+    const timings = options.collectTimings ? createNodeRequestTimings(url) : null;
+    if (timings) {
+      timings.httpVersion = '2';
+    }
+    let settled = false;
+    const sessionOptions = url.protocol === 'https:' ? (tlsOptions || {}) : {};
+    const session = http2.connect(url.origin, sessionOptions);
+    const fail = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      session.destroy();
+      reject(error);
+    };
+    session.once('error', fail);
+    session.once('connect', () => {
+      const started = performance.now();
+      const stream = session.request(http2RequestHeaders(url, requestOptions));
+      const chunks = [];
+      let responseHeaders = {};
+      if (requestOptions.signal) {
+        if (requestOptions.signal.aborted) {
+          stream.close();
+          fail(new Error('Request aborted.'));
+          return;
+        }
+        requestOptions.signal.addEventListener('abort', () => {
+          stream.close();
+          fail(new Error('Request aborted.'));
+        }, { once: true });
+      }
+      stream.once('response', (headers) => {
+        responseHeaders = headersToObject(headers);
+        if (timings) {
+          timings.timeToFirstByteMillis = elapsedSince(timings.transportStartedAt);
+        }
+      });
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.once('error', fail);
+      stream.once('end', () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (timings) {
+          timings.uploadMillis = Math.max(0, Math.round(timings.timeToFirstByteMillis || 0));
+          timings.downloadMillis = elapsedSince(started);
+          timings.totalTransportMillis = elapsedSince(timings.transportStartedAt);
+          timings.tls = tlsDiagnostics(session.socket);
+        }
+        const statusCode = Number(responseHeaders[':status']?.[0] || responseHeaders.status?.[0] || 0);
+        delete responseHeaders[':status'];
+        session.close();
+        resolve({
+          statusCode,
+          headers: responseHeaders,
+          body: decodedNodeResponseBody(responseHeaders, Buffer.concat(chunks)),
+          url: url.toString(),
+          timings: publicNodeTimings(timings)
+        });
+      });
+      if (requestOptions.body != null) {
+        stream.write(requestOptions.body);
+      }
+      stream.end();
+    });
+  });
+}
+
+function http2RequestHeaders(url, requestOptions) {
+  const output = {
+    ':method': requestOptions.method || 'GET',
+    ':scheme': url.protocol.replace(':', ''),
+    ':authority': hostHeaderForUrl(url),
+    ':path': `${url.pathname}${url.search}`
+  };
+  const blocked = new Set([
+    'connection',
+    'host',
+    'http2-settings',
+    'keep-alive',
+    'proxy-connection',
+    'transfer-encoding',
+    'upgrade'
+  ]);
+  for (const [name, value] of Object.entries(requestOptions.headers || {})) {
+    const normalized = name.toLowerCase();
+    if (blocked.has(normalized)) {
+      continue;
+    }
+    if (normalized === 'te' && String(value).toLowerCase() !== 'trailers') {
+      continue;
+    }
+    output[normalized] = value;
+  }
+  return output;
+}
+
 function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = null, agent = null, options = {}) {
   if (proxyOptions) {
     return sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions, options);
   }
+  const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http;
     const timings = options.collectTimings ? createNodeRequestTimings(url) : null;
@@ -540,6 +750,7 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = n
       method: requestOptions.method,
       headers: requestOptions.headers,
       agent,
+      insecureHTTPParser: requestSettings.strictHttpParser !== true,
       signal: requestOptions.signal,
       ...(url.protocol === 'https:' ? tlsOptions : {})
     };
@@ -564,6 +775,7 @@ function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOpt
   if (url.protocol === 'https:' || proxyOptions.tunnel === true) {
     return sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions, options);
   }
+  const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   return new Promise((resolve, reject) => {
     const transport = proxyOptions.protocol === 'https:' ? https : http;
     const timings = options.collectTimings ? createNodeRequestTimings(url, { proxy: true }) : null;
@@ -579,6 +791,7 @@ function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOpt
       path: url.toString(),
       method: requestOptions.method,
       headers,
+      insecureHTTPParser: requestSettings.strictHttpParser !== true,
       signal: requestOptions.signal
     };
     const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings));
@@ -599,6 +812,7 @@ function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOpt
 
 async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions, options = {}) {
   const tunnelSocket = await openProxyTunnel(url, requestOptions.signal, proxyOptions);
+  const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http;
     const timings = options.collectTimings ? createNodeRequestTimings(url, { proxy: true }) : null;
@@ -609,6 +823,7 @@ async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptio
       path: `${url.pathname}${url.search}`,
       method: requestOptions.method,
       headers: requestOptions.headers,
+      insecureHTTPParser: requestSettings.strictHttpParser !== true,
       signal: requestOptions.signal,
       createConnection: () => {
         if (url.protocol === 'https:') {
@@ -1289,6 +1504,7 @@ function escapeMultipartValue(value) {
 
 function buildUrl(request, environment) {
   const resolvedUrl = resolveEnvironmentValue(request.url, environment).trim();
+  const requestSettings = normalizeRequestSettings(request.settings || {});
   let url;
   try {
     url = new URL(normalizeRequestUrlText(resolvedUrl));
@@ -1313,16 +1529,31 @@ function buildUrl(request, environment) {
     return url;
   }
 
-  for (const pair of resolvedQueryParams) {
-    if (pair.enabled === false || !hasKey(pair)) {
-      continue;
+  if (requestSettings.encodeUrlAutomatically === false) {
+    appendRawQueryPairs(url, resolvedQueryParams);
+  } else {
+    for (const pair of resolvedQueryParams) {
+      if (pair.enabled === false || !hasKey(pair)) {
+        continue;
+      }
+      url.searchParams.append(
+        pair.key.trim(),
+        pair.value ?? ''
+      );
     }
-    url.searchParams.append(
-      pair.key.trim(),
-      pair.value ?? ''
-    );
   }
   return url;
+}
+
+function appendRawQueryPairs(url, queryParams = []) {
+  const raw = queryParams
+    .filter((pair) => pair.enabled !== false && hasKey(pair))
+    .map((pair) => `${String(pair.key || '').trim()}=${String(pair.value ?? '')}`)
+    .join('&');
+  if (!raw) {
+    return;
+  }
+  url.search = url.search ? `${url.search}&${raw}` : `?${raw}`;
 }
 
 function normalizeRequestUrlText(value) {

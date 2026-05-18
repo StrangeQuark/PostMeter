@@ -3,18 +3,15 @@ const tls = require('node:tls');
 const { normalizeAuth } = require('./authModel');
 const { resolveEnvironmentValue } = require('./environmentResolver');
 const { extractPfxToPem, readRegularFileBounded } = require('./pfxCertificate');
+const {
+  normalizeRequestSettings,
+  requestTransportTlsOptions
+} = require('./requestSettings');
 
 const DEFAULT_HTTPS_PORT = '443';
-const TLS_VERIFICATION_VALUES = new Set(['inherit', 'enabled', 'disabled']);
 
 function normalizeRequestTlsSettings(settings = {}) {
-  const source = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
-  const sslCertificateVerification = normalizeVerificationOverride(
-    source.sslCertificateVerification ?? source.sslVerification ?? source.strictSSL
-  );
-  return {
-    sslCertificateVerification
-  };
+  return normalizeRequestSettings(settings);
 }
 
 function normalizeTlsSettings(settings = {}) {
@@ -81,17 +78,6 @@ function normalizeManagedClientCertificates(certificates) {
     }
   }
   return output;
-}
-
-function normalizeVerificationOverride(value) {
-  if (value === true) {
-    return 'enabled';
-  }
-  if (value === false) {
-    return 'disabled';
-  }
-  const normalized = String(value || 'inherit').trim().toLowerCase();
-  return TLS_VERIFICATION_VALUES.has(normalized) ? normalized : 'inherit';
 }
 
 function normalizePort(value) {
@@ -170,12 +156,16 @@ async function resolveHttpTlsPolicy(request = {}, environment, url, options = {}
     ? null
     : await loadMatchedClientCertificateOptions(url, environment, clientCertificates);
   const clientCertificateOptions = explicitClientCertificate || matchedClientCertificate?.tlsOptions || null;
+  const requestTransportOptions = requestTransportTlsOptions(requestTlsSettings);
   if (clientCertificateOptions?.ca) {
     caParts.push(clientCertificateOptions.ca);
   }
 
   const ca = caParts.filter(Boolean);
-  const shouldApplyTlsOptions = rejectUnauthorized === false || ca.length > 0 || clientCertificateOptions;
+  const shouldApplyTlsOptions = rejectUnauthorized === false
+    || ca.length > 0
+    || clientCertificateOptions
+    || Object.keys(requestTransportOptions).length > 0;
   const tlsOptions = shouldApplyTlsOptions ? { rejectUnauthorized } : null;
   if (ca.length) {
     tlsOptions.ca = caWithSystemRoots(ca);
@@ -190,6 +180,9 @@ async function resolveHttpTlsPolicy(request = {}, environment, url, options = {}
     if (clientCertificateOptions.passphrase) {
       tlsOptions.passphrase = clientCertificateOptions.passphrase;
     }
+  }
+  if (tlsOptions && Object.keys(requestTransportOptions).length) {
+    Object.assign(tlsOptions, requestTransportOptions);
   }
   const hasClientCertificate = Boolean(clientCertificateOptions?.cert && clientCertificateOptions?.key);
   return {

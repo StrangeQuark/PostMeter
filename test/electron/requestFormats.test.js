@@ -20,8 +20,33 @@ test('exports and imports a single PostMeter request envelope', () => {
     scripts: { preRequest: '', tests: '' },
     settings: {
       sslCertificateVerification: 'enabled',
-      caCertificatePath: '/tmp/request-ca.pem'
+      caCertificatePath: '/tmp/request-ca.pem',
+      httpVersion: 'http2',
+      followRedirects: false,
+      followOriginalHttpMethod: true,
+      followAuthorizationHeader: true,
+      removeRefererHeaderOnRedirect: true,
+      strictHttpParser: true,
+      encodeUrlAutomatically: false,
+      maxRedirects: 7,
+      useServerCipherSuiteDuringHandshake: true,
+      disabledTlsProtocols: ['TLSv1', 'TLSv1.1'],
+      cipherSuiteSelection: 'AES128-SHA'
     }
+  };
+  const expectedSettings = {
+    sslCertificateVerification: 'enabled',
+    httpVersion: 'http2',
+    followRedirects: false,
+    followOriginalHttpMethod: true,
+    followAuthorizationHeader: true,
+    removeRefererHeaderOnRedirect: true,
+    strictHttpParser: true,
+    encodeUrlAutomatically: false,
+    maxRedirects: 7,
+    useServerCipherSuiteDuringHandshake: true,
+    disabledTlsProtocols: ['TLSv1', 'TLSv1.1'],
+    cipherSuiteSelection: 'AES128-SHA'
   };
 
   const exported = exportRequestToJson(original);
@@ -29,6 +54,7 @@ test('exports and imports a single PostMeter request envelope', () => {
   assert.equal(parsed.format, 'postmeter.request');
   assert.equal(parsed.request.name, 'Create Widget');
   assert.equal(parsed.request.settings.caCertificatePath, undefined);
+  assert.deepEqual(parsed.request.settings, expectedSettings);
 
   const imported = importRequestFromText(exported);
   assert.notEqual(imported.id, original.id);
@@ -36,9 +62,7 @@ test('exports and imports a single PostMeter request envelope', () => {
   assert.equal(imported.method, 'POST');
   assert.equal(imported.queryParams[0].key, 'trace');
   assert.equal(imported.body, '{"name":"hammer"}');
-  assert.deepEqual(imported.settings, {
-    sslCertificateVerification: 'enabled'
-  });
+  assert.deepEqual(imported.settings, expectedSettings);
 });
 
 test('native request import and export preserve expanded auth fields', () => {

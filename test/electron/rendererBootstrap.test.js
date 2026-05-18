@@ -944,7 +944,13 @@ test('renderer bootstrap binds request-local TLS setting controls', () => {
       getElementById(id) {
         return elements.get(id) || null;
       },
-      querySelectorAll() {
+      querySelectorAll(selector) {
+        if (selector === '[data-request-setting]') {
+          return [elements.get('requestSslCertificateVerificationInput')];
+        }
+        if (selector === '[data-performance-request-setting]') {
+          return [elements.get('performanceRequestSslCertificateVerificationInput')];
+        }
         return [];
       },
       addEventListener() {}

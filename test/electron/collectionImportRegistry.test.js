@@ -93,3 +93,102 @@ test('collection import registry exports Postman-compatible collections', () => 
   assert.equal(parsed.item[0].event[0].listen, 'prerequest');
   assert.equal(parsed.item[0].event[1].listen, 'test');
 });
+
+test('collection import and export preserve Postman request settings through registry models', () => {
+  const postmanDocument = {
+    info: {
+      name: 'Request Settings Round Trip',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'All request settings',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/settings',
+        protocolProfileBehavior: {
+          disableBodyPruning: true,
+          disableCookieJar: true,
+          strictSSL: false,
+          httpVersion: 'http2',
+          followRedirects: false,
+          followOriginalHttpMethod: true,
+          followAuthorizationHeader: true,
+          removeRefererHeaderOnRedirect: true,
+          strictHttpParser: true,
+          disableUrlEncoding: true,
+          maxRedirects: 7,
+          useServerCipherSuiteDuringHandshake: true,
+          disabledTlsProtocols: ['TLSv1', 'TLSv1.1'],
+          cipherSuiteSelection: 'AES128-SHA'
+        }
+      }
+    }, {
+      name: 'Default auto settings',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/defaults'
+      }
+    }, {
+      name: 'Explicit HTTP1 settings',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/http1',
+        protocolProfileBehavior: {
+          httpVersion: 'http1'
+        }
+      }
+    }]
+  };
+
+  const collection = importCollectionFromContent(JSON.stringify(postmanDocument));
+  const importedAll = collection.requests.find((request) => request.name === 'All request settings');
+  const importedDefaults = collection.requests.find((request) => request.name === 'Default auto settings');
+  const importedHttp1 = collection.requests.find((request) => request.name === 'Explicit HTTP1 settings');
+
+  assert.equal(importedAll.cookieJar.enabled, false);
+  assert.deepEqual(importedAll.settings, {
+    sslCertificateVerification: 'disabled',
+    httpVersion: 'http2',
+    followRedirects: false,
+    followOriginalHttpMethod: true,
+    followAuthorizationHeader: true,
+    removeRefererHeaderOnRedirect: true,
+    strictHttpParser: true,
+    encodeUrlAutomatically: false,
+    maxRedirects: 7,
+    useServerCipherSuiteDuringHandshake: true,
+    disabledTlsProtocols: ['TLSv1', 'TLSv1.1'],
+    cipherSuiteSelection: 'AES128-SHA'
+  });
+  assert.equal(importedDefaults.cookieJar.enabled, true);
+  assert.equal(importedDefaults.settings.httpVersion, 'auto');
+  assert.equal(importedDefaults.settings.followRedirects, true);
+  assert.equal(importedDefaults.settings.encodeUrlAutomatically, true);
+  assert.equal(importedHttp1.settings.httpVersion, 'http1');
+
+  const exported = JSON.parse(exportCollectionByFormat(collection, 'postman', {
+    collections: [collection],
+    environments: [],
+    history: []
+  }));
+  const exportedAll = exported.item.find((item) => item.name === 'All request settings').request.protocolProfileBehavior;
+  const exportedDefaults = exported.item.find((item) => item.name === 'Default auto settings').request.protocolProfileBehavior;
+  const exportedHttp1 = exported.item.find((item) => item.name === 'Explicit HTTP1 settings').request.protocolProfileBehavior;
+
+  assert.equal(exportedAll.disableBodyPruning, true);
+  assert.equal(exportedAll.disableCookieJar, true);
+  assert.equal(exportedAll.strictSSL, false);
+  assert.equal(exportedAll.httpVersion, 'http2');
+  assert.equal(exportedAll.followRedirects, false);
+  assert.equal(exportedAll.followOriginalHttpMethod, true);
+  assert.equal(exportedAll.followAuthorizationHeader, true);
+  assert.equal(exportedAll.removeRefererHeaderOnRedirect, true);
+  assert.equal(exportedAll.strictHttpParser, true);
+  assert.equal(exportedAll.disableUrlEncoding, true);
+  assert.equal(exportedAll.maxRedirects, 7);
+  assert.equal(exportedAll.useServerCipherSuiteDuringHandshake, true);
+  assert.deepEqual(exportedAll.disabledTlsProtocols, ['TLSv1', 'TLSv1.1']);
+  assert.equal(exportedAll.cipherSuiteSelection, 'AES128-SHA');
+  assert.equal(exportedDefaults, undefined);
+  assert.equal(exportedHttp1.httpVersion, 'http1');
+});

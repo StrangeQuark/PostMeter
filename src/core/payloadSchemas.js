@@ -14,6 +14,7 @@ const BODY_TYPE_VALUES = [
   'BINARY'
 ];
 const REQUEST_PROTOCOLS = ['http', 'graphql', 'grpc', 'websocket', 'socketio'];
+const REQUEST_HTTP_VERSIONS = ['auto', 'http1', 'http2'];
 const AUTH_TYPE_VALUES = [
   'none',
   'bearer',
@@ -154,6 +155,7 @@ const SCHEMA_ENUMS = {
   diagnosticLogLevels: DIAGNOSTIC_LOG_LEVELS,
   editorFontValues: EDITOR_FONT_VALUES,
   httpMethods: HTTP_METHODS,
+  requestHttpVersions: REQUEST_HTTP_VERSIONS,
   interfaceFontValues: INTERFACE_FONT_VALUES,
   oauth2GrantTypes: OAUTH2_GRANT_TYPES,
   oauth2CodeChallengeMethods: OAUTH2_CODE_CHALLENGE_METHODS,
@@ -209,7 +211,18 @@ const FIELD_SCHEMAS = {
   },
   tlsRequestSettings: {
     sslCertificateVerification: { type: 'boolean', optional: true },
-    caCertificatePath: { type: 'string', limit: 'value', optional: true }
+    caCertificatePath: { type: 'string', limit: 'value', optional: true },
+    httpVersion: { type: 'string', limit: 'tiny', enum: 'requestHttpVersions', optional: true },
+    followRedirects: { type: 'boolean', optional: true },
+    followOriginalHttpMethod: { type: 'boolean', optional: true },
+    followAuthorizationHeader: { type: 'boolean', optional: true },
+    removeRefererHeaderOnRedirect: { type: 'boolean', optional: true },
+    strictHttpParser: { type: 'boolean', optional: true },
+    encodeUrlAutomatically: { type: 'boolean', optional: true },
+    maxRedirects: { type: 'number', optional: true },
+    useServerCipherSuiteDuringHandshake: { type: 'boolean', optional: true },
+    disabledTlsProtocols: { type: 'string', limit: 'value', optional: true },
+    cipherSuiteSelection: { type: 'string', limit: 'value', optional: true }
   },
   keyValue: {
     enabled: { type: 'boolean', optional: true },

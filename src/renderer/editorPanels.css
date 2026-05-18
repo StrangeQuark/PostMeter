@@ -1196,6 +1196,18 @@ textarea.code-editor-input.has-openable-variable-hover {
   text-transform: uppercase;
 }
 
+.request-settings-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.request-settings-columns .settings-toggle {
+  align-self: end;
+  min-height: 31px;
+}
+
 .auth-section {
   display: none;
   grid-template-columns: repeat(2, minmax(220px, 1fr));

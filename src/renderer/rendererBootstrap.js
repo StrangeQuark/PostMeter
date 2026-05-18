@@ -384,7 +384,8 @@
     bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarStoreInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceFilterCookiesToRequestHostInput', options.onPerformanceFilterCookiesChange);
-    bindChange(doc, 'performanceRequestSslCertificateVerificationInput', options.onPerformanceRequestTlsSettingsChange);
+    bindAll(doc, '[data-performance-request-setting]', 'change', options.onPerformanceRequestTlsSettingsChange);
+    bindAll(doc, '[data-performance-request-setting]', 'input', options.onPerformanceRequestTlsSettingsChange);
     bindChange(doc, 'methodSelect', options.onMethodChange);
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
@@ -406,7 +407,8 @@
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);
-    bindChange(doc, 'requestSslCertificateVerificationInput', options.onRequestTlsSettingsChange);
+    bindAll(doc, '[data-request-setting]', 'change', options.onRequestTlsSettingsChange);
+    bindAll(doc, '[data-request-setting]', 'input', options.onRequestTlsSettingsChange);
     bindChange(doc, 'trustedScriptSendRequestInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptCookiesInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptVaultInput', options.onTrustedScriptCapabilityChange);
