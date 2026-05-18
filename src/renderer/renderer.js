@@ -6718,6 +6718,13 @@ function toggleActiveRunnerAuthRefresh() {
   }
   collectRunnerFromEditor();
   const existing = normalizeAuthRefreshConfig(runner.authRefresh || {});
+  if (existing.enabled !== true && !authRefreshRequestHasUrl(existing.request)) {
+    runner.authRefresh = existing;
+    renderAuthRefreshControls('runner', runner.authRefresh, true);
+    openAuthRefreshSettingsPanel('runner');
+    setStatus('Create or import an auth request with a URL before turning runner refreshing auth on.');
+    return runner.authRefresh;
+  }
   runner.authRefresh = normalizeAuthRefreshConfig({
     ...existing,
     enabled: existing.enabled !== true
@@ -6741,6 +6748,13 @@ function toggleActivePerformanceAuthRefresh() {
   }
   collectPerformanceTestFromEditor();
   const previousAuthRefresh = normalizeAuthRefreshConfig(test.authRefresh || {});
+  if (previousAuthRefresh.enabled !== true && !authRefreshRequestHasUrl(previousAuthRefresh.request)) {
+    test.authRefresh = previousAuthRefresh;
+    renderAuthRefreshControls('performance', test.authRefresh, true);
+    openAuthRefreshSettingsPanel('performance');
+    setStatus('Create or import an auth request with a URL before turning performance refreshing auth on.');
+    return test.authRefresh;
+  }
   test.authRefresh = normalizeAuthRefreshConfig({
     ...previousAuthRefresh,
     enabled: previousAuthRefresh.enabled !== true
@@ -8827,6 +8841,22 @@ function toggleAuthRefreshPanel(prefix, event) {
   }
 }
 
+function openAuthRefreshSettingsPanel(prefix) {
+  const panel = $(`${prefix}AuthRefreshPanel`);
+  const button = $(`${prefix}AuthRefreshButton`);
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: panel });
+  panel.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  positionAuthRefreshPanel(prefix);
+  panel.querySelector('select, input, button, textarea')?.focus?.();
+}
+
 function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   const normalized = normalizeAuthRefreshConfig(authRefresh || {});
   const authType = normalizeAuthRefreshUiType(normalized.authType);
@@ -8971,6 +9001,10 @@ function renderAuthRefreshRequestSummaryElement(summary, request, emptyText, fal
 function authRefreshRequestConfigured(request = {}) {
   const id = String(request?.id || '').trim();
   return Boolean(String(request?.url || '').trim() || (id && !authRefreshDefaultRequestIds().has(id)));
+}
+
+function authRefreshRequestHasUrl(request = {}) {
+  return Boolean(String(request?.url || '').trim());
 }
 
 function authRefreshDefaultRequestIds() {
@@ -11128,6 +11162,13 @@ async function runActivePerformanceTest() {
   if (!test.request?.url) {
     return setStatus('Enter a request URL before running a performance test.');
   }
+  const preflightError = performanceRunPreflightError(test);
+  if (preflightError) {
+    renderPerformanceMessage(preflightError);
+    setStatus('Performance test failed.');
+    notifyUser('Performance Test Failed', preflightError);
+    return null;
+  }
   const performanceApi = window.postmeter?.performance;
   if (!performanceApi?.start) {
     return setStatus('Performance execution is unavailable in this runtime.');
@@ -11187,6 +11228,16 @@ async function runActivePerformanceTest() {
       renderPerformanceEditor();
     }
   }
+}
+
+function performanceRunPreflightError(test = {}) {
+  const authRefresh = normalizeAuthRefreshConfig(test.authRefresh || {});
+  if (authRefresh.enabled === true
+    && authRefresh.failurePolicy !== 'continue'
+    && !authRefreshRequestHasUrl(authRefresh.request)) {
+    return 'Refreshing Auth is enabled, but its auth request does not have a URL. Open Refreshing Auth and choose or import an auth request, or turn Refreshing Auth off.';
+  }
+  return '';
 }
 
 async function exportActivePerformanceTest(test = activePerformanceTest()) {

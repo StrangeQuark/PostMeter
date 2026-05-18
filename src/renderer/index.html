@@ -1589,10 +1589,6 @@
                 </div>
               </div>
             </div>
-            <div class="performance-run-actions">
-              <button id="runPerformanceTestButton" type="button" class="primary">Run</button>
-              <button id="cancelPerformanceTestButton" type="button" class="danger-button" disabled>Cancel</button>
-            </div>
           </div>
           <div id="performanceEditorSection" class="performance-editor-section performance-plan-section">
                     <label class="field compact-number-field performance-type-select-field">
@@ -1703,8 +1699,10 @@
                 <option class="method-options">OPTIONS</option>
               </select>
               <input id="performanceUrlInput" placeholder="https://api.example.com/resource" aria-label="Performance request URL">
-              
-              
+              <div class="performance-run-actions">
+                <button id="runPerformanceTestButton" type="button" class="primary">Run</button>
+                <button id="cancelPerformanceTestButton" type="button" class="danger-button" disabled>Cancel</button>
+              </div>
             </div>
 
             <div class="tabs performance-request-tabs" role="tablist" aria-label="Performance request editor sections" data-tab-group="performanceRequest">

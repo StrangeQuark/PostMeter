@@ -3638,6 +3638,7 @@
     const originalPerformanceTabs = structuredClone(openPerformanceTabs);
     const originalPerformanceCalibrate = window.postmeter?.performance?.calibrate;
     const originalPerformanceCancelCalibration = window.postmeter?.performance?.cancelCalibration;
+    const originalPerformanceStart = window.postmeter?.performance?.start;
     try {
       assertUiSmoke(!$('environmentTab'), 'Environment request tab panel should be removed from the request editor.');
       assertUiSmoke(!document.querySelector('.tab[data-tab-group="request"][data-tab="environment"]'), 'Environment should not appear in the request tab row.');
@@ -3811,7 +3812,7 @@
       assertUiSmoke($('performanceTypeSelect')?.closest('#performanceEditorSection'), 'Performance type selector should live with the active performance test controls.');
       assertUiSmoke($('performanceMethodSelect').closest('.performance-request-line'), 'Performance request method should live in the request-style line.');
       assertUiSmoke($('performanceUrlInput').closest('.performance-request-line'), 'Performance request URL should live in the request-style line.');
-      assertUiSmoke($('runPerformanceTestButton').closest('.performance-run-actions'), 'Performance Run action should live in the top action row.');
+      assertUiSmoke($('runPerformanceTestButton').closest('.performance-request-line'), 'Performance Run action should live beside the performance request URL.');
       assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
       assertUiSmoke($('importPerformanceRequestButton').closest('.performance-request-header'), 'Performance import request action should live with the request section header.');
       assertUiSmoke($('deletePerformanceTestButton').classList.contains('danger-button'), 'Performance delete button should use danger styling.');
@@ -4054,6 +4055,53 @@
       dispatchChange($('performanceAuthRefreshTypeSelect'));
       $('performanceAuthRefreshButton').click();
       assertUiSmoke(!$('performanceAuthRefreshMenu').hidden, 'Performance Refreshing Auth button should open the toggle menu.');
+      $('performanceToggleAuthRefreshButton').click();
+      await nextPaint();
+      assertUiSmoke(performanceTest.authRefresh?.enabled !== true, 'Performance Refreshing Auth should stay off until an auth request URL is configured.');
+      assertUiSmoke($('performanceAuthRefreshButton').textContent.trim() === 'Refreshing Auth: Off', 'Performance Refreshing Auth button should stay Off when enabling is blocked.');
+      assertUiSmoke(!$('performanceAuthRefreshPanel').hidden, 'Blocked Performance Refreshing Auth enable should open the settings panel.');
+      assertUiSmoke(performanceTest.request.auth?.type === 'bearer', 'Blocked Performance Refreshing Auth enable should not rewrite the performance request auth type.');
+      if (window.postmeter?.performance) {
+        let blockedPerformanceStartCalls = 0;
+        window.postmeter.performance.start = async () => {
+          blockedPerformanceStartCalls += 1;
+          return {};
+        };
+        performanceTest.authRefresh = normalizeAuthRefreshConfig({
+          ...performanceTest.authRefresh,
+          enabled: true,
+          request: {
+            ...(performanceTest.authRefresh?.request || {}),
+            url: ''
+          }
+        });
+        renderPerformanceEditor();
+        $('performanceUrlInput').value = 'https://api.example.test/run';
+        dispatchInput($('performanceUrlInput'));
+        $('runPerformanceTestButton').click();
+        await nextPaint();
+        assertUiSmoke(blockedPerformanceStartCalls === 0, 'Performance Run should not call IPC when Refreshing Auth is enabled without an auth request URL.');
+        assertUiSmoke(
+          $('performanceRunDetails').textContent.includes('Refreshing Auth is enabled, but its auth request does not have a URL'),
+          'Performance Run should explain the missing Refreshing Auth request URL before IPC.'
+        );
+        performanceTest.authRefresh = normalizeAuthRefreshConfig({
+          ...performanceTest.authRefresh,
+          enabled: false
+        });
+        renderPerformanceEditor();
+      }
+      openNewAuthRefreshRequest('performance', 'access');
+      await nextPaint();
+      $('urlInput').value = 'https://auth.example.test/access-token';
+      dispatchInput($('urlInput'));
+      collectRequestFromEditor();
+      selectPerformanceTestItem(performanceTest.id);
+      await nextPaint();
+      $('performanceRequestAuthTabButton').click();
+      await nextPaint();
+      $('performanceAuthRefreshButton').click();
+      assertUiSmoke(!$('performanceAuthRefreshMenu').hidden, 'Performance Refreshing Auth button should reopen the toggle menu after configuring a request URL.');
       $('performanceToggleAuthRefreshButton').click();
       await nextPaint();
       let performanceAutoRefreshAccessOption = $('performanceAuthTypeSelect').querySelector('option[value="autoRefresh"]');
@@ -4968,6 +5016,20 @@
       dispatchChange($('runnerAuthRefreshTypeSelect'));
       $('runnerAuthRefreshButton').click();
       assertUiSmoke(!$('runnerAuthRefreshMenu').hidden, 'Runner Refreshing Auth button should open the toggle menu.');
+      $('runnerToggleAuthRefreshButton').click();
+      await nextPaint();
+      assertUiSmoke(runner.authRefresh?.enabled !== true, 'Runner Refreshing Auth should stay off until an auth request URL is configured.');
+      assertUiSmoke($('runnerAuthRefreshButton').textContent.trim() === 'Refreshing Auth: Off', 'Runner Refreshing Auth button should stay Off when enabling is blocked.');
+      assertUiSmoke(!$('runnerAuthRefreshPanel').hidden, 'Blocked Runner Refreshing Auth enable should open the settings panel.');
+      openNewAuthRefreshRequest('runner', 'access');
+      await nextPaint();
+      $('urlInput').value = 'https://auth.example.test/runner-access-token';
+      dispatchInput($('urlInput'));
+      collectRequestFromEditor();
+      selectRunnerItem(runner.id);
+      await nextPaint();
+      $('runnerAuthRefreshButton').click();
+      assertUiSmoke(!$('runnerAuthRefreshMenu').hidden, 'Runner Refreshing Auth button should reopen the toggle menu after configuring a request URL.');
       $('runnerToggleAuthRefreshButton').click();
       await nextPaint();
       assertUiSmoke(
@@ -6117,6 +6179,7 @@
       if (window.postmeter?.performance) {
         window.postmeter.performance.calibrate = originalPerformanceCalibrate;
         window.postmeter.performance.cancelCalibration = originalPerformanceCancelCalibration;
+        window.postmeter.performance.start = originalPerformanceStart;
       }
       renderAll();
     }

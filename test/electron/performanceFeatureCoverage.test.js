@@ -98,6 +98,7 @@ test('Performance UI keeps type-specific input fields scoped to applicable test 
   }
   assert.doesNotMatch(performanceRequest, /performanceRequestCookiesTabButton/);
   assert.match(performanceRequest, /id="performanceMethodSelect"/);
+  assert.match(performanceRequest, /class="request-line performance-request-line"[\s\S]*id="runPerformanceTestButton"[\s\S]*id="cancelPerformanceTestButton"/);
   assert.match(performanceRequest, /id="performanceTypeSelect"/);
   assert.match(performanceRequest, />Full Endpoint Diagnosis</);
   assert.match(performanceRequest, />RPS \/ Throughput</);
