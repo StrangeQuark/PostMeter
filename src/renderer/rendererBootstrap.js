@@ -384,6 +384,7 @@
     bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarStoreInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceFilterCookiesToRequestHostInput', options.onPerformanceFilterCookiesChange);
+    bindChange(doc, 'performanceRequestSslCertificateVerificationInput', options.onPerformanceRequestTlsSettingsChange);
     bindChange(doc, 'methodSelect', options.onMethodChange);
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);

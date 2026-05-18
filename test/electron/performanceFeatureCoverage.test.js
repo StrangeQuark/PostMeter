@@ -93,14 +93,16 @@ test('Performance UI keeps type-specific input fields scoped to applicable test 
   const ramp = htmlPanel(html, 'rampTab', 'performanceResultsResize');
 
   assert.match(performanceRequest, /data-tab-group="performanceRequest"/);
-  for (const label of ['Params', 'Headers', 'Auth', 'Cookies', 'Body', 'Scripts', 'Variables', 'Docs']) {
+  for (const label of ['Params', 'Headers', 'Auth', 'Body', 'Scripts', 'Variables', 'Settings', 'Docs']) {
     assert.match(performanceRequest, new RegExp(`>${label}<`));
   }
+  assert.doesNotMatch(performanceRequest, /performanceRequestCookiesTabButton/);
   assert.match(performanceRequest, /id="performanceMethodSelect"/);
   assert.match(performanceRequest, /class="method-get">GET/);
   assert.match(performanceRequest, /id="performanceBodyTypeSelect"/);
   assert.match(performanceRequest, /id="performanceAuthTypeSelect"/);
   assert.match(performanceRequest, /id="performanceRequestCookieJarEnabledInput"/);
+  assert.match(performanceRequest, /id="performanceRequestSslCertificateVerificationInput"/);
   assert.doesNotMatch(performanceRequest, /performanceImportSource/);
 
   assert.match(diagnosis, />Scope</);

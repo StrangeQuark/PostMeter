@@ -126,7 +126,7 @@
     dispatchChange($('methodSelect'));
     $('urlInput').value = `${baseUrl}/echo`;
     dispatchInput($('urlInput'));
-    activateTab('request', 'cookies');
+    activateTab('request', 'requestSettings');
     $('requestCookieJarEnabledInput').checked = true;
     dispatchChange($('requestCookieJarEnabledInput'));
 

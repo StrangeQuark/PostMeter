@@ -729,8 +729,14 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="docsPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="collectionDescriptionPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestSslCertificateVerificationInput"/);
+  assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestCookieJarEnabledInput"/);
+  assert.doesNotMatch(indexSource, /id="requestCookiesTabButton"/);
+  assert.match(indexSource, /id="performanceSettingsTab"[\s\S]*id="performanceRequestSslCertificateVerificationInput"/);
+  assert.match(indexSource, /id="performanceSettingsTab"[\s\S]*id="performanceRequestCookieJarEnabledInput"/);
+  assert.doesNotMatch(indexSource, /id="performanceRequestCookiesTabButton"/);
   assert.doesNotMatch(indexSource, /id="requestCaCertificatePathInput"/);
   assert.match(rendererSource, /request:\s*\[[^\]]*'requestSettingsTab'[^\]]*\]/);
+  assert.match(rendererSource, /performanceRequest:\s*\[[^\]]*'performanceSettingsTab'[^\]]*\]/);
   assert.match(rendererSource, /results:\s*\[[^\]]*'responseNetworkTab'[^\]]*\]/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
@@ -928,6 +934,7 @@ test('renderer bootstrap binds request-local TLS setting controls', () => {
   const calls = [];
   const elements = new Map([
     ['requestSslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
+    ['performanceRequestSslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
   ]);
@@ -943,13 +950,16 @@ test('renderer bootstrap binds request-local TLS setting controls', () => {
       addEventListener() {}
     },
     windowObject: { addEventListener() {} },
-    onRequestTlsSettingsChange: () => calls.push('request-tls')
+    onRequestTlsSettingsChange: () => calls.push('request-tls'),
+    onPerformanceRequestTlsSettingsChange: () => calls.push('performance-request-tls')
   });
 
   elements.get('requestSslCertificateVerificationInput').dispatch('change');
+  elements.get('performanceRequestSslCertificateVerificationInput').dispatch('change');
 
   assert.deepEqual(calls, [
-    'request-tls'
+    'request-tls',
+    'performance-request-tls'
   ]);
 });
 

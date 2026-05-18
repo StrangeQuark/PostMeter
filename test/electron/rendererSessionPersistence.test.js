@@ -162,6 +162,38 @@ test('renderer session persistence restores workspace list order', () => {
   assert.deepEqual(state.workspaces.map((workspace) => workspace.id), ['c.json', 'a.json', 'b.json']);
 });
 
+test('renderer session persistence maps the removed Cookies request tab to Settings', () => {
+  const state = createRendererState();
+  state.workspace = { collections: [], environments: [], runners: [] };
+  state.workspaces = [{ id: 'Workspace.json', name: 'Workspace' }];
+
+  const built = buildRendererSession({
+    state,
+    doc: {
+      querySelector(selector) {
+        if (selector.includes('data-tab-group="request"')) {
+          return { dataset: { tab: 'cookies' } };
+        }
+        return null;
+      }
+    }
+  });
+  assert.equal(built.activeRequestTab, 'requestSettings');
+
+  const restored = restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Workspace.json',
+      selectedWorkspaceId: 'Workspace.json',
+      activeRequestTab: 'cookies'
+    },
+    workspaceListItems: () => state.workspaces,
+    findFolder,
+    findRequest
+  });
+  assert.equal(restored.activeRequestTab, 'requestSettings');
+});
+
 test('renderer session persistence serializes and restores collapsed collection tree nodes', () => {
   const state = createRendererState();
   state.workspace = {
