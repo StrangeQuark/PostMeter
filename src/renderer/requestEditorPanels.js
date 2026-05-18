@@ -885,8 +885,10 @@
     const filterInput = element(doc, options.filterInputId || 'filterCookiesToRequestHostInput');
     const filterLabel = element(doc, options.filterLabelId || 'cookieHostFilterLabel');
 
+    if (!workspace) {
+      return;
+    }
     workspace.cookies ||= [];
-    container.textContent = '';
 
     const activeHost = domainFromRequestUrl(options.activeRequestUrl);
     const managedCookieNames = new Set((options.managedCookieNames || [])
@@ -903,6 +905,10 @@
     if (filterLabel) {
       filterLabel.textContent = activeHost ? `Host: ${activeHost}` : 'No active host';
     }
+    if (!container) {
+      return;
+    }
+    container.textContent = '';
 
     const visibleCookies = workspace.cookies
       .map((cookie, index) => ({ cookie, index }))

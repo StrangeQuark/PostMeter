@@ -969,6 +969,7 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
     ['cancelAuthRefreshAutoDetectButton', createElement()],
     ['confirmAuthRefreshAutoDetectButton', createElement()],
     ['closeNotificationModalButton', createElement()],
+    ['closeCookiesModalButton', createElement()],
     ['cancelRunnerImportButton', createElement()],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
@@ -1006,9 +1007,88 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('cancelAuthRefreshAutoDetectButton').dispatch('click');
   elements.get('confirmAuthRefreshAutoDetectButton').dispatch('click');
   elements.get('closeNotificationModalButton').dispatch('click');
+  elements.get('closeCookiesModalButton').dispatch('click');
   elements.get('cancelRunnerImportButton').dispatch('click');
 
-  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, null, null, 'auth-auto-detect-confirm', true, null]);
+  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, null, null, 'auth-auto-detect-confirm', true, true, null]);
+});
+
+test('renderer bootstrap binds workspace cookie manager controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['openCookiesButton', createElement()],
+    ['openRequestCookiesButton', createElement()],
+    ['openPerformanceCookiesButton', createElement()],
+    ['cookiesDomainInput', createElement({ tagName: 'INPUT' })],
+    ['cookiesAddDomainButton', createElement()],
+    ['clearExpiredWorkspaceCookiesButton', createElement()],
+    ['clearAllWorkspaceCookiesButton', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onOpenCookies: () => calls.push('open'),
+    onAddCookieDomain: () => calls.push('add-domain'),
+    onClearExpiredWorkspaceCookies: () => calls.push('clear'),
+    onClearAllWorkspaceCookies: () => calls.push('clear-all')
+  });
+
+  elements.get('openCookiesButton').dispatch('click');
+  elements.get('openRequestCookiesButton').dispatch('click');
+  elements.get('openPerformanceCookiesButton').dispatch('click');
+  elements.get('cookiesAddDomainButton').dispatch('click');
+  elements.get('cookiesDomainInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('clearExpiredWorkspaceCookiesButton').dispatch('click');
+  elements.get('clearAllWorkspaceCookiesButton').dispatch('click');
+
+  assert.deepEqual(calls, ['open', 'open', 'open', 'add-domain', 'add-domain', 'clear', 'clear-all']);
+});
+
+test('renderer bootstrap opens toolbar menus inside active modals', () => {
+  const elements = new Map([
+    ['cookiesClearMenuButton', createElement()],
+    ['cookiesClearMenu', createElement({ closest: (selector) => selector === '.modal' ? elements.get('cookiesModal') : null })],
+    ['cookiesModal', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+  elements.get('modalBackdrop').hidden = false;
+  elements.get('cookiesModal').hidden = false;
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [elements.get('cookiesClearMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('cookiesClearMenuButton')];
+        }
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  });
+
+  elements.get('cookiesClearMenuButton').dispatch('click');
+
+  assert.equal(elements.get('cookiesClearMenu').hidden, false);
+  assert.equal(elements.get('cookiesClearMenuButton').getAttribute('aria-expanded'), 'true');
 });
 
 test('renderer bootstrap binds CSV variable edit buttons and modal controls', () => {
@@ -1685,8 +1765,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
     'addPerformanceRequestVariableButton',
-    'addPerformanceCookieButton',
-    'clearExpiredPerformanceCookiesButton',
+    'openPerformanceCookiesButton',
     'performanceMethodSelect',
     'performanceUrlInput',
     'performanceBodyTypeSelect',
@@ -1761,8 +1840,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onAddPerformanceParam: () => calls.push('add-param'),
     onAddPerformanceHeader: () => calls.push('add-header'),
     onAddPerformanceRequestVariable: () => calls.push('add-variable'),
-    onAddPerformanceCookie: () => calls.push('add-cookie'),
-    onClearExpiredPerformanceCookies: () => calls.push('clear-cookies'),
+    onOpenCookies: () => calls.push('open-cookies'),
     onCalibratePerformance: () => calls.push('calibrate'),
     onClosePerformanceCalibration: () => calls.push('close-calibration'),
     onPerformanceConfigChange: () => calls.push('config'),
@@ -1799,8 +1877,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
     'addPerformanceRequestVariableButton',
-    'addPerformanceCookieButton',
-    'clearExpiredPerformanceCookiesButton',
+    'openPerformanceCookiesButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton',
     'performanceBeautifyBodyButton',
@@ -1828,7 +1905,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 25), [
+  assert.deepEqual(calls.slice(0, 24), [
     'new',
     'new',
     'import-test',
@@ -1850,8 +1927,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'add-param',
     'add-header',
     'add-variable',
-    'add-cookie',
-    'clear-cookies',
+    'open-cookies',
     'calibrate',
     'close-calibration'
   ]);
@@ -2581,7 +2657,7 @@ test('renderer loads code editor helpers before request editor panels and render
   assert.ok(codeEditorIndex < rendererIndex, 'codeEditor.js should load before renderer.js initializes textareas.');
 });
 
-function createElement({ tagName = 'BUTTON', value = '' } = {}) {
+function createElement({ tagName = 'BUTTON', value = '', closest = null } = {}) {
   const listeners = new Map();
   return {
     attributes: {},
@@ -2606,6 +2682,9 @@ function createElement({ tagName = 'BUTTON', value = '' } = {}) {
     },
     matches(selector) {
       return selector === 'button' && this.tagName === 'BUTTON';
+    },
+    closest(selector) {
+      return typeof closest === 'function' ? closest(selector) : null;
     },
     querySelector() {
       return null;

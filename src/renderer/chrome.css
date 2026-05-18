@@ -201,7 +201,10 @@
 }
 
 .environment-control {
-  min-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
   margin-left: auto;
 }
 

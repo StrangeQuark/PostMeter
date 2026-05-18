@@ -53,16 +53,14 @@
 
     await captureUiSnapshotState('cookies', () => {
       activateTab('request', 'cookies');
-      $('addCookieButton').click();
-      const row = $('cookiesTable').querySelector('.cookie-row');
-      assertUiSmoke(row, 'Snapshot cookie row was not rendered.');
-      const inputs = row.querySelectorAll('input');
-      inputs[1].value = 'snapshotSession';
-      dispatchInput(inputs[1]);
-      inputs[2].value = 'secret';
-      dispatchInput(inputs[2]);
-      $('filterCookiesToRequestHostInput').checked = true;
-      dispatchChange($('filterCookiesToRequestHostInput'));
+      $('openRequestCookiesButton').click();
+      const addCookieButton = $('cookiesDomainList').querySelector('.cookie-add-inline-button');
+      assertUiSmoke(addCookieButton, 'Snapshot cookie domain was not rendered.');
+      addCookieButton.click();
+      const editor = $('cookiesDomainList').querySelector('.cookie-text-editor textarea');
+      assertUiSmoke(editor, 'Snapshot cookie text editor was not rendered.');
+      editor.value = 'snapshotSession=secret; Path=/; Secure; HttpOnly; SameSite=Lax;';
+      dispatchInput(editor);
     }, global);
 
     await captureUiSnapshotState('auth-oauth', () => {

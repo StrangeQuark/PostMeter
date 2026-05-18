@@ -68,10 +68,10 @@
         <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
       </div>
     </div>
-    <label class="field inline environment-control">
-      <span>Environment</span>
-      <select id="environmentSelect"></select>
-    </label>
+    <div class="environment-control">
+      <button id="openCookiesButton" type="button">Cookies</button>
+      <select id="environmentSelect" aria-label="Environment"></select>
+    </div>
   </header>
 
   <main id="appGrid" class="app-grid">
@@ -1058,13 +1058,8 @@
               <input id="filterCookiesToRequestHostInput" type="checkbox">
               <span>Active host only</span>
             </label>
-            <span id="cookieHostFilterLabel" class="muted-inline"></span>
+            <button id="openRequestCookiesButton" type="button">Open Cookies</button>
           </div>
-          <div class="environment-actions">
-            <button id="addCookieButton">Add Cookie</button>
-            <button id="clearExpiredCookiesButton">Clear Expired</button>
-          </div>
-          <div id="cookiesTable" class="kv-table cookies-table"></div>
         </div>
 
         <div id="collectionVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestVariablesTabButton">
@@ -2219,13 +2214,8 @@
                   <input id="performanceFilterCookiesToRequestHostInput" type="checkbox">
                   <span>Active host only</span>
                 </label>
-                <span id="performanceCookieHostFilterLabel" class="muted-inline"></span>
+                <button id="openPerformanceCookiesButton" type="button">Open Cookies</button>
               </div>
-              <div class="environment-actions">
-                <button id="addPerformanceCookieButton" type="button">Add Cookie</button>
-                <button id="clearExpiredPerformanceCookiesButton" type="button">Clear Expired</button>
-              </div>
-              <div id="performanceCookiesTable" class="kv-table cookies-table"></div>
             </div>
 
             <div id="performanceBodyTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestBodyTabButton">
@@ -2864,6 +2854,29 @@
       <div class="modal-actions">
         <button id="startTutorialButton" type="button" class="primary">Start Tutorial</button>
       </div>
+    </section>
+
+    <section id="cookiesModal" class="modal cookies-manager-modal" role="dialog" aria-modal="true" aria-labelledby="cookiesModalTitle" hidden>
+      <div class="modal-title-row">
+        <h2 id="cookiesModalTitle">Cookies</h2>
+        <button id="closeCookiesModalButton" type="button" class="modal-close-button" aria-label="Close cookies">X</button>
+      </div>
+      <div class="cookies-modal-tabs" role="tablist" aria-label="Cookie manager views">
+        <button type="button" class="cookie-modal-tab is-active" aria-selected="true">Manage Cookies</button>
+      </div>
+      <div class="cookie-domain-add-row">
+        <input id="cookiesDomainInput" type="text" autocomplete="off" spellcheck="false" placeholder="Type a domain name" aria-label="Domain name">
+        <button id="cookiesAddDomainButton" type="button">Add domain</button>
+        <div class="toolbar-group menu-group cookie-clear-menu-group">
+          <button id="cookiesClearMenuButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Clear</button>
+          <div id="cookiesClearMenu" class="toolbar-menu cookie-clear-menu" role="menu" aria-labelledby="cookiesClearMenuButton" hidden>
+            <button id="clearExpiredWorkspaceCookiesButton" type="button" role="menuitem">Clear expired</button>
+            <button id="clearAllWorkspaceCookiesButton" type="button" role="menuitem" class="danger-button">Clear all</button>
+          </div>
+        </div>
+      </div>
+      <div id="cookiesModalError" class="cookie-manager-error" role="alert" hidden></div>
+      <div id="cookiesDomainList" class="cookies-domain-list"></div>
     </section>
 
     <section id="unsavedRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unsavedRequestTitle" aria-describedby="unsavedRequestMessage" hidden>

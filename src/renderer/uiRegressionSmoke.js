@@ -371,21 +371,47 @@
     }
     activateTab('request', 'cookies');
     assertUiSmoke($('requestCookieJarEnabledInput'), 'Cookie jar request toggle is missing.');
-    $('addCookieButton').click();
-    const cookieRow = $('cookiesTable').querySelector('.cookie-row');
-    assertUiSmoke(cookieRow, 'Cookie editor did not create a row.');
-    assertUiSmoke(cookieRow.querySelector('[aria-label^="Cookie"][aria-label$="name"]'), 'Cookie row name input should expose a contextual accessible label.');
-    assertUiSmoke(cookieRow.querySelector('[aria-label^="Cookie"][aria-label*="SameSite"]'), 'Cookie SameSite control should expose a contextual accessible label.');
-    assertUiSmoke(cookieRow.querySelector('[aria-label^="Remove cookie"]')?.classList.contains('danger-button'), 'Cookie row remove button should use danger styling.');
-    $('filterCookiesToRequestHostInput').checked = true;
-    dispatchChange($('filterCookiesToRequestHostInput'));
-    assertUiSmoke($('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter hid the matching row.');
-    assertUiSmoke($('cookieHostFilterLabel').textContent.includes('api.example.test'), 'Cookie active-host filter did not show the active host.');
-    $('urlInput').value = 'https://other.example.test/v1/users';
-    dispatchInput($('urlInput'));
-    assertUiSmoke(!$('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter did not hide non-matching rows.');
-    $('filterCookiesToRequestHostInput').checked = false;
-    dispatchChange($('filterCookiesToRequestHostInput'));
+    assertUiSmoke($('openRequestCookiesButton'), 'Request Cookies tab should expose the cookie manager shortcut.');
+    $('openRequestCookiesButton').click();
+    await nextPaint();
+    const cookieDomain = $('cookiesDomainList').querySelector('.cookie-domain-section');
+    assertUiSmoke(cookieDomain, 'Cookie manager should render domain sections.');
+    assertUiSmoke(cookieDomain.querySelector('.cookie-domain-name')?.textContent.includes('api.example.test'), 'Cookie manager should include the active request host.');
+    cookieDomain.querySelector('.cookie-add-inline-button').click();
+    await nextPaint();
+    const cookieEditor = $('cookiesDomainList').querySelector('.cookie-text-editor textarea');
+    assertUiSmoke(cookieEditor, 'Cookie editor did not open a text field.');
+    assertUiSmoke(cookieEditor.getAttribute('aria-label')?.startsWith('Cookie'), 'Cookie text field should expose a contextual accessible label.');
+    cookieEditor.value = 'session=secret; Path=/; Secure; HttpOnly; SameSite=Lax;';
+    dispatchInput(cookieEditor);
+    $('cookiesDomainList').querySelector('.cookie-text-actions .primary').click();
+    await nextPaint();
+    const savedCookieButton = Array.from($('cookiesDomainList').querySelectorAll('.cookie-name-button'))
+      .find((button) => button.textContent === 'session');
+    assertUiSmoke(savedCookieButton, 'Saving the cookie text should update the cookie list.');
+    assertUiSmoke($('cookiesDomainList').querySelector('[aria-label="Remove cookie session"]'), 'Cookie list should expose a remove button.');
+    const removeDomainButton = $('cookiesDomainList').querySelector('[aria-label="Remove domain api.example.test"]');
+    assertUiSmoke(removeDomainButton, 'Cookie manager should expose a domain-level remove button.');
+    removeDomainButton.click();
+    await nextPaint();
+    assertUiSmoke(!$('cookiesDomainList').querySelector('.cookie-domain-section'), 'Removing a domain should remove the domain section and its cookies.');
+    $('cookiesDomainInput').value = 'youtube.com';
+    dispatchInput($('cookiesDomainInput'));
+    $('cookiesAddDomainButton').click();
+    assertUiSmoke($('cookiesDomainInput').value === '', 'Add domain should clear the domain input immediately.');
+    await nextPaint();
+    assertUiSmoke($('cookiesDomainList').querySelector('[aria-label="Remove domain youtube.com"]'), 'Add domain should create an empty domain section.');
+    $('cookiesClearMenuButton').click();
+    $('clearAllWorkspaceCookiesButton').click();
+    await nextPaint();
+    assertUiSmoke(!$('confirmActionModal').hidden, 'Clear all should warn before removing empty cookie domains.');
+    assertUiSmoke(!$('cookiesModal').hidden, 'Clear all warning should keep the Cookies modal visible underneath.');
+    assertUiSmoke($('modalBackdrop').classList.contains('is-stacked'), 'Clear all warning should render as a stacked modal.');
+    $('confirmActionButton').click();
+    await nextPaint();
+    assertUiSmoke(!$('cookiesDomainList').querySelector('.cookie-domain-section'), 'Clear all should remove empty cookie domains.');
+    $('closeCookiesModalButton').click();
+    await nextPaint();
     activateTab('request', 'docs');
     assertUiSmoke($('docsPreview').getAttribute('aria-label') === 'Request docs', 'Docs Markdown preview should expose an accessible label.');
     assertUiSmoke($('docsPreview').getAttribute('role') === 'button' && $('docsSaveButton').hidden && $('docsCancelButton').hidden, 'Docs preview should be the edit trigger and hide Save/Cancel before editing.');
@@ -4070,13 +4096,17 @@
       assertUiSmoke($('performanceRequestCookieJarEnabledInput').checked === true && $('performanceRequestCookieJarEnabledInput').disabled === true, 'Cookie performance refreshing auth should force the cookie jar on.');
       $('performanceRequestCookiesTabButton').click();
       await nextPaint();
-      const managedPerformanceCookieRow = Array.from($('performanceCookiesTable').querySelectorAll('.cookie-row'))
-        .find((row) => row.querySelector('[aria-label$=" name"]')?.value === 'perf_session');
-      assertUiSmoke(managedPerformanceCookieRow, 'Cookie performance refreshing auth should show the managed cookie in the Cookies tab.');
+      $('openPerformanceCookiesButton').click();
+      await nextPaint();
+      const managedPerformanceCookieItem = Array.from($('cookiesDomainList').querySelectorAll('.cookie-name-item'))
+        .find((item) => item.querySelector('.cookie-name-button')?.textContent === 'perf_session');
+      assertUiSmoke(managedPerformanceCookieItem, 'Cookie performance refreshing auth should show the managed cookie in the cookie manager.');
       assertUiSmoke(
-        Array.from(managedPerformanceCookieRow.querySelectorAll('input, select, button')).every((control) => control.disabled === true),
-        'Cookie performance refreshing auth managed cookie row should be uneditable.'
+        Array.from(managedPerformanceCookieItem.querySelectorAll('button')).every((control) => control.disabled === true),
+        'Cookie performance refreshing auth managed cookie item should be uneditable.'
       );
+      $('closeCookiesModalButton').click();
+      await nextPaint();
       $('performanceRequestParamsTabButton').click();
       for (const [tabId, type, label] of [
         ['performanceDiagnosisTabButton', 'diagnosis', 'Full Endpoint Diagnosis'],

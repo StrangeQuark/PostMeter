@@ -1099,6 +1099,7 @@ textarea.code-editor-input.has-openable-variable-hover {
 .cookie-jar-options {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 14px;
   margin-bottom: 10px;
 }
@@ -1112,11 +1113,6 @@ textarea.code-editor-input.has-openable-variable-hover {
 .cookies-table {
   display: grid;
   gap: 8px;
-}
-
-#cookiesTab > .environment-actions,
-#performanceCookiesTab > .environment-actions {
-  margin-bottom: 8px;
 }
 
 .cookie-row {

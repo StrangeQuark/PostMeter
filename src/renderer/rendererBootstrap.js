@@ -266,8 +266,13 @@
     bindClick(doc, 'refreshVaultMetadataButton', options.onRefreshVaultMetadata);
     bindClick(doc, 'resetVaultButton', options.onResetVault);
     bindClick(doc, 'addRequestVariableButton', options.onAddRequestVariable);
-    bindClick(doc, 'addCookieButton', options.onAddCookie);
-    bindClick(doc, 'clearExpiredCookiesButton', options.onClearExpiredCookies);
+    bindClick(doc, 'openCookiesButton', options.onOpenCookies);
+    bindClick(doc, 'openRequestCookiesButton', options.onOpenCookies);
+    bindClick(doc, 'openPerformanceCookiesButton', options.onOpenCookies);
+    bindClick(doc, 'cookiesAddDomainButton', options.onAddCookieDomain);
+    bindKey(doc, 'cookiesDomainInput', options.onAddCookieDomain, ['Enter']);
+    bindClick(doc, 'clearExpiredWorkspaceCookiesButton', options.onClearExpiredWorkspaceCookies);
+    bindClick(doc, 'clearAllWorkspaceCookiesButton', options.onClearAllWorkspaceCookies);
     bindClick(doc, 'runCollectionButton', options.onRunCollection);
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
     bindClick(doc, 'exportRunnerHtmlButton', options.onExportRunnerHtml);
@@ -324,8 +329,6 @@
     bindChange(doc, 'performanceSendPostMeterTokenInput', options.onPerformancePostMeterTokenHeaderChange);
     bindChange(doc, 'performanceShowGeneratedHeadersInput', options.onPerformanceShowGeneratedHeadersChange);
     bindClick(doc, 'addPerformanceRequestVariableButton', options.onAddPerformanceRequestVariable);
-    bindClick(doc, 'addPerformanceCookieButton', options.onAddPerformanceCookie);
-    bindClick(doc, 'clearExpiredPerformanceCookiesButton', options.onClearExpiredPerformanceCookies);
     bindClick(doc, 'calibratePerformanceButton', options.onCalibratePerformance);
     bindClick(doc, 'startPkceFlowButton', options.onStartPkceFlow);
     bindClick(doc, 'startDeviceFlowButton', options.onStartDeviceFlow);
@@ -571,6 +574,7 @@
     bindClick(doc, 'cancelAuthRefreshAutoDetectButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'confirmAuthRefreshAutoDetectButton', options.onConfirmAuthRefreshAutoDetectModal);
     bindClick(doc, 'closeNotificationModalButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closeCookiesModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalFooterButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeTutorialsModalButton', () => options.onResolveActiveModal?.(null));
@@ -713,7 +717,8 @@
       ['performanceAuthRefreshManageRequestButton', 'performanceAuthRefreshManageRequestMenu'],
       ['performanceAuthRefreshTokenManageRequestButton', 'performanceAuthRefreshTokenManageRequestMenu'],
       ['exportRunnerResultsButton', 'exportRunnerResultsMenu'],
-      ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu']
+      ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu'],
+      ['cookiesClearMenuButton', 'cookiesClearMenu']
     ]) {
       const button = getElement(doc, buttonId);
       const menu = getElement(doc, menuId);
@@ -886,7 +891,8 @@
   }
 
   function openToolbarMenu(doc, button, menu, options = {}) {
-    if (isModalBackdropOpen(doc)) {
+    const openModal = menu.closest?.('.modal');
+    if (isModalBackdropOpen(doc) && !(openModal && openModal.hidden === false)) {
       closeToolbarMenus(doc);
       return;
     }
