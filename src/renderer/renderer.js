@@ -130,11 +130,11 @@ const {
 } = PostMeterRequestQueryModel;
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
-  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'requestSettingsTab', 'docsTab'],
+  request: ['paramsTab', 'headersTab', 'authTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'requestSettingsTab', 'docsTab'],
   collection: ['collectionOverviewTab', 'collectionAuthTab', 'collectionScriptsTab', 'collectionLevelVariablesTab'],
   folder: ['folderOverviewTab', 'folderAuthTab', 'folderScriptsTab', 'folderLevelVariablesTab'],
   results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'responseNetworkTab', 'testResultsTab', 'visualizerTab'],
-  performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceDocsTab'],
+  performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceSettingsTab', 'performanceDocsTab'],
   performance: ['diagnosisTab', 'latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
 };
@@ -970,6 +970,7 @@ function bindUi() {
     onAddPerformanceUrlencodedBodyRow: () => addBodyUrlencodedRow('performance'),
     onPerformanceAuthTypeChange: showPerformanceAuthSection,
     onPerformanceAuthInput: collectPerformanceTestAndMarkDirty,
+    onPerformanceRequestTlsSettingsChange: () => setActivePerformanceRequestTlsSettingsFromInputs(),
     onCollectionAuthTypeChange: showCollectionAuthSection,
     onCollectionInput: collectCollectionAndMarkDirty,
     onCollectionAuthInput: collectCollectionAndMarkDirty,
@@ -7927,6 +7928,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     setChecked('performanceRequestCookieJarEnabledInput', false);
     setChecked('performanceRequestCookieJarStoreInput', true);
     setManagedCookieJarToggleState('performance', false);
+    renderPerformanceRequestTlsSettings(null);
     for (const id of [
       'performanceParamsTable',
       'performanceHeadersTable',
@@ -7965,6 +7967,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   setChecked('performanceRequestCookieJarEnabledInput', request.cookieJar.enabled === true);
   setChecked('performanceRequestCookieJarStoreInput', request.cookieJar.storeResponses !== false);
   setManagedCookieJarToggleState('performance', managedCookieRequest);
+  renderPerformanceRequestTlsSettings(request);
 
   renderPerformancePairs('performanceParamsTable', request.queryParams);
   renderPerformanceHeaderPairs('performanceHeadersTable', request);
@@ -8079,9 +8082,7 @@ function renderPerformanceCookieJarEditor() {
   renderRequestCookieJarEditor({
     doc: document,
     workspace,
-    containerId: 'performanceCookiesTable',
     filterInputId: 'performanceFilterCookiesToRequestHostInput',
-    filterLabelId: 'performanceCookieHostFilterLabel',
     activeRequestUrl: activePerformanceTest()?.request?.url || '',
     managedCookieNames: performanceManagedRefreshingCookieNames(),
     onDirty: markCookieJarDirty,
@@ -15913,10 +15914,6 @@ function renderRequestEditor() {
     $('paramsTable').textContent = '';
     $('headersTable').textContent = '';
     $('requestVariablesTable').textContent = '';
-    const cookiesTable = $('cookiesTable');
-    if (cookiesTable) {
-      cookiesTable.textContent = '';
-    }
     renderRequestHeaderControls(null);
     $('requestCookieJarEnabledInput').checked = false;
     $('requestCookieJarStoreInput').checked = true;
@@ -16443,8 +16440,16 @@ function renderRequestHeaderControls(request) {
 }
 
 function renderRequestTlsSettings(request) {
+  renderRequestTlsSettingsControl(request, 'requestSslCertificateVerificationInput');
+}
+
+function renderPerformanceRequestTlsSettings(request) {
+  renderRequestTlsSettingsControl(request, 'performanceRequestSslCertificateVerificationInput');
+}
+
+function renderRequestTlsSettingsControl(request, inputId) {
   const settings = request ? normalizeRendererRequestTlsSettings(request.settings) : normalizeRendererRequestTlsSettings();
-  const verification = $('requestSslCertificateVerificationInput');
+  const verification = $(inputId);
   if (verification) {
     const workspaceVerification = workspace.settings?.request?.sslCertificateVerification !== false;
     verification.checked = settings.sslCertificateVerification === 'inherit'
@@ -20718,18 +20723,31 @@ function setActiveRequestTlsSettingsFromInputs() {
   if (!request) {
     return;
   }
-  const input = $('requestSslCertificateVerificationInput');
+  setRequestTlsSettingsFromInput(request, 'requestSslCertificateVerificationInput');
+  markActiveRequestDirty();
+}
+
+function setActivePerformanceRequestTlsSettingsFromInputs() {
+  const test = activePerformanceTest();
+  if (!test?.request) {
+    return;
+  }
+  setRequestTlsSettingsFromInput(test.request, 'performanceRequestSslCertificateVerificationInput');
+  markActivePerformanceDirty();
+}
+
+function setRequestTlsSettingsFromInput(request, inputId) {
+  const input = $(inputId);
   request.settings = {
     sslCertificateVerification: input?.checked === true ? 'enabled' : 'disabled'
   };
   if (input) {
     input.dataset.verificationValue = request.settings.sslCertificateVerification;
   }
-  markActiveRequestDirty();
 }
 
-function requestTlsSettingsFromInputs(existingSettings = {}) {
-  const input = $('requestSslCertificateVerificationInput');
+function requestTlsSettingsFromInputs(existingSettings = {}, inputId = 'requestSslCertificateVerificationInput') {
+  const input = $(inputId);
   const fallback = normalizeRendererRequestTlsSettings(existingSettings).sslCertificateVerification;
   const value = normalizeRendererRequestSslVerification(input?.dataset?.verificationValue || fallback);
   return { sslCertificateVerification: value };
@@ -21125,6 +21143,7 @@ function collectPerformanceTestFromEditor(editedElement = null) {
     sendPostMeterToken: $('performanceSendPostMeterTokenInput')?.checked === true,
     showGeneratedHeaders: $('performanceShowGeneratedHeadersInput')?.checked === true
   };
+  test.request.settings = requestTlsSettingsFromInputs(test.request.settings, 'performanceRequestSslCertificateVerificationInput');
   test.request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', test.request.queryParams);
   test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
   test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);

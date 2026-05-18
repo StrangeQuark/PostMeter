@@ -52,8 +52,11 @@
     closeContextMenu();
 
     await captureUiSnapshotState('cookies', () => {
-      activateTab('request', 'cookies');
+      activateTab('request', 'requestSettings');
       $('openRequestCookiesButton').click();
+      $('cookiesDomainInput').value = 'api.snapshot.test';
+      dispatchInput($('cookiesDomainInput'));
+      $('cookiesAddDomainButton').click();
       const addCookieButton = $('cookiesDomainList').querySelector('.cookie-add-inline-button');
       assertUiSmoke(addCookieButton, 'Snapshot cookie domain was not rendered.');
       addCookieButton.click();

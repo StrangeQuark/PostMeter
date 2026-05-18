@@ -289,7 +289,6 @@
           <button id="requestParamsTabButton" class="tab active" type="button" role="tab" data-tab-group="request" data-tab="params" aria-selected="true" aria-controls="paramsTab">Params</button>
           <button id="requestHeadersTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="headers" aria-selected="false" aria-controls="headersTab">Headers</button>
           <button id="requestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="auth" aria-selected="false" aria-controls="authTab">Auth</button>
-          <button id="requestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="cookies" aria-selected="false" aria-controls="cookiesTab">Cookies</button>
           <button id="requestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="body" aria-selected="false" aria-controls="bodyTab">Body</button>
           <button id="requestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="scripts" aria-selected="false" aria-controls="scriptsTab">Scripts</button>
           <button id="requestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="collectionVariables" aria-selected="false" aria-controls="collectionVariablesTab">Variables</button>
@@ -1044,24 +1043,6 @@
           </div>
         </div>
 
-        <div id="cookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestCookiesTabButton">
-          <div class="cookie-jar-options">
-            <label class="field inline">
-              <input id="requestCookieJarEnabledInput" type="checkbox">
-              <span>Use cookie jar for this request</span>
-            </label>
-            <label class="field inline">
-              <input id="requestCookieJarStoreInput" type="checkbox">
-              <span>Store response cookies</span>
-            </label>
-            <label class="field inline">
-              <input id="filterCookiesToRequestHostInput" type="checkbox">
-              <span>Active host only</span>
-            </label>
-            <button id="openRequestCookiesButton" type="button">Open Cookies</button>
-          </div>
-        </div>
-
         <div id="collectionVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestVariablesTabButton">
           <div class="environment-actions variable-actions">
             <button id="addRequestVariableButton">Add Variable</button>
@@ -1072,10 +1053,31 @@
 
         <div id="requestSettingsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestSettingsTabButton">
           <div class="request-settings-grid">
-            <label class="settings-toggle">
-              <input id="requestSslCertificateVerificationInput" type="checkbox">
-              <span>Enable SSL certificate verification</span>
-            </label>
+            <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
+              <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
+              <label class="settings-toggle">
+                <input id="requestSslCertificateVerificationInput" type="checkbox">
+                <span>Enable SSL certificate verification</span>
+              </label>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestCookiesSettingsTitle">
+              <h3 id="requestCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
+              <div class="cookie-jar-options">
+                <label class="field inline">
+                  <input id="requestCookieJarEnabledInput" type="checkbox">
+                  <span>Use cookie jar for this request</span>
+                </label>
+                <label class="field inline">
+                  <input id="requestCookieJarStoreInput" type="checkbox">
+                  <span>Store response cookies</span>
+                </label>
+                <label class="field inline">
+                  <input id="filterCookiesToRequestHostInput" type="checkbox">
+                  <span>Active host only</span>
+                </label>
+                <button id="openRequestCookiesButton" type="button">Open Cookies</button>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -1535,10 +1537,10 @@
               <button id="performanceRequestParamsTabButton" class="tab active" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceParams" aria-selected="true" aria-controls="performanceParamsTab">Params</button>
               <button id="performanceRequestHeadersTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceHeaders" aria-selected="false" aria-controls="performanceHeadersTab">Headers</button>
               <button id="performanceRequestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceAuth" aria-selected="false" aria-controls="performanceAuthTab">Auth</button>
-              <button id="performanceRequestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceCookies" aria-selected="false" aria-controls="performanceCookiesTab">Cookies</button>
               <button id="performanceRequestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceBody" aria-selected="false" aria-controls="performanceBodyTab">Body</button>
               <button id="performanceRequestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceScripts" aria-selected="false" aria-controls="performanceScriptsTab">Scripts</button>
               <button id="performanceRequestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceVariables" aria-selected="false" aria-controls="performanceVariablesTab">Variables</button>
+              <button id="performanceRequestSettingsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceSettings" aria-selected="false" aria-controls="performanceSettingsTab">Settings</button>
               <button id="performanceRequestDocsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceDocs" aria-selected="false" aria-controls="performanceDocsTab">Docs</button>
             </div>
 
@@ -2200,24 +2202,6 @@
               </div>
             </div>
 
-            <div id="performanceCookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestCookiesTabButton">
-              <div class="cookie-jar-options">
-                <label class="field inline">
-                  <input id="performanceRequestCookieJarEnabledInput" type="checkbox">
-                  <span>Use cookie jar for this request</span>
-                </label>
-                <label class="field inline">
-                  <input id="performanceRequestCookieJarStoreInput" type="checkbox">
-                  <span>Store response cookies</span>
-                </label>
-                <label class="field inline">
-                  <input id="performanceFilterCookiesToRequestHostInput" type="checkbox">
-                  <span>Active host only</span>
-                </label>
-                <button id="openPerformanceCookiesButton" type="button">Open Cookies</button>
-              </div>
-            </div>
-
             <div id="performanceBodyTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestBodyTabButton">
               <div class="body-editor-controls">
                 <label class="field compact">
@@ -2304,6 +2288,36 @@
               </div>
               <div id="performanceRequestVariablesTable" class="kv-table"></div>
               <pre id="performanceVariablePreview" class="variable-preview">No variables</pre>
+            </div>
+
+            <div id="performanceSettingsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestSettingsTabButton">
+              <div class="request-settings-grid">
+                <section class="request-settings-section" aria-labelledby="performanceCertificatesSettingsTitle">
+                  <h3 id="performanceCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
+                  <label class="settings-toggle">
+                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox">
+                    <span>Enable SSL certificate verification</span>
+                  </label>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceCookiesSettingsTitle">
+                  <h3 id="performanceCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
+                  <div class="cookie-jar-options">
+                    <label class="field inline">
+                      <input id="performanceRequestCookieJarEnabledInput" type="checkbox">
+                      <span>Use cookie jar for this request</span>
+                    </label>
+                    <label class="field inline">
+                      <input id="performanceRequestCookieJarStoreInput" type="checkbox">
+                      <span>Store response cookies</span>
+                    </label>
+                    <label class="field inline">
+                      <input id="performanceFilterCookiesToRequestHostInput" type="checkbox">
+                      <span>Active host only</span>
+                    </label>
+                    <button id="openPerformanceCookiesButton" type="button">Open Cookies</button>
+                  </div>
+                </section>
+              </div>
             </div>
 
             <div id="performanceDocsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestDocsTabButton">

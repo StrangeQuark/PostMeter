@@ -369,9 +369,11 @@
         }
       }
     }
-    activateTab('request', 'cookies');
+    activateTab('request', 'requestSettings');
     assertUiSmoke($('requestCookieJarEnabledInput'), 'Cookie jar request toggle is missing.');
-    assertUiSmoke($('openRequestCookiesButton'), 'Request Cookies tab should expose the cookie manager shortcut.');
+    assertUiSmoke($('requestCookiesSettingsTitle')?.textContent === 'Cookies', 'Request Settings should include a Cookies section.');
+    assertUiSmoke($('requestCertificatesSettingsTitle')?.textContent === 'Certificates', 'Request Settings should include a Certificates section.');
+    assertUiSmoke($('openRequestCookiesButton'), 'Request Settings tab should expose the cookie manager shortcut.');
     $('openRequestCookiesButton').click();
     await nextPaint();
     assertUiSmoke($('cookiesDomainList').textContent.includes('No cookie domains.'), 'Cookie manager should not auto-add the active request host as an empty domain.');
@@ -748,7 +750,10 @@
       }
       $('chooseClientCertificateCertPathButton').click();
       await waitForUiSmoke(
-        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        () => !$('filePickerModal').hidden
+          && !$('clientCertificateModal').hidden
+          && $('clientCertificateModal').classList.contains('is-stack-parent')
+          && $('filePickerModal').classList.contains('is-stack-top'),
         'Client certificate CRT Choose should open the local file picker over the certificate form.',
         3000,
         global
@@ -765,7 +770,10 @@
       );
       $('chooseClientCertificateKeyPathButton').click();
       await waitForUiSmoke(
-        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        () => !$('filePickerModal').hidden
+          && !$('clientCertificateModal').hidden
+          && $('clientCertificateModal').classList.contains('is-stack-parent')
+          && $('filePickerModal').classList.contains('is-stack-top'),
         'Client certificate KEY Choose should open the local file picker over the certificate form.',
         3000,
         global
@@ -781,7 +789,10 @@
       );
       $('chooseClientCertificateKeyPathButton').click();
       await waitForUiSmoke(
-        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        () => !$('filePickerModal').hidden
+          && !$('clientCertificateModal').hidden
+          && $('clientCertificateModal').classList.contains('is-stack-parent')
+          && $('filePickerModal').classList.contains('is-stack-top'),
         'Client certificate KEY Choose should reopen the local file picker.',
         3000,
         global
@@ -819,7 +830,10 @@
       assertUiSmoke($('clientCertificateCertPathInput').closest('.client-certificate-pem-field').hidden, 'PEM certificate path should hide when PFX format is selected.');
       $('chooseClientCertificatePfxPathButton').click();
       await waitForUiSmoke(
-        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        () => !$('filePickerModal').hidden
+          && !$('clientCertificateModal').hidden
+          && $('clientCertificateModal').classList.contains('is-stack-parent')
+          && $('filePickerModal').classList.contains('is-stack-top'),
         'Client certificate PFX/P12 Choose should open the local file picker over the certificate form.',
         3000,
         global
@@ -3849,10 +3863,10 @@
         ['performanceRequestParamsTabButton', 'Params'],
         ['performanceRequestHeadersTabButton', 'Headers'],
         ['performanceRequestAuthTabButton', 'Auth'],
-        ['performanceRequestCookiesTabButton', 'Cookies'],
         ['performanceRequestBodyTabButton', 'Body'],
         ['performanceRequestScriptsTabButton', 'Scripts'],
         ['performanceRequestVariablesTabButton', 'Variables'],
+        ['performanceRequestSettingsTabButton', 'Settings'],
         ['performanceRequestDocsTabButton', 'Docs']
       ]) {
         assertUiSmoke($(tabId).getAttribute('role') === 'tab', `Performance request ${label} tab should expose role=tab.`);
@@ -4104,8 +4118,19 @@
       assertUiSmoke(performanceTest.request.useRefreshingAuthCookie === true, 'Cookie performance refreshing auth should mark the performance request as using the refreshing cookie.');
       assertUiSmoke($('performanceAuthTypeSelect').value === 'none' && $('performanceAuthTypeSelect').disabled === true, 'Cookie performance refreshing auth should lock the Auth Type selector on None.');
       assertUiSmoke($('performanceRequestCookieJarEnabledInput').checked === true && $('performanceRequestCookieJarEnabledInput').disabled === true, 'Cookie performance refreshing auth should force the cookie jar on.');
-      $('performanceRequestCookiesTabButton').click();
+      $('performanceRequestSettingsTabButton').click();
       await nextPaint();
+      assertUiSmoke($('performanceSettingsTab').classList.contains('active'), 'Performance request Settings tab panel should become active.');
+      assertUiSmoke($('performanceCookiesSettingsTitle')?.textContent === 'Cookies', 'Performance request Settings should include a Cookies section.');
+      assertUiSmoke($('performanceCertificatesSettingsTitle')?.textContent === 'Certificates', 'Performance request Settings should include a Certificates section.');
+      const performanceVerification = $('performanceRequestSslCertificateVerificationInput');
+      assertUiSmoke(performanceVerification && performanceVerification.getBoundingClientRect().height > 0, 'Performance request Settings should expose SSL certificate verification.');
+      performanceVerification.checked = false;
+      dispatchChange(performanceVerification);
+      assertUiSmoke(performanceTest.request.settings?.sslCertificateVerification === 'disabled', 'Performance request Settings should disable SSL verification on the performance request copy.');
+      performanceVerification.checked = true;
+      dispatchChange(performanceVerification);
+      assertUiSmoke(performanceTest.request.settings?.sslCertificateVerification === 'enabled', 'Performance request Settings should enable SSL verification on the performance request copy.');
       $('openPerformanceCookiesButton').click();
       await nextPaint();
       const managedPerformanceCookieItem = Array.from($('cookiesDomainList').querySelectorAll('.cookie-name-item'))

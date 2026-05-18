@@ -1178,6 +1178,24 @@ textarea.code-editor-input.has-openable-variable-hover {
   max-width: 940px;
 }
 
+.request-settings-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.request-settings-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--ui-font-size-sm);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .auth-section {
   display: none;
   grid-template-columns: repeat(2, minmax(220px, 1fr));

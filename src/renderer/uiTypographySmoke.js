@@ -18,17 +18,17 @@
     'files',
     'diagnostics'
   ];
-  const REQUEST_TABS = ['params', 'headers', 'auth', 'cookies', 'body', 'scripts', 'collectionVariables', 'docs'];
+  const REQUEST_TABS = ['params', 'headers', 'auth', 'body', 'scripts', 'collectionVariables', 'requestSettings', 'docs'];
   const COLLECTION_TABS = ['collectionOverview', 'collectionAuth', 'collectionScripts', 'collectionLevelVariables'];
   const FOLDER_TABS = ['folderOverview', 'folderAuth', 'folderScripts', 'folderLevelVariables'];
   const PERFORMANCE_REQUEST_TABS = [
     'performanceParams',
     'performanceHeaders',
     'performanceAuth',
-    'performanceCookies',
     'performanceBody',
     'performanceScripts',
     'performanceVariables',
+    'performanceSettings',
     'performanceDocs'
   ];
   const PERFORMANCE_TYPE_TABS = ['latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];

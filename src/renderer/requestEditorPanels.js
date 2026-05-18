@@ -881,9 +881,9 @@
     const workspace = options.workspace;
     const rerender = options.rerender || (() => {});
     const setStatus = options.setStatus || (() => {});
-    const container = element(doc, options.containerId || 'cookiesTable');
+    const container = options.containerId ? element(doc, options.containerId) : null;
     const filterInput = element(doc, options.filterInputId || 'filterCookiesToRequestHostInput');
-    const filterLabel = element(doc, options.filterLabelId || 'cookieHostFilterLabel');
+    const filterLabel = options.filterLabelId ? element(doc, options.filterLabelId) : null;
 
     if (!workspace) {
       return;

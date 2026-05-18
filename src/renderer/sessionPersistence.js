@@ -3,7 +3,7 @@
   const DEFAULT_RESULTS_TAB = 'response';
   const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'performance', 'history']);
   const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner', 'performance']);
-  const REQUEST_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'scripts', 'collectionVariables', 'requestSettings', 'docs']);
+  const REQUEST_TABS = new Set(['params', 'headers', 'auth', 'body', 'scripts', 'collectionVariables', 'requestSettings', 'docs']);
   const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'responseNetwork', 'testResults', 'visualizer']);
 
   function buildRendererSession(options = {}) {
@@ -28,7 +28,7 @@
       activePerformanceTestId: normalizeId(state.activePerformanceTestId),
       activeSidebarPanel: normalizeEnum(state.activeSidebarPanel, SIDEBAR_PANELS, 'collections'),
       activeMainPanel: normalizeEnum(state.activeMainPanel, MAIN_PANELS, 'request'),
-      activeRequestTab: normalizeEnum(activeTabName(doc, 'request', DEFAULT_REQUEST_TAB), REQUEST_TABS, DEFAULT_REQUEST_TAB),
+      activeRequestTab: normalizeRequestTab(activeTabName(doc, 'request', DEFAULT_REQUEST_TAB)),
       activeResultsTab: normalizeEnum(activeTabName(doc, 'results', DEFAULT_RESULTS_TAB), RESULTS_TABS, DEFAULT_RESULTS_TAB),
       openCollectionTabs: (Array.isArray(state.openCollectionTabs) ? state.openCollectionTabs : [])
         .map((tab) => serializeCollectionTab(tab, collectionForTab(tab)))
@@ -782,7 +782,7 @@
       activePerformanceTestId: normalizeId(session.activePerformanceTestId),
       activeSidebarPanel: normalizeEnum(session.activeSidebarPanel, SIDEBAR_PANELS, 'collections'),
       activeMainPanel: normalizeEnum(session.activeMainPanel, MAIN_PANELS, 'request'),
-      activeRequestTab: normalizeEnum(session.activeRequestTab, REQUEST_TABS, DEFAULT_REQUEST_TAB),
+      activeRequestTab: normalizeRequestTab(session.activeRequestTab),
       activeResultsTab: normalizeEnum(session.activeResultsTab, RESULTS_TABS, DEFAULT_RESULTS_TAB),
       openCollectionTabs: Array.isArray(session.openCollectionTabs) ? session.openCollectionTabs.filter(isObject) : [],
       openFolderTabs: Array.isArray(session.openFolderTabs) ? session.openFolderTabs.filter(isObject) : [],
@@ -898,6 +898,12 @@
 
   function normalizeEnum(value, allowed, fallback) {
     return allowed.has(value) ? value : fallback;
+  }
+
+  function normalizeRequestTab(value) {
+    return value === 'cookies'
+      ? 'requestSettings'
+      : normalizeEnum(value, REQUEST_TABS, DEFAULT_REQUEST_TAB);
   }
 
   function normalizeId(value) {
