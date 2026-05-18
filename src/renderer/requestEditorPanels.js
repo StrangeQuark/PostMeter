@@ -862,6 +862,9 @@
     );
   }
 
+  const VARIABLE_PREVIEW_DEFAULT_SORT = { column: 'Name', direction: 'asc' };
+  const VARIABLE_PREVIEW_SORT_COLUMNS = new Set(['Name', 'Source', 'Status']);
+
   function buildVariablePreviewText(collection, environment, request, folder, folders = null) {
     const rows = buildAvailableVariableRows(collection, environment, request, folder, folders)
       .filter((item) => item.status === 'Active')
@@ -872,9 +875,15 @@
   function renderVariablePreview(options = {}) {
     const doc = options.doc || document;
     const container = element(doc, options.containerId || 'variablePreview');
-    const rows = buildAvailableVariableRows(options.collection, options.environment, options.request, options.folder, options.folders);
+    const sort = variablePreviewSortState(container, options.sort);
+    const rows = sortAvailableVariableRows(
+      buildAvailableVariableRows(options.collection, options.environment, options.request, options.folder, options.folders),
+      sort
+    );
     container.textContent = '';
     container.dataset.variablePreviewMode = 'grid';
+    container.dataset.variablePreviewSortColumn = sort.column;
+    container.dataset.variablePreviewSortDirection = sort.direction;
     if (!rows.length) {
       const empty = doc.createElement('div');
       empty.className = 'variable-preview-empty';
@@ -903,7 +912,17 @@
       source: 'Source',
       status: 'Status'
     }, {
-      header: true
+      header: true,
+      sort,
+      onSort: (column) => {
+        const currentSort = variablePreviewSortState(container);
+        const nextDirection = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
+        container.dataset.variablePreviewSortColumn = column;
+        container.dataset.variablePreviewSortDirection = nextDirection;
+        const nextOptions = { ...options, doc };
+        delete nextOptions.sort;
+        renderVariablePreview(nextOptions);
+      }
     });
     table.append(header);
     for (const row of rows) {
@@ -923,28 +942,48 @@
     wrapper.dataset.variableSource = row.source;
     wrapper.dataset.variableStatus = row.status;
     wrapper.append(
-      variablePreviewCell(doc, row.key, 'Name', 'variable-preview-key', row.key),
-      variablePreviewCell(doc, row.value, 'Value', 'variable-preview-value', row.value),
-      variablePreviewCell(doc, row.source, 'Source', 'variable-preview-source', row.sourceName || row.source),
-      variablePreviewStatusCell(doc, row.status, options.header)
+      variablePreviewCell(doc, row.key, 'Name', 'variable-preview-key', row.key, options),
+      variablePreviewCell(doc, row.value, 'Value', 'variable-preview-value', row.value, options),
+      variablePreviewCell(doc, row.source, 'Source', 'variable-preview-source', row.sourceName || row.source, options),
+      variablePreviewStatusCell(doc, row.status, options.header, options)
     );
     return wrapper;
   }
 
-  function variablePreviewCell(doc, value, column, className, title = '') {
+  function variablePreviewCell(doc, value, column, className, title = '', options = {}) {
     const cell = doc.createElement('div');
     cell.className = `variable-preview-cell ${className}`;
-    cell.setAttribute('role', 'cell');
+    cell.setAttribute('role', options.header ? 'columnheader' : 'cell');
     cell.dataset.column = column;
-    cell.textContent = value == null ? '' : String(value);
+    const text = value == null ? '' : String(value);
+    if (options.header && VARIABLE_PREVIEW_SORT_COLUMNS.has(column)) {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.className = 'variable-preview-sort-button';
+      button.textContent = text;
+      const isActiveSort = options.sort?.column === column;
+      button.setAttribute('aria-label', `${text}: sort ${isActiveSort && options.sort?.direction === 'asc' ? 'descending' : 'ascending'}`);
+      if (typeof options.onSort === 'function') {
+        button.addEventListener('click', () => options.onSort(column));
+      }
+      const indicator = doc.createElement('span');
+      indicator.className = 'variable-preview-sort-indicator';
+      indicator.setAttribute('aria-hidden', 'true');
+      indicator.textContent = isActiveSort ? (options.sort.direction === 'asc' ? '^' : 'v') : '';
+      button.append(indicator);
+      cell.append(button);
+      cell.setAttribute('aria-sort', isActiveSort ? (options.sort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+    } else {
+      cell.textContent = text;
+    }
     if (title) {
       cell.title = String(title);
     }
     return cell;
   }
 
-  function variablePreviewStatusCell(doc, status, header = false) {
-    const cell = variablePreviewCell(doc, status, 'Status', 'variable-preview-status-cell', status);
+  function variablePreviewStatusCell(doc, status, header = false, options = {}) {
+    const cell = variablePreviewCell(doc, status, 'Status', 'variable-preview-status-cell', status, { ...options, header });
     if (!header) {
       const badge = doc.createElement('span');
       badge.className = `variable-preview-status variable-preview-status-${String(status || '').toLowerCase()}`;
@@ -956,6 +995,75 @@
       cell.append(badge);
     }
     return cell;
+  }
+
+  function variablePreviewSortState(container, override = null) {
+    const column = normalizeVariablePreviewSortColumn(override?.column || container?.dataset?.variablePreviewSortColumn);
+    const direction = normalizeVariablePreviewSortDirection(override?.direction || container?.dataset?.variablePreviewSortDirection);
+    return {
+      column: column || VARIABLE_PREVIEW_DEFAULT_SORT.column,
+      direction: direction || VARIABLE_PREVIEW_DEFAULT_SORT.direction
+    };
+  }
+
+  function normalizeVariablePreviewSortColumn(column) {
+    const normalized = String(column || '').trim().toLowerCase();
+    if (normalized === 'name') {
+      return 'Name';
+    }
+    if (normalized === 'source') {
+      return 'Source';
+    }
+    if (normalized === 'status') {
+      return 'Status';
+    }
+    return '';
+  }
+
+  function normalizeVariablePreviewSortDirection(direction) {
+    return String(direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc';
+  }
+
+  function sortAvailableVariableRows(rows, sort = VARIABLE_PREVIEW_DEFAULT_SORT) {
+    const state = {
+      column: normalizeVariablePreviewSortColumn(sort?.column) || VARIABLE_PREVIEW_DEFAULT_SORT.column,
+      direction: normalizeVariablePreviewSortDirection(sort?.direction)
+    };
+    const multiplier = state.direction === 'desc' ? -1 : 1;
+    return [...(rows || [])].sort((left, right) => {
+      const primary = compareVariablePreviewColumn(left, right, state.column);
+      if (primary) {
+        return primary * multiplier;
+      }
+      return compareVariablePreviewFallback(left, right);
+    });
+  }
+
+  function compareVariablePreviewColumn(left, right, column) {
+    if (column === 'Source') {
+      return (left.precedence || 0) - (right.precedence || 0);
+    }
+    if (column === 'Status') {
+      return variablePreviewStatusRank(left.status) - variablePreviewStatusRank(right.status);
+    }
+    return compareVariablePreviewText(left.key, right.key);
+  }
+
+  function compareVariablePreviewFallback(left, right) {
+    return compareVariablePreviewText(left.key, right.key)
+      || right.precedence - left.precedence
+      || left.order - right.order;
+  }
+
+  function variablePreviewStatusRank(status) {
+    return String(status || '') === 'Active' ? 0 : 1;
+  }
+
+  function compareVariablePreviewText(left, right) {
+    return String(left || '').localeCompare(String(right || ''), undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    });
   }
 
   function renderCookieJarEditor(options = {}) {
@@ -1232,6 +1340,7 @@
     renderAuthEditor,
     renderCookieJarEditor,
     renderRequestPairs,
+    sortAvailableVariableRows,
     syncJwtAlgorithmFields,
     syncOauth1SignatureFields,
     syncOauth2GrantFields,

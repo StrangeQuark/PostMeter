@@ -6,6 +6,7 @@ const {
   buildAvailableVariableRows,
   buildVariablePreviewText,
   collectAuthFromEditor,
+  sortAvailableVariableRows,
   syncOauth1SignatureFields,
   syncRefreshingAuthSelectOptions
 } = require('../../src/renderer/requestEditorPanels');
@@ -299,6 +300,93 @@ test('request editor panels expose environment collection folder and request var
       ['shared', 'folder', 'Folder', 'Shadowed'],
       ['shared', 'collection', 'Collection', 'Shadowed'],
       ['shared', 'environment', 'Environment', 'Shadowed']
+    ]
+  );
+});
+
+test('request editor panels sort variable preview rows by name source precedence and status', () => {
+  const rows = buildAvailableVariableRows(
+    {
+      name: 'Collection',
+      variables: [
+        { enabled: true, key: 'alpha', value: 'collection-alpha' },
+        { enabled: true, key: 'shared', value: 'collection-shared' }
+      ]
+    },
+    {
+      name: 'Environment',
+      variables: [
+        { enabled: true, key: 'gamma', value: 'environment-gamma' },
+        { enabled: true, key: 'shared', value: 'environment-shared' }
+      ]
+    },
+    {
+      name: 'Request',
+      variables: [
+        { enabled: true, key: 'beta', value: 'request-beta' },
+        { enabled: true, key: 'shared', value: 'request-shared' }
+      ]
+    },
+    null,
+    [{
+      name: 'Folder',
+      variables: [
+        { enabled: true, key: 'folderOnly', value: 'folder-only' },
+        { enabled: true, key: 'shared', value: 'folder-shared' }
+      ]
+    }]
+  );
+
+  assert.deepEqual(
+    sortAvailableVariableRows(rows, { column: 'Name', direction: 'desc' }).map((row) => `${row.key}:${row.source}`),
+    [
+      'shared:Request',
+      'shared:Folder',
+      'shared:Collection',
+      'shared:Environment',
+      'gamma:Environment',
+      'folderOnly:Folder',
+      'beta:Request',
+      'alpha:Collection'
+    ]
+  );
+  assert.deepEqual(
+    sortAvailableVariableRows(rows, { column: 'Source', direction: 'asc' }).map((row) => `${row.source}:${row.key}`),
+    [
+      'Environment:gamma',
+      'Environment:shared',
+      'Collection:alpha',
+      'Collection:shared',
+      'Folder:folderOnly',
+      'Folder:shared',
+      'Request:beta',
+      'Request:shared'
+    ]
+  );
+  assert.deepEqual(
+    sortAvailableVariableRows(rows, { column: 'Source', direction: 'desc' }).map((row) => `${row.source}:${row.key}`),
+    [
+      'Request:beta',
+      'Request:shared',
+      'Folder:folderOnly',
+      'Folder:shared',
+      'Collection:alpha',
+      'Collection:shared',
+      'Environment:gamma',
+      'Environment:shared'
+    ]
+  );
+  assert.deepEqual(
+    sortAvailableVariableRows(rows, { column: 'Status', direction: 'desc' }).map((row) => `${row.status}:${row.source}:${row.key}`),
+    [
+      'Shadowed:Folder:shared',
+      'Shadowed:Collection:shared',
+      'Shadowed:Environment:shared',
+      'Active:Collection:alpha',
+      'Active:Request:beta',
+      'Active:Folder:folderOnly',
+      'Active:Environment:gamma',
+      'Active:Request:shared'
     ]
   );
 });

@@ -192,6 +192,26 @@
       !variablePreviewHasRow('variablePreview', 'removedToken', 'remove-me', 'Request', 'Active'),
       'Request variable inspector kept a removed request variable.'
     );
+    clickVariablePreviewHeader('variablePreview', 'Name');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Name') === 'requestToken',
+      'Clicking the variable Name header should sort request variables descending first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Name');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Name') === 'collectionToken',
+      'Clicking the variable Name header again should sort request variables ascending first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Source');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Source') === 'Environment',
+      'Clicking the variable Source header should sort by lowest shadowing precedence first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Source');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Source') === 'Request',
+      'Clicking the variable Source header again should sort by highest shadowing precedence first.'
+    );
     $('urlInput').value = '{{requestToken}}{{folderToken}}{{collectionToken}}{{environmentToken}}/tail';
     dispatchInput($('urlInput'));
     assertVariableHighlight($('urlInput'), 'requestToken', 'Request variables should render as request-scope tokens.', 'valid', 'request');
@@ -213,6 +233,23 @@
     requestVariableInputs[1].value = 'requestToken';
     dispatchInput(requestVariableInputs[1]);
     assertVariableHighlight($('urlInput'), 'requestToken', 'Restoring a request variable key should refresh URL highlighting immediately.', 'valid', 'request');
+    $('addRequestVariableButton').click();
+    setPairRow('requestVariablesTable', 'environmentToken', 'request-overrides-environment', global);
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'environmentToken', 'request-overrides-environment', 'Request', 'Active')
+      && variablePreviewHasRow('variablePreview', 'environmentToken', 'from-environment', 'Environment', 'Shadowed'),
+      'Request variable inspector did not render active and shadowed rows for duplicate variables.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Status');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Status') === 'Active',
+      'Clicking the variable Status header should sort active variables first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Status');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Status') === 'Shadowed',
+      'Clicking the variable Status header again should sort shadowed variables first.'
+    );
     await setIncludePrereleases(true, { showStatus: false });
 
     editRequestTitle('Smoke Request');
@@ -654,6 +691,18 @@
     const removeButton = row.querySelector('button');
     assertUiSmoke(removeButton, `Missing remove button in ${tableId}.`);
     removeButton.click();
+  }
+
+  function clickVariablePreviewHeader(previewId, column) {
+    const button = $(previewId).querySelector(`.variable-preview-header [data-column="${column}"] button`);
+    assertUiSmoke(button, `Missing sortable ${column} header in ${previewId}.`);
+    button.click();
+  }
+
+  function variablePreviewFirstCellText(previewId, column) {
+    const row = $(previewId).querySelector('.variable-preview-data');
+    assertUiSmoke(row, `Missing variable preview data row in ${previewId}.`);
+    return row.querySelector(`[data-column="${column}"]`)?.textContent.trim() || '';
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {

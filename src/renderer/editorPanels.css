@@ -1173,6 +1173,33 @@ textarea.code-editor-input.has-openable-variable-hover {
   font-weight: 800;
 }
 
+.variable-preview-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.variable-preview-sort-button:hover {
+  color: var(--text);
+}
+
+.variable-preview-sort-indicator {
+  flex: 0 0 auto;
+  width: 10px;
+  color: var(--accent);
+  font-size: 0.82em;
+  line-height: 1;
+}
+
 .variable-preview-data {
   background: color-mix(in srgb, var(--surface) 74%, transparent);
 }
