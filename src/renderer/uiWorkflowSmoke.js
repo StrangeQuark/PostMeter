@@ -122,8 +122,23 @@
     await setIncludePrereleases(true, { showStatus: false });
 
     editRequestTitle('Smoke Request');
+    const requestTreeBadge = () => Array.from(document.querySelectorAll('.request-node .tree-item'))
+      .find((button) => button.dataset.treeId === request.id)
+      ?.querySelector('.tree-badge');
+    const activeRequestTabBadge = () => document.querySelector('.request-tab-button.active .request-tab-method');
+    $('methodSelect').value = 'DELETE';
+    dispatchChange($('methodSelect'));
+    assertUiSmoke(request.method === 'DELETE', 'Changing the method dropdown should update the active request method.');
+    assertUiSmoke(requestTreeBadge()?.textContent === 'DEL', 'DELETE request tree badge should compact to DEL immediately.');
+    assertUiSmoke(activeRequestTabBadge()?.textContent === 'DEL', 'DELETE request tab badge should compact to DEL immediately.');
+    $('methodSelect').value = 'OPTIONS';
+    dispatchChange($('methodSelect'));
+    assertUiSmoke(requestTreeBadge()?.textContent === 'OPT', 'OPTIONS request tree badge should compact to OPT immediately.');
+    assertUiSmoke(activeRequestTabBadge()?.textContent === 'OPT', 'OPTIONS request tab badge should compact to OPT immediately.');
     $('methodSelect').value = 'POST';
     dispatchChange($('methodSelect'));
+    assertUiSmoke(requestTreeBadge()?.textContent === 'POST', 'Request tree badge should update immediately after method changes.');
+    assertUiSmoke(activeRequestTabBadge()?.textContent === 'POST', 'Request tab badge should update immediately after method changes.');
     $('urlInput').value = `${baseUrl}/echo`;
     dispatchInput($('urlInput'));
     activateTab('request', 'requestSettings');
@@ -159,11 +174,15 @@
     dispatchInput($('testScriptInput'));
 
     newEnvironment();
-    const environment = activeEnvironment();
+    const environment = activeEditorEnvironment();
     assertUiSmoke(environment, 'New environment was not created.');
+    assertUiSmoke(!activeEnvironment(), 'Creating a new environment should not load it for requests.');
+    assertUiSmoke(Array.isArray(environment.variables) && environment.variables.length === 0, 'New environments should start without default variables.');
     environment.name = 'Smoke Environment';
     environment.variables = [{ enabled: true, key: 'localToken', value: 'local-value' }];
     renderAll();
+    $('setEnvironmentButton').click();
+    assertUiSmoke(activeEnvironment()?.id === environment.id, 'Set Environment should load the environment for requests.');
     selectRequestTab(openRequestTabs.find((tab) => tab.requestId === request.id));
     activateTab('request', 'body');
     const variableAutocomplete = document.getElementById('variableAutocompleteMenu');
@@ -510,6 +529,18 @@
       global
     );
     assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Codes over time'), 'RPS / Throughput graphs did not render the response-code timeline graph.');
+
+    selectSidebarPanel('environments');
+    activeEnvironmentEditorId = environment.id;
+    ensureOpenEnvironmentTabForActive();
+    renderAll();
+    assertUiSmoke(activeEnvironmentId === environment.id, 'Smoke environment should still be loaded before deletion.');
+    const deleteLoadedEnvironment = deleteEnvironment(environment);
+    assertUiSmoke(!$('confirmActionModal').hidden, 'Deleting the loaded environment should ask for confirmation.');
+    $('confirmActionButton').click();
+    await deleteLoadedEnvironment;
+    assertUiSmoke(activeEnvironmentId === 'none', 'Deleting the loaded environment should switch requests to No Environment.');
+    assertUiSmoke($('environmentSelect').value === 'none', 'Deleting the loaded environment should update the top-right environment selector.');
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {

@@ -194,7 +194,7 @@ const TUTORIALS = Object.freeze([
       {
         selector: '#environmentTable',
         title: 'Edit variables',
-        body: 'Each enabled row defines one variable key and value. New environments start with a baseUrl example.',
+        body: 'Each enabled row defines one variable key and value. New environments start empty so you can add only the values you need.',
         beforeStep: tutorialEnsureEnvironmentContext
       },
       {
@@ -270,6 +270,7 @@ let activeRunnerRequestRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerRequestRun
 let activeRunnerConfigId = RENDERER_STATE_DEFAULTS.activeRunnerConfigId;
 let activePerformanceTestId = RENDERER_STATE_DEFAULTS.activePerformanceTestId;
 let activeEnvironmentId = RENDERER_STATE_DEFAULTS.activeEnvironmentId;
+let activeEnvironmentEditorId = RENDERER_STATE_DEFAULTS.activeEnvironmentEditorId;
 let activeWorkspaceId = RENDERER_STATE_DEFAULTS.activeWorkspaceId;
 let activeSidebarPanel = RENDERER_STATE_DEFAULTS.activeSidebarPanel;
 let activeMainPanel = RENDERER_STATE_DEFAULTS.activeMainPanel;
@@ -514,6 +515,8 @@ const state = {
   set activePerformanceTestId(value) { activePerformanceTestId = value; },
   get activeEnvironmentId() { return activeEnvironmentId; },
   set activeEnvironmentId(value) { activeEnvironmentId = value; },
+  get activeEnvironmentEditorId() { return activeEnvironmentEditorId; },
+  set activeEnvironmentEditorId(value) { activeEnvironmentEditorId = value; },
   get activeWorkspaceId() { return activeWorkspaceId; },
   set activeWorkspaceId(value) { activeWorkspaceId = value; },
   get activeSidebarPanel() { return activeSidebarPanel; },
@@ -578,7 +581,7 @@ const state = {
 const requestTabState = createRequestTabState({
   state,
   activeCollection,
-  activeEnvironment,
+  activeEnvironment: activeEditorEnvironment,
   activeFolder,
   activeRequest,
   activeRunner,
@@ -802,6 +805,7 @@ function bindUi() {
     onSaveCollection: () => { void saveCollectionFromPane(); },
     onSaveFolder: () => { void saveFolderFromPane(); },
     onSaveEnvironment: () => { void saveEnvironmentFromPane(); },
+    onSetEnvironment: () => setActiveEnvironmentFromPane(),
     onImportWorkspace: importWorkspace,
     onExportWorkspace: () => { void exportWorkspaceFromPicker(); },
     onImportRequest: () => { void importRequest(); },
@@ -931,8 +935,6 @@ function bindUi() {
     onConfirmHtmlReportOptions: confirmHtmlReportOptionsModal,
     onEnvironmentSelectChange: (environmentId) => {
       activeEnvironmentId = environmentId;
-      renderEnvironments();
-      renderEnvironmentEditor();
       refreshVariableHighlights();
       scheduleSessionSave();
     },
@@ -987,6 +989,12 @@ function bindUi() {
     onMethodChange: () => {
       updateMethodSelectClass();
       collectRequestAndMarkDirty();
+      if (activeRunnerRequestRunnerId) {
+        renderRunnerEditor();
+      } else if (activeCollectionId) {
+        renderCollections();
+      }
+      renderRequestTabs();
     },
     onUrlInput: () => {
       syncRequestParamsFromUrlInput();
@@ -1255,7 +1263,7 @@ function bindEnvironmentTitleEditor() {
 }
 
 function beginEnvironmentTitleEdit() {
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   const title = $('environmentMainTitle');
   if (!environment || !title || title.dataset.editing === 'true') {
     return;
@@ -1303,7 +1311,7 @@ function finishEnvironmentTitleEdit(options = {}) {
   if (!title || title.dataset.editing !== 'true') {
     return;
   }
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   if (environment && options.revert === true) {
     environment.name = environmentTitleEditOriginal || 'Untitled Environment';
     title.textContent = environment.name;
@@ -2095,7 +2103,7 @@ function renderRequestTabs() {
 }
 
 function requestTabMethodText(request, tab = {}) {
-  const method = requestMethodText(request);
+  const method = requestMethodBadgeText(request);
   if (isAuthRefreshRequestTab(tab)) {
     return `AUTH - ${method}`;
   }
@@ -2113,6 +2121,19 @@ function requestTabMethodClassName(request, tab = {}) {
 
 function requestMethodText(request) {
   return String(request?.method || 'GET').trim().toUpperCase() || 'GET';
+}
+
+function requestMethodBadgeText(request) {
+  return methodBadgeText(requestMethodText(request));
+}
+
+function methodBadgeText(method) {
+  const normalizedMethod = String(method || '').trim().toUpperCase();
+  const compactMethodLabels = {
+    DELETE: 'DEL',
+    OPTIONS: 'OPT'
+  };
+  return compactMethodLabels[normalizedMethod] || normalizedMethod || 'GET';
 }
 
 function isRunnerRequestTab(tab = {}) {
@@ -3500,10 +3521,10 @@ function tutorialEnsureRequestContext(tabName = 'params') {
 
 function tutorialEnsureEnvironmentContext() {
   workspace.environments ||= [];
-  if (!activeEnvironment() && workspace.environments.length) {
-    activeEnvironmentId = workspace.environments[0].id;
+  if (!activeEditorEnvironment() && workspace.environments.length) {
+    activeEnvironmentEditorId = workspace.environments[0].id;
   }
-  if (!activeEnvironment()) {
+  if (!activeEditorEnvironment()) {
     newEnvironment();
     return;
   }
@@ -4897,7 +4918,7 @@ function openEnvironmentFromVariableReference(target) {
     return true;
   }
   collectActiveEditorState();
-  activeEnvironmentId = environment.id;
+  activeEnvironmentEditorId = environment.id;
   activeRunnerRequestRunnerId = null;
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
@@ -5048,7 +5069,7 @@ function selectSidebarPanel(panel) {
     activeRunnerRequestRunnerId = null;
     activeAuthRefreshRequestOwnerType = '';
     activeAuthRefreshRequestOwnerId = null;
-    activeEnvironmentId = 'none';
+    activeEnvironmentEditorId = 'none';
     activeMainPanel = 'environment';
   } else if (panel === 'workspaces') {
     const activeTab = openWorkspaceTabs.find((tab) => tab.key === activeWorkspaceTabKey());
@@ -5120,7 +5141,7 @@ function renderMainPanels() {
   const showFolder = activeMainPanel === 'request' && Boolean(activeFolder()) && !activeRequest();
   const showCollection = activeMainPanel === 'request' && Boolean(activeCollection()) && !activeFolder() && !activeRequest();
   const showRequestEmpty = activeMainPanel === 'request' && !activeRequest() && !showCollection && !showFolder;
-  const showEnvironmentEmpty = showEnvironment && !activeEnvironment();
+  const showEnvironmentEmpty = showEnvironment && !activeEditorEnvironment();
   const showWorkspaceEmpty = showWorkspace && !activeWorkspaceItem();
   const showRunnerEmpty = showRunner && !activeRunner();
   const showPerformanceEmpty = showPerformance && !activePerformanceTest();
@@ -7636,7 +7657,7 @@ function renderEnvironments() {
 function environmentNode(environment) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node environment-node';
-  const button = treeButton(environment.name || 'Untitled Environment', environment.id === activeEnvironmentId, 'ENV', {
+  const button = treeButton(environment.name || 'Untitled Environment', environment.id === activeEnvironmentEditorId, 'ENV', {
     treeKind: 'environment',
     treeId: environment.id
   });
@@ -7650,7 +7671,7 @@ function environmentNode(environment) {
     }
     collectActiveEditorState();
     activeRunnerRequestRunnerId = null;
-    activeEnvironmentId = environment.id;
+    activeEnvironmentEditorId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
     ensureOpenEnvironmentTabForActive();
@@ -9210,7 +9231,7 @@ function runnerRequestRow(runner, request, index) {
   dirtyIndicator.hidden = !runnerRequestIsDirty(runner.id, request.id);
   const method = document.createElement('span');
   method.className = `runner-row-method ${methodClassName(request.method || 'GET')}`;
-  method.textContent = request.method || 'GET';
+  method.textContent = methodBadgeText(request.method || 'GET');
   methodCell.append(dirtyIndicator, method);
 
   const name = document.createElement('span');
@@ -14128,7 +14149,7 @@ function treeButton(text, active, kind, options = {}) {
   }
   const badge = document.createElement('span');
   badge.className = ['tree-badge', tagClassName(kind)].filter(Boolean).join(' ');
-  badge.textContent = kind;
+  badge.textContent = methodBadgeText(kind);
   const label = document.createElement('span');
   label.className = 'tree-label';
   label.textContent = text;
@@ -15197,8 +15218,8 @@ function activeCollectionTreeFocusTargets() {
 }
 
 function activeEnvironmentTreeFocusTargets() {
-  return activeEnvironmentId && activeEnvironmentId !== 'none'
-    ? [treeFocusTarget('environment', activeEnvironmentId)]
+  return activeEnvironmentEditorId && activeEnvironmentEditorId !== 'none'
+    ? [treeFocusTarget('environment', activeEnvironmentEditorId)]
     : [];
 }
 
@@ -16813,7 +16834,10 @@ function renderEnvironmentSelect() {
 }
 
 function renderEnvironmentEditor() {
-  const environment = activeEnvironment();
+  if (activeEnvironmentEditorId !== 'none' && !(workspace.environments || []).some((environment) => environment.id === activeEnvironmentEditorId)) {
+    activeEnvironmentEditorId = 'none';
+  }
+  const environment = activeEditorEnvironment();
   const title = $('environmentMainTitle');
   if (title.dataset.editing !== 'true') {
     title.textContent = environment?.name || 'Select an environment';
@@ -16827,6 +16851,7 @@ function renderEnvironmentEditor() {
   $('saveEnvironmentButton').disabled = !environment;
   $('deleteEnvironmentButton').disabled = !environment;
   $('addVariableButton').disabled = !environment;
+  $('setEnvironmentButton').disabled = !environment;
   if (!environment) {
     const container = $('environmentTable');
     container.textContent = '';
@@ -16954,7 +16979,7 @@ function renderVariablePreview() {
   renderEditorVariablePreview({
     doc: document,
     collection: activeCollection(),
-    environment: activeEnvironment(),
+    environment: activeMainPanel === 'environment' ? activeEditorEnvironment() : activeEnvironment(),
     folder: activeFolderForActiveRequest(),
     folders: activeFolderPathForActiveRequest(),
     request: activeRequest()
@@ -19079,7 +19104,7 @@ async function saveFolderFromPane() {
 }
 
 async function saveEnvironmentFromPane() {
-  if (!activeEnvironment()) {
+  if (!activeEditorEnvironment()) {
     setStatus('Select an environment before saving.');
     return false;
   }
@@ -19095,6 +19120,21 @@ async function saveEnvironmentFromPane() {
     notifyUser('Environment Save Failed', message);
     return false;
   }
+}
+
+function setActiveEnvironmentFromPane() {
+  const environment = activeEditorEnvironment();
+  if (!environment) {
+    setStatus('Select an environment before setting it.');
+    return false;
+  }
+  collectEnvironmentFromEditor();
+  activeEnvironmentId = environment.id;
+  renderEnvironmentSelect();
+  refreshVariableHighlights();
+  scheduleSessionSave();
+  setStatus(`Environment set: ${environment.name || 'Untitled Environment'}.`);
+  return true;
 }
 
 async function saveWorkspace(showStatus = true, options = {}) {
@@ -20013,7 +20053,7 @@ async function importEnvironment() {
     environment.name = uniqueName(environment.name || 'Imported Environment', workspace.environments.map((candidate) => candidate.name));
     workspace.environments.push(environment);
     activeRunnerRequestRunnerId = null;
-    activeEnvironmentId = environment.id;
+    activeEnvironmentEditorId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
     ensureOpenEnvironmentTabForActive({ dirty: true, createdUnsaved: true });
@@ -20029,8 +20069,8 @@ async function importEnvironment() {
   }
 }
 
-async function exportEnvironment(environment = activeEnvironment(), format = 'postmeter') {
-  const selectedEnvironment = environment || activeEnvironment() || workspace.environments?.[0] || null;
+async function exportEnvironment(environment = activeEditorEnvironment(), format = 'postmeter') {
+  const selectedEnvironment = environment || activeEditorEnvironment() || workspace.environments?.[0] || null;
   if (!selectedEnvironment) {
     return setStatus('Select an environment before exporting.');
   }
@@ -20040,7 +20080,7 @@ async function exportEnvironment(environment = activeEnvironment(), format = 'po
     return setStatus('Environment export is unavailable in this runtime.');
   }
   if (typeof window.__postmeterExportEnvironment === 'function' || !window.postmeter?.fileExport) {
-    if (selectedEnvironment.id === activeEnvironmentId) {
+    if (selectedEnvironment.id === activeEnvironmentEditorId) {
       collectEnvironmentFromEditor();
     }
     try {
@@ -20061,7 +20101,7 @@ async function exportEnvironment(environment = activeEnvironment(), format = 'po
     format,
     name: selectedEnvironment.name || 'environment',
     payloadFactory: () => {
-      if (selectedEnvironment.id === activeEnvironmentId) {
+      if (selectedEnvironment.id === activeEnvironmentEditorId) {
         collectEnvironmentFromEditor();
       }
       return normalizeImportedEnvironment(cloneJson(selectedEnvironment));
@@ -20076,7 +20116,7 @@ async function exportEnvironment(environment = activeEnvironment(), format = 'po
 
 async function exportEnvironmentFromPicker(format = 'postmeter') {
   const environments = Array.isArray(workspace?.environments) ? workspace.environments : [];
-  const selectedEnvironment = await promptForItemExport('environment', environments, activeEnvironment() || environments[0] || null);
+  const selectedEnvironment = await promptForItemExport('environment', environments, activeEditorEnvironment() || environments[0] || null);
   if (!selectedEnvironment) {
     return null;
   }
@@ -20325,10 +20365,10 @@ function newEnvironment() {
   const environment = {
     id: crypto.randomUUID(),
     name: uniqueName('New Environment', workspace.environments.map((item) => item.name)),
-    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com' }]
+    variables: []
   };
   workspace.environments.push(environment);
-  activeEnvironmentId = environment.id;
+  activeEnvironmentEditorId = environment.id;
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
   ensureOpenEnvironmentTabForActive({ dirty: true, createdUnsaved: true });
@@ -20336,7 +20376,7 @@ function newEnvironment() {
   return environment;
 }
 
-async function deleteEnvironment(environment = activeEnvironment()) {
+async function deleteEnvironment(environment = activeEditorEnvironment()) {
   if (!environment || !(await confirmActionModal({
     title: 'Delete environment?',
     message: `Delete ${environment.name}?`,
@@ -20349,12 +20389,16 @@ async function deleteEnvironment(environment = activeEnvironment()) {
   workspace.environments = workspace.environments.filter((item) => item.id !== environment.id);
   activeRunnerRequestRunnerId = null;
   if (activeEnvironmentId === environment.id) {
-    activeEnvironmentId = workspace.environments[0]?.id || 'none';
+    activeEnvironmentId = 'none';
+  }
+  if (activeEnvironmentEditorId === environment.id) {
+    activeEnvironmentEditorId = 'none';
   }
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
   ensureOpenEnvironmentTabForActive();
   renderAll();
+  scheduleSessionSave();
   restoreTreeFocus(null, activeEnvironmentTreeFocusTargets());
 }
 
@@ -20372,7 +20416,7 @@ async function renameEnvironment(environment) {
   if (value?.trim()) {
     environment.name = value.trim();
     activeRunnerRequestRunnerId = null;
-    activeEnvironmentId = environment.id;
+    activeEnvironmentEditorId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
     ensureOpenEnvironmentTabForActive({ dirty: true });
@@ -20382,7 +20426,7 @@ async function renameEnvironment(environment) {
 }
 
 function addVariable() {
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   if (environment) {
     environment.variables.push({ enabled: true, key: '', value: '' });
     markActiveEnvironmentDirty();
@@ -20660,7 +20704,7 @@ function duplicateEnvironment(environment) {
   duplicate.name = uniqueName(`${environment.name || 'Environment'} Copy`, workspace.environments.map((candidate) => candidate.name));
   workspace.environments.push(duplicate);
   activeRunnerRequestRunnerId = null;
-  activeEnvironmentId = duplicate.id;
+  activeEnvironmentEditorId = duplicate.id;
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
   ensureOpenEnvironmentTabForActive({ dirty: true, createdUnsaved: true });
@@ -21148,7 +21192,7 @@ function syncPerformanceRefreshingAuthAccessToken(test, authRefresh = test?.auth
 }
 
 function collectEnvironmentFromEditor() {
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   if (environment) {
     const title = $('environmentMainTitle');
     environment.name = environmentTitleInputValue() || 'Untitled Environment';
@@ -21770,6 +21814,10 @@ function performanceTestDisplayName(test = activePerformanceTest()) {
 
 function activeEnvironment() {
   return (workspace?.environments || []).find((environment) => environment.id === activeEnvironmentId) || null;
+}
+
+function activeEditorEnvironment() {
+  return (workspace?.environments || []).find((environment) => environment.id === activeEnvironmentEditorId) || null;
 }
 
 function activeRequest() {

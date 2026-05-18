@@ -60,6 +60,7 @@ function assertSessionPayload(value, field = 'session') {
     'activeWorkspaceId',
     'selectedWorkspaceId',
     'activeEnvironmentId',
+    'activeEnvironmentEditorId',
     'activeCollectionId',
     'activeFolderId',
     'activeRequestId',

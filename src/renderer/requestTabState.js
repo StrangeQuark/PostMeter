@@ -382,7 +382,7 @@
 
     function ensureOpenEnvironmentTabForActive(config = {}) {
       const environment = activeEnvironment();
-      if (!environment || state.activeEnvironmentId === 'none') {
+      if (!environment || state.activeEnvironmentEditorId === 'none') {
         return null;
       }
       const key = rendererState.activeEnvironmentTabKey(state);
@@ -393,14 +393,14 @@
         }
         tab = {
           key,
-          environmentId: state.activeEnvironmentId,
+          environmentId: state.activeEnvironmentEditorId,
           dirty: config.dirty === true,
           createdUnsaved: config.createdUnsaved === true,
           snapshot: rendererState.environmentSnapshot(environment)
         };
         state.openEnvironmentTabs.push(tab);
       }
-      tab.environmentId = state.activeEnvironmentId;
+      tab.environmentId = state.activeEnvironmentEditorId;
       tab.snapshot ||= rendererState.environmentSnapshot(environment);
       if (config.createdUnsaved === true) {
         tab.createdUnsaved = true;
@@ -776,7 +776,7 @@
         renderAll();
         return;
       }
-      state.activeEnvironmentId = environment.id;
+      state.activeEnvironmentEditorId = environment.id;
       state.activeRunnerRequestRunnerId = null;
       state.activeAuthRefreshRequestOwnerType = '';
       state.activeAuthRefreshRequestOwnerId = null;
@@ -1615,7 +1615,7 @@
         selectRequestTabCallback(fallbackRequest);
         return;
       }
-      state.activeEnvironmentId = 'none';
+      state.activeEnvironmentEditorId = 'none';
       state.activeSidebarPanel = 'environments';
       state.activeMainPanel = 'environment';
       renderAll();
@@ -1624,8 +1624,11 @@
     function discardEnvironmentTabChanges(tab) {
       if (tab.createdUnsaved) {
         state.workspace.environments = (state.workspace.environments || []).filter((environment) => environment.id !== tab.environmentId);
+        if (state.activeEnvironmentEditorId === tab.environmentId) {
+          state.activeEnvironmentEditorId = 'none';
+        }
         if (state.activeEnvironmentId === tab.environmentId) {
-          state.activeEnvironmentId = state.workspace.environments[0]?.id || 'none';
+          state.activeEnvironmentId = 'none';
         }
         return;
       }

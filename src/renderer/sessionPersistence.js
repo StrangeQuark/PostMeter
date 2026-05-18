@@ -18,6 +18,7 @@
       activeWorkspaceId: normalizeId(state.activeWorkspaceId),
       selectedWorkspaceId: normalizeId(state.selectedWorkspaceId),
       activeEnvironmentId: normalizeEnvironmentId(state.activeEnvironmentId),
+      activeEnvironmentEditorId: normalizeEnvironmentId(state.activeEnvironmentEditorId),
       activeCollectionId: normalizeId(state.activeCollectionId),
       activeFolderId: normalizeId(state.activeFolderId),
       activeRequestId: normalizeId(state.activeRequestId),
@@ -150,6 +151,9 @@
     }
     if (session.activeEnvironmentId === 'none' || environmentExists(state, session.activeEnvironmentId)) {
       state.activeEnvironmentId = session.activeEnvironmentId;
+    }
+    if (session.activeEnvironmentEditorId === 'none' || environmentExists(state, session.activeEnvironmentEditorId)) {
+      state.activeEnvironmentEditorId = session.activeEnvironmentEditorId;
     }
     if (shouldRestoreActiveRunnerConfig && runnerExists(state, session.activeRunnerConfigId)) {
       state.activeRunnerConfigId = session.activeRunnerConfigId;
@@ -636,7 +640,7 @@
         || (state.openWorkspaceTabs || []).some((tab) => tab.workspaceId === state.selectedWorkspaceId);
     }
     if (panel === 'environment') {
-      return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);
+      return state.activeEnvironmentEditorId === 'none' || environmentExists(state, state.activeEnvironmentEditorId);
     }
     if (panel === 'runner') {
       return !state.activeRunnerConfigId || runnerExists(state, state.activeRunnerConfigId);
@@ -673,7 +677,7 @@
         || workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
     }
     if (panel === 'environments') {
-      return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);
+      return state.activeEnvironmentEditorId === 'none' || environmentExists(state, state.activeEnvironmentEditorId);
     }
     if (panel === 'runners') {
       return !state.activeRunnerConfigId || runnerExists(state, state.activeRunnerConfigId);
@@ -772,6 +776,7 @@
       activeWorkspaceId: normalizeId(session.activeWorkspaceId),
       selectedWorkspaceId: normalizeId(session.selectedWorkspaceId),
       activeEnvironmentId: normalizeEnvironmentId(session.activeEnvironmentId),
+      activeEnvironmentEditorId: normalizeEnvironmentId(session.activeEnvironmentEditorId ?? session.activeEnvironmentId),
       activeCollectionId: normalizeId(session.activeCollectionId),
       activeFolderId: normalizeId(session.activeFolderId),
       activeRequestId: normalizeId(session.activeRequestId),

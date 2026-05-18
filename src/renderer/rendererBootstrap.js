@@ -251,6 +251,7 @@
     bindClick(doc, 'exportRequestPanelPostmeterButton', options.onExportCurrentRequest);
     bindClick(doc, 'exportRequestPanelCurlButton', options.onExportCurrentRequestCurl);
     bindClick(doc, 'saveEnvironmentButton', options.onSaveEnvironment);
+    bindClick(doc, 'setEnvironmentButton', options.onSetEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);

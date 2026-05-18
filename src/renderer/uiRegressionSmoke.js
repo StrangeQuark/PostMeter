@@ -156,7 +156,7 @@
     dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousedown', { ctrlKey: true });
     await nextPaint();
     assertUiSmoke(
-      activeMainPanel === 'environment' && activeEnvironmentId === variableLinkEnvironment.id,
+      activeMainPanel === 'environment' && activeEnvironmentEditorId === variableLinkEnvironment.id,
       'Ctrl+clicking an environment variable should open its environment tab.'
     );
     assertUiSmoke(
@@ -2499,6 +2499,7 @@
     workspace.collections = [];
     workspace.environments = [];
     activeEnvironmentId = 'none';
+    activeEnvironmentEditorId = 'none';
     clearActiveWorkspaceItem();
     resetRequestTabs();
     renderAll();
@@ -2512,7 +2513,7 @@
     selectSidebarPanel('collections');
     const firstEnvironment = newEnvironment();
     const secondEnvironment = newEnvironment();
-    activeEnvironmentId = firstEnvironment.id;
+    activeEnvironmentEditorId = firstEnvironment.id;
     ensureOpenEnvironmentTabForActive();
     renderAll();
     editEnvironmentTitle('Pending Environment Rename', { commit: false });
@@ -3654,6 +3655,7 @@
       }
       workspace.environments = [];
       activeEnvironmentId = 'none';
+      activeEnvironmentEditorId = 'none';
       openEnvironmentTabs = [];
       openWorkspaceTabs = [];
       selectedWorkspaceId = '';
@@ -4569,6 +4571,7 @@
       assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no environment is selected.');
       assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden when no environment is selected.');
       const environment = newEnvironment();
+      assertUiSmoke(activeEnvironmentId === 'none', 'Creating an environment should not load it for requests.');
       assertUiSmoke(activeSidebarPanel === 'environments', 'Creating an environment should open the Environments panel.');
       assertUiSmoke($('environmentEmptyPanel').hidden, 'Create environment screen should hide once an environment exists.');
       assertUiSmoke(!$('environmentMainPanel').hidden, 'Creating an environment should show the main environment editor.');
@@ -4598,8 +4601,8 @@
       const environmentActions = environmentHeader.querySelector('.environment-actions');
       const environmentActionLabels = Array.from(environmentActions.querySelectorAll('button')).map((button) => button.textContent.trim());
       assertUiSmoke(
-        environmentActionLabels.join('|') === 'Add Variable|Save Environment|Delete Environment',
-        `Environment editor header actions should order Add Variable before save and delete. labels=${environmentActionLabels.join('|')}`
+        environmentActionLabels.join('|') === 'Add Variable|Set Environment|Save Environment|Delete Environment',
+        `Environment editor header actions should order Add Variable, Set Environment, save, and delete. labels=${environmentActionLabels.join('|')}`
       );
       const titleWidth = environmentTitle.getBoundingClientRect().width;
       const expectedTitleWidth = environmentHeader.getBoundingClientRect().width - environmentActions.getBoundingClientRect().width - 36;
@@ -4608,6 +4611,7 @@
       assertUiSmoke(environmentTitle.getAttribute('contenteditable') === 'plaintext-only', 'Clicking the environment title should make it editable inline.');
       editEnvironmentTitle('Inline Environment Rename');
       assertUiSmoke(environment.name === 'Inline Environment Rename', 'Editing the environment title should update the environment name.');
+      $('addVariableButton').click();
       const environmentVariableRow = $('environmentTable').querySelector('.env-row');
       assertUiSmoke(environmentVariableRow, 'Environment variable editor did not render the default row.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 enabled"]'), 'Environment variable enabled control should expose a contextual accessible label.');
@@ -4621,7 +4625,8 @@
       const environmentOpenTabCount = openEnvironmentTabs.length;
       selectSidebarPanel('collections');
       selectSidebarPanel('environments');
-      assertUiSmoke(activeEnvironmentId === environment.id, 'Selecting Environments with an open environment tab should restore that tab.');
+      assertUiSmoke(activeEnvironmentEditorId === environment.id, 'Selecting Environments with an open environment tab should restore that tab.');
+      assertUiSmoke(activeEnvironmentId === 'none', 'Selecting Environments should not load the restored environment for requests.');
       assertUiSmoke(!$('environmentMainPanel').hidden, 'Selecting Environments with an open environment tab should show the environment editor.');
       assertUiSmoke(openEnvironmentTabs.length === environmentOpenTabCount, 'Selecting Environments should not open a duplicate environment tab.');
       openRequestTabs = [];
@@ -6423,6 +6428,7 @@
 
       workspace.environments = [];
       activeEnvironmentId = 'none';
+      activeEnvironmentEditorId = 'none';
       const environment = newEnvironment();
       await saveWorkspace(false);
       const savedEnvironmentName = environment.name;
@@ -6438,7 +6444,7 @@
       await closeEnvironment;
       assertUiSmoke(workspace.environments.some((item) => item.id === environment.id && item.name === savedEnvironmentName), 'Closing an environment without saving should restore the saved snapshot.');
 
-      activeEnvironmentId = environment.id;
+      activeEnvironmentEditorId = environment.id;
       activeSidebarPanel = 'environments';
       activeMainPanel = 'environment';
       ensureOpenEnvironmentTabForActive();
@@ -6461,6 +6467,7 @@
       workspace.collections = [];
       workspace.environments = [];
       activeEnvironmentId = 'none';
+      activeEnvironmentEditorId = 'none';
       clearActiveWorkspaceItem();
       resetRequestTabs();
       renderAll();
