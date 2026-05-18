@@ -1552,6 +1552,7 @@ h2 {
 }
 
 .performance-output-panel {
+  container-type: inline-size;
   min-height: 0;
 }
 
@@ -1928,6 +1929,7 @@ h2 {
 }
 
 .runner-results-shell {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1954,6 +1956,20 @@ h2 {
   grid-template-columns: minmax(260px, 0.9fr) minmax(340px, 1.1fr);
   gap: 10px;
   min-height: 0;
+}
+
+@container (max-width: 700px) {
+  .runner-execution-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(340px, 1fr);
+    align-content: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .runner-execution-grid > .script-results-section {
+    min-height: 340px;
+  }
 }
 
 .runner-execution-list,
@@ -2014,7 +2030,13 @@ h2 {
 }
 
 .runner-execution-row.active {
-  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  background: color-mix(in srgb, var(--primary) 20%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.runner-execution-row.active:hover,
+.runner-execution-row.active:focus-visible {
+  background: color-mix(in srgb, var(--primary) 24%, var(--surface));
 }
 
 .runner-execution-row:last-child {

@@ -5787,6 +5787,94 @@
           && runnerStatusOptions.includes('500'),
         'Runner status filter should populate from returned status codes.'
       );
+      const runnerExecutionSectionWide = $('runnerExecutionList').closest('.script-results-section');
+      const runnerDetailSectionWide = $('runnerExecutionDetails').closest('.script-results-section');
+      const runnerExecutionHeaderWide = runnerExecutionSectionWide.querySelector('.script-results-header');
+      const runnerDetailHeaderWide = runnerDetailSectionWide.querySelector('.script-results-header');
+      assertUiSmoke(
+        Math.abs(runnerExecutionHeaderWide.getBoundingClientRect().height - runnerDetailHeaderWide.getBoundingClientRect().height) <= 1,
+        'Runner Execution and Request details headers should keep matching heights in the default results layout.'
+      );
+      const assertRunnerHeaderItemsDoNotOverlap = (elements, message) => {
+        const visibleElements = elements.filter((element) => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0);
+        for (let leftIndex = 0; leftIndex < visibleElements.length; leftIndex += 1) {
+          const leftRect = visibleElements[leftIndex].getBoundingClientRect();
+          for (let rightIndex = leftIndex + 1; rightIndex < visibleElements.length; rightIndex += 1) {
+            const rightRect = visibleElements[rightIndex].getBoundingClientRect();
+            const overlaps = leftRect.left < rightRect.right - 1
+              && rightRect.left < leftRect.right - 1
+              && leftRect.top < rightRect.bottom - 1
+              && rightRect.top < leftRect.bottom - 1;
+            assertUiSmoke(!overlaps, message);
+          }
+        }
+      };
+      const runnerResultsShellNarrowWidth = $('runnerResultsShell').style.width;
+      const runnerResultsShellNarrowMaxWidth = $('runnerResultsShell').style.maxWidth;
+      const runnerResultsShellNarrowHeight = $('runnerResultsShell').style.height;
+      const originalRunnerResultUiFontSize = document.documentElement.style.getPropertyValue('--ui-font-size');
+      try {
+        $('runnerResultsShell').style.width = '420px';
+        $('runnerResultsShell').style.maxWidth = '420px';
+        $('runnerResultsShell').style.height = '180px';
+        document.documentElement.style.setProperty('--ui-font-size', '19px');
+        await nextPaint();
+        const runnerExecutionSection = $('runnerExecutionList').closest('.script-results-section');
+        const runnerDetailSection = $('runnerExecutionDetails').closest('.script-results-section');
+        const runnerExecutionGrid = runnerExecutionSection.closest('.runner-execution-grid');
+        assertUiSmoke(
+          runnerDetailSection.getBoundingClientRect().top >= runnerExecutionSection.getBoundingClientRect().bottom - 1,
+          'Runner results should stack Execution and Request details when the results area is narrow.'
+        );
+        assertUiSmoke(
+          runnerExecutionGrid.scrollHeight > runnerExecutionGrid.clientHeight,
+          'Stacked runner results should scroll vertically instead of collapsing panels when the results area is short.'
+        );
+        assertUiSmoke(
+          runnerExecutionSection.getBoundingClientRect().height >= 330
+            && runnerDetailSection.getBoundingClientRect().height >= 330,
+          'Stacked runner result panels should keep enough height to show their body content.'
+        );
+        assertUiSmoke(
+          $('runnerExecutionList').getBoundingClientRect().height >= 70
+            && $('runnerExecutionDetails').getBoundingClientRect().height >= 70,
+          'Stacked runner result panel bodies should not collapse to header-only rows.'
+        );
+        const runnerExecutionHeader = runnerExecutionSection.querySelector('.script-results-header');
+        const runnerExecutionTitleRow = runnerExecutionHeader.querySelector('.script-results-title-row');
+        const runnerExecutionFilter = runnerExecutionHeader.querySelector('.runner-execution-filter');
+        const runnerDetailHeader = runnerDetailSection.querySelector('.script-results-header');
+        assertUiSmoke(
+          Math.abs(runnerExecutionHeader.getBoundingClientRect().height - runnerDetailHeader.getBoundingClientRect().height) <= 1,
+          'Stacked runner Execution and Request details headers should keep matching heights at max interface font size.'
+        );
+        assertRunnerHeaderItemsDoNotOverlap(
+          Array.from(runnerExecutionHeader.children),
+          'Runner Execution header items should not overlap at max interface font size in a narrow results pane.'
+        );
+        assertRunnerHeaderItemsDoNotOverlap(
+          Array.from(runnerExecutionTitleRow.children),
+          'Runner Execution title and status filter should not overlap at max interface font size in a narrow results pane.'
+        );
+        assertRunnerHeaderItemsDoNotOverlap(
+          Array.from(runnerExecutionFilter.children),
+          'Runner Execution status label and filter should not overlap at max interface font size in a narrow results pane.'
+        );
+        assertRunnerHeaderItemsDoNotOverlap(
+          Array.from(runnerDetailHeader.children),
+          'Runner Request details header items should not overlap at max interface font size in a narrow results pane.'
+        );
+      } finally {
+        $('runnerResultsShell').style.width = runnerResultsShellNarrowWidth;
+        $('runnerResultsShell').style.maxWidth = runnerResultsShellNarrowMaxWidth;
+        $('runnerResultsShell').style.height = runnerResultsShellNarrowHeight;
+        if (originalRunnerResultUiFontSize) {
+          document.documentElement.style.setProperty('--ui-font-size', originalRunnerResultUiFontSize);
+        } else {
+          document.documentElement.style.removeProperty('--ui-font-size');
+        }
+        await nextPaint();
+      }
       runnerStatusFilter.value = 'ERR';
       runnerStatusFilter.dispatchEvent(new Event('change', { bubbles: true }));
       await nextPaint();
@@ -5812,6 +5900,26 @@
       runnerStatusFilter.dispatchEvent(new Event('change', { bubbles: true }));
       await nextPaint();
       executionRows = Array.from($('runnerExecutionList').querySelectorAll('.runner-execution-row'));
+      const runnerExecutionList = $('runnerExecutionList');
+      runnerExecutionList.scrollTop = 360;
+      await nextPaint();
+      const runnerExecutionScrollTop = runnerExecutionList.scrollTop;
+      assertUiSmoke(runnerExecutionScrollTop > 0, 'Runner execution list should be scrollable before testing click selection.');
+      executionRows[20].click();
+      await nextPaint();
+      assertUiSmoke(
+        Math.abs(runnerExecutionList.scrollTop - runnerExecutionScrollTop) <= 1,
+        'Clicking a runner execution row should not reset the execution list scroll position.'
+      );
+      const activeRunnerExecutionRow = runnerExecutionList.querySelector('.runner-execution-row.active');
+      assertUiSmoke(
+        activeRunnerExecutionRow?.dataset.runnerExecutionIndex === '20',
+        'Clicking a runner execution row should visibly mark that row as active.'
+      );
+      assertUiSmoke(
+        activeRunnerExecutionRow?.getAttribute('aria-pressed') === 'true',
+        'Active runner execution row should expose its selected state.'
+      );
       executionRows[1].click();
       assertUiSmoke($('runnerExecutionDetailsStatus').textContent === '500', 'Runner details should update when selecting an execution row.');
       assertUiSmoke($('runnerExecutionDetails').textContent.includes('runner request failed'), 'Runner details should show selected request script results.');

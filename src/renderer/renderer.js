@@ -11667,8 +11667,7 @@ function performanceExecutionRow(sample, index) {
   row.setAttribute('aria-pressed', index === selectedPerformanceResultIndex ? 'true' : 'false');
   row.setAttribute('aria-label', `Show details for ${sample?.requestDisplayName || sample?.requestName || 'request'} iteration ${sample?.iteration || index + 1} with status ${runnerStatusLabel(sample)}`);
   row.addEventListener('click', () => {
-    selectedPerformanceResultIndex = index;
-    renderPerformanceResult(lastPerformanceResult);
+    selectPerformanceExecutionRow(index);
   });
 
   const badge = document.createElement('span');
@@ -18662,8 +18661,7 @@ function runnerExecutionRow(item, index) {
   row.setAttribute('aria-pressed', index === selectedRunnerExecutionIndex ? 'true' : 'false');
   row.setAttribute('aria-label', `Show details for ${item?.requestDisplayName || item?.requestName || 'request'} with status ${runnerStatusLabel(item)}`);
   row.addEventListener('click', () => {
-    selectedRunnerExecutionIndex = index;
-    renderRunnerExecutionResult(lastRunnerResult);
+    selectRunnerExecutionRow(index);
   });
 
   const badge = document.createElement('span');
@@ -18680,6 +18678,46 @@ function runnerExecutionRow(item, index) {
   content.append(name, meta);
   row.append(badge, content);
   return row;
+}
+
+function selectPerformanceExecutionRow(index) {
+  const list = $('performanceExecutionList');
+  const scrollTop = list?.scrollTop || 0;
+  selectedPerformanceResultIndex = index;
+  updateExecutionSelectionState(list, 'performanceExecutionIndex', selectedPerformanceResultIndex);
+  const renderDetails = lastPerformanceResult?.storeBacked === true && window.postmeter?.performance?.resultDetail
+    ? renderStoredPerformanceExecutionDetails(lastPerformanceResult)
+    : renderPerformanceExecutionDetails(lastPerformanceResult);
+  if (list) {
+    list.scrollTop = scrollTop;
+  }
+  return renderDetails;
+}
+
+function selectRunnerExecutionRow(index) {
+  const list = $('runnerExecutionList');
+  const scrollTop = list?.scrollTop || 0;
+  selectedRunnerExecutionIndex = index;
+  updateExecutionSelectionState(list, 'runnerExecutionIndex', selectedRunnerExecutionIndex);
+  const renderDetails = lastRunnerResult?.storeBacked === true && window.postmeter?.runner?.resultDetail
+    ? renderStoredRunnerExecutionDetails(lastRunnerResult)
+    : renderRunnerExecutionDetails(lastRunnerResult);
+  if (list) {
+    list.scrollTop = scrollTop;
+  }
+  return renderDetails;
+}
+
+function updateExecutionSelectionState(list, indexDataKey, selectedIndex) {
+  if (!list) {
+    return;
+  }
+  for (const row of list.querySelectorAll('.runner-execution-row')) {
+    const rowIndex = Number(row.dataset[indexDataKey]);
+    const selected = rowIndex === selectedIndex;
+    row.classList.toggle('active', selected);
+    row.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  }
 }
 
 function runnerExecutionMeta(item = {}) {
