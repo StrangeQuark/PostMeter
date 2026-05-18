@@ -102,7 +102,8 @@ test('Performance UI keeps type-specific input fields scoped to applicable test 
   assert.match(performanceRequest, /id="performanceTypeSelect"/);
   assert.match(performanceRequest, />Full Endpoint Diagnosis</);
   assert.match(performanceRequest, />RPS \/ Throughput</);
-  assert.match(performanceRequest, /id="performanceEnvironmentSelect"/);
+  assert.doesNotMatch(performanceRequest, /id="performanceEnvironmentSelect"/);
+  assert.doesNotMatch(performanceRequest, /data-performance-environment/);
   assert.match(performanceRequest, /id="performanceAllowEnvironmentMutationInput"/);
   assert.doesNotMatch(performanceRequest, /performance-type-tabs/);
   assert.match(performanceRequest, /class="method-get">GET/);

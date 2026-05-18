@@ -4035,6 +4035,15 @@
       dispatchInput(performanceRowInputs[1]);
       performanceRowInputs[2].value = 'value';
       dispatchInput(performanceRowInputs[2]);
+      assertUiSmoke(
+        Array.from($('performanceVariablePreview').querySelectorAll('.variable-preview-data')).some((row) =>
+          row.dataset.variableKey === 'perfLocal'
+          && row.dataset.variableSource === 'Request'
+          && row.dataset.variableStatus === 'Active'
+          && row.querySelector('.variable-preview-value')?.textContent === 'value'
+        ),
+        'Performance request variable inspector should update immediately after editing a request variable.'
+      );
       collectPerformanceTestFromEditor();
       assertUiSmoke(
         performanceTest.request.queryParams.some((pair) => pair.key === 'probe' && pair.value === 'enabled'),
@@ -4046,6 +4055,24 @@
       assertUiSmoke(performanceTest.request.bodyType === 'RAW_JSON' && performanceTest.request.body.includes('performance'), 'Performance request Body tab should update the performance request copy.');
       assertUiSmoke(performanceTest.request.scripts.preRequest.includes('perfToken') && performanceTest.request.scripts.tests.includes('perf status'), 'Performance request Scripts tab should update the performance request copy.');
       assertUiSmoke(performanceTest.request.variables.some((pair) => pair.key === 'perfLocal'), 'Performance request Variables tab should update the performance request copy.');
+      const performanceVariableRemoveButton = $('performanceRequestVariablesTable').querySelector('.kv-row button');
+      assertUiSmoke(performanceVariableRemoveButton, 'Performance request Variables tab should render a remove button.');
+      performanceVariableRemoveButton.click();
+      assertUiSmoke(
+        !$('performanceRequestVariablesTable').querySelector('.kv-row'),
+        'Removing a performance request variable should remove the visible row immediately.'
+      );
+      assertUiSmoke(
+        !performanceTest.request.variables.some((pair) => pair.key === 'perfLocal'),
+        'Removing a performance request variable should remove it from the performance request model.'
+      );
+      assertUiSmoke(
+        !Array.from($('performanceVariablePreview').querySelectorAll('.variable-preview-data')).some((row) =>
+          row.dataset.variableKey === 'perfLocal'
+          && row.dataset.variableSource === 'Request'
+        ),
+        'Removing a performance request variable should remove it from the available variables grid.'
+      );
       $('performanceRequestAuthTabButton').click();
       $('performanceAuthTypeSelect').value = 'bearer';
       dispatchChange($('performanceAuthTypeSelect'));
@@ -4290,10 +4317,7 @@
         latencyIterationsInput.value = '7';
         await nextPaint();
       }
-      assertUiSmoke(
-        $('performanceEnvironmentSelect').closest('.performance-settings'),
-        'Performance Environment control should live in the settings row.'
-      );
+      assertUiSmoke(!document.getElementById('performanceEnvironmentSelect'), 'Performance editor should rely on the global environment selector.');
       const performanceAuthRefreshRect = $('performanceAuthRefreshButton').getBoundingClientRect();
       const performanceCaptureSettingsRect = $('performanceCaptureSettingsButton').getBoundingClientRect();
       assertUiSmoke(
@@ -4829,10 +4853,7 @@
       assertUiSmoke(runner && activeRunnerConfigId === runner.id, 'Creating a runner should select it.');
       assertUiSmoke($('requestTabBar').textContent.includes(runner.name), 'Creating a runner should open a runner tab.');
       assertUiSmoke(!$('runnerMainPanel').hidden, 'Creating a runner should show the runner editor.');
-      assertUiSmoke($('runnerEnvironmentSelect'), 'Runner environment selector is missing.');
-      assertUiSmoke($('runnerEnvironmentSelect').getAttribute('aria-label') === 'Runner environment', 'Runner environment selector should keep an accessible label without visible label text.');
-      assertUiSmoke(!$('runnerEnvironmentSelect').closest('label'), 'Runner environment selector should not render a visible Environment label.');
-      assertUiSmoke(Math.round($('runnerEnvironmentSelect').getBoundingClientRect().height) >= Math.round($('runnerCsvVariablesButton').getBoundingClientRect().height), 'Runner environment selector should match settings-row button height.');
+      assertUiSmoke(!document.getElementById('runnerEnvironmentSelect'), 'Runner editor should rely on the global environment selector.');
       assertUiSmoke($('runnerAllowEnvironmentMutation'), 'Runner environment mutation checkbox is missing.');
       assertUiSmoke($('deleteRunnerButton').classList.contains('danger-button'), 'Runner delete button should use danger styling.');
       const runnerHeaderActionLabels = Array.from($('runnerMainPanel').querySelectorAll('.runner-main-header .runner-actions button')).map((button) => button.textContent.trim());
@@ -5536,14 +5557,24 @@
       const originalRunnerStart = window.__postmeterStartRunner;
       const originalSaveWorkspaceForRunnerRun = window.__postmeterSaveWorkspace;
       let runnerRunPayload = null;
+      let runnerRunEnvironment = null;
       let runnerRunSaveCalls = 0;
       try {
+        const runnerGlobalEnvironment = {
+          id: crypto.randomUUID(),
+          name: 'Runner Global Environment',
+          variables: [{ enabled: true, key: 'runnerGlobalToken', value: 'runner-global' }]
+        };
+        workspace.environments.push(runnerGlobalEnvironment);
+        activeEnvironmentId = runnerGlobalEnvironment.id;
+        renderEnvironmentSelect();
         window.__postmeterSaveWorkspace = async (nextWorkspace) => {
           runnerRunSaveCalls += 1;
           return nextWorkspace;
         };
-        window.__postmeterStartRunner = async (_runnerId, runnerPayload) => {
+        window.__postmeterStartRunner = async (_runnerId, runnerPayload, environmentPayload) => {
           runnerRunPayload = structuredClone(runnerPayload);
+          runnerRunEnvironment = structuredClone(environmentPayload);
           return {
             collectionName: runnerPayload.name,
             totalRequests: 1,
@@ -5577,6 +5608,10 @@
         assertUiSmoke(
           runnerRunPayload.requests?.[0]?.postmanBody?.formdata?.some((part) => part.key === 'runnerBody' && part.value === 'value'),
           'Running a runner should execute dirty unsaved runner-owned request body edits.'
+        );
+        assertUiSmoke(
+          runnerRunPayload.environmentId === runnerGlobalEnvironment.id && runnerRunEnvironment?.id === runnerGlobalEnvironment.id,
+          'Running a runner should use the globally selected environment instead of a runner-specific selector.'
         );
         $('saveRunnerButton').click();
         await waitForUiSmoke(() => runnerRunSaveCalls === 1

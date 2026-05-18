@@ -369,7 +369,6 @@
 
     selectSidebarPanel('runners');
     const runner = newRunner();
-    runner.environmentId = activeEnvironmentId;
     importCollectionIntoRunner(workspace.collections[0]);
     assertUiSmoke(runner.requests.length > 0, 'Workflow runner did not import collection requests.');
     runner.requests[0].scripts.tests = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.response.to.have.status(200); });";

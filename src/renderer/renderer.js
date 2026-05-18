@@ -222,7 +222,7 @@ const TUTORIALS = Object.freeze([
     title: 'Run a Request Series',
     level: 'Beginner',
     duration: '3 minutes',
-    summary: 'Create a runner, add request copies, choose an environment, and review the controls before running.',
+    summary: 'Create a runner, add request copies, use the global environment, and review the controls before running.',
     steps: Object.freeze([
       {
         selector: '#runnersPanelTab',
@@ -236,9 +236,9 @@ const TUTORIALS = Object.freeze([
         beforeStep: tutorialEnsureRunnerContext
       },
       {
-        selector: '#runnerEnvironmentSelect',
-        title: 'Choose the run environment',
-        body: 'Runner requests use the selected environment when resolving variables during the run.',
+        selector: '#environmentSelect',
+        title: 'Use the active environment',
+        body: 'Runner requests use the top-bar Environment selector when resolving variables during the run.',
         beforeStep: tutorialEnsureRunnerContext
       },
       {
@@ -937,17 +937,10 @@ function bindUi() {
     onConfirmHtmlReportOptions: confirmHtmlReportOptionsModal,
     onEnvironmentSelectChange: (environmentId) => {
       activeEnvironmentId = environmentId;
-      refreshVariableHighlights();
-      scheduleSessionSave();
-    },
-    onRunnerEnvironmentSelectChange: (environmentId) => {
-      const runner = activeRunner();
-      if (!runner) {
-        return;
-      }
-      runner.environmentId = environmentId;
-      markActiveRunnerDirty();
-      renderRunnerEditor();
+      renderVariablePreview();
+      renderPerformanceVariablePreview();
+      renderAuthRefreshVariableSuggestions('runner');
+      renderAuthRefreshVariableSuggestions('performance');
       refreshVariableHighlights();
       scheduleSessionSave();
     },
@@ -2359,6 +2352,7 @@ function collectPerformanceTestAndMarkDirty(event) {
   collectPerformanceTestFromEditor(event?.target || null);
   markActivePerformanceDirty();
   refreshActivePerformanceGeneratedHeaderPreview();
+  renderPerformanceVariablePreview();
   refreshVariableHighlights();
 }
 
@@ -4839,25 +4833,13 @@ function mergeVariableHighlightSources(...sources) {
 
 function variableHighlightEnvironmentForTarget(target) {
   if (activeRunnerRequestRunnerId) {
-    const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
-    const runnerEnvironment = environmentById(runner?.environmentId);
-    if (runnerEnvironment) {
-      return runnerEnvironment;
-    }
+    return activeEnvironment();
   }
   if (target?.closest?.('#runnerMainPanel')) {
-    const runnerEnvironment = environmentById(activeRunner()?.environmentId);
-    if (runnerEnvironment) {
-      return runnerEnvironment;
-    }
+    return activeEnvironment();
   }
   if (target?.closest?.('#performanceMainPanel')) {
-    const test = activePerformanceTest();
-    const type = activePerformanceType() || test?.type || 'diagnosis';
-    const performanceEnvironment = environmentById(performanceTypeSettings(test, type).environmentId);
-    if (performanceEnvironment) {
-      return performanceEnvironment;
-    }
+    return activeEnvironment();
   }
   return activeEnvironment();
 }
@@ -7930,7 +7912,6 @@ function renderRunnerEditor() {
   $('deleteRunnerButton').disabled = !runner;
   $('runCollectionButton').disabled = !runner || activeRunnerId != null;
   $('cancelRunnerButton').disabled = !activeRunnerId;
-  renderRunnerEnvironmentSelect(runner);
   $('runnerStopOnFailure').checked = runner?.stopOnFailure === true;
   $('runnerStopOnFailure').disabled = !runner;
   $('runnerAllowEnvironmentMutation').checked = runner?.allowEnvironmentMutation === true;
@@ -7988,7 +7969,6 @@ function renderPerformanceEditor() {
     cancelButton.disabled = !activePerformanceRunId;
   }
   renderPerformanceTypeTabs(test);
-  renderPerformanceEnvironmentControls(test);
   renderPerformanceConfigControls(test);
   renderPerformanceSafetyControls(test);
   renderPerformanceMutationControls(test);
@@ -8136,11 +8116,13 @@ function renderPerformanceRequestVariablePairs(pairs) {
     containerId: 'performanceRequestVariablesTable',
     pairs,
     onChange: () => {
+      collectPerformanceTestFromEditor();
       markActivePerformanceDirty();
       renderPerformanceVariablePreview();
       refreshVariableHighlights();
     },
     onRemove: () => {
+      collectPerformanceTestFromEditor();
       markActivePerformanceDirty();
       renderPerformanceRequestEditor();
       refreshVariableHighlights();
@@ -8208,10 +8190,7 @@ function setManagedCookieJarToggleState(prefix, managed) {
 }
 
 function performanceSelectedEnvironment(test = activePerformanceTest()) {
-  const environmentId = test?.environmentId || performanceTypeSettings(test, test?.type || 'diagnosis')?.environmentId || 'none';
-  return environmentId && environmentId !== 'none'
-    ? (workspace.environments || []).find((environment) => environment.id === environmentId) || null
-    : null;
+  return activeEnvironment();
 }
 
 function renderPerformanceTypeTabs(test) {
@@ -8239,31 +8218,6 @@ function renderPerformanceTypeTabs(test) {
     const isActive = panel.id === `${type}Tab`;
     panel.classList.toggle('active', isActive);
     panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-  }
-}
-
-function renderPerformanceEnvironmentControls(test) {
-  const activeType = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
-  for (const select of document.querySelectorAll('[data-performance-environment]')) {
-    const type = performanceTypeForElement(select) || activeType;
-    const settings = performanceTypeSettings(test, type);
-    const selectedEnvironmentId = settings.environmentId || 'none';
-    select.textContent = '';
-    const none = document.createElement('option');
-    none.value = 'none';
-    none.textContent = 'No Environment';
-    select.append(none);
-    for (const environment of workspace.environments || []) {
-      const option = document.createElement('option');
-      option.value = environment.id;
-      option.textContent = environment.name || 'Untitled Environment';
-      select.append(option);
-    }
-    select.value = selectedEnvironmentId;
-    if (select.value !== selectedEnvironmentId) {
-      select.value = 'none';
-    }
-    select.disabled = !test;
   }
 }
 
@@ -8316,7 +8270,6 @@ function setActivePerformanceTypeFromControl() {
   test.type = nextType;
   syncPerformanceActiveTypeSettings(test);
   renderPerformanceTypeTabs(test);
-  renderPerformanceEnvironmentControls(test);
   renderPerformanceConfigControls(test);
   renderPerformanceSafetyControls(test);
   renderPerformanceMutationControls(test);
@@ -9290,9 +9243,7 @@ function renderAuthRefreshVariableSuggestions(prefix) {
   if (!list) {
     return;
   }
-  const environment = prefix === 'runner'
-    ? environmentById($('runnerEnvironmentSelect')?.value || activeRunner()?.environmentId)
-    : performanceSelectedEnvironment(activePerformanceTest());
+  const environment = activeEnvironment();
   list.textContent = '';
   const seen = new Set();
   for (const variable of environment?.variables || []) {
@@ -9346,26 +9297,6 @@ function performanceTypeForElement(element) {
     : element?.closest?.('.performance-type-panel');
   const type = String(panel?.id || '').replace(/Tab$/, '');
   return RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : '';
-}
-
-function renderRunnerEnvironmentSelect(runner) {
-  const select = $('runnerEnvironmentSelect');
-  select.textContent = '';
-  const none = document.createElement('option');
-  none.value = 'none';
-  none.textContent = 'No Environment';
-  select.append(none);
-  for (const environment of workspace.environments || []) {
-    const option = document.createElement('option');
-    option.value = environment.id;
-    option.textContent = environment.name || 'Untitled Environment';
-    select.append(option);
-  }
-  select.value = runner?.environmentId || 'none';
-  if (select.value !== (runner?.environmentId || 'none')) {
-    select.value = 'none';
-  }
-  select.disabled = !runner;
 }
 
 function renderRunnerRequestList(runner) {
@@ -10568,10 +10499,7 @@ function authRefreshOutputDescription(output = {}) {
 }
 
 function authRefreshAutoDetectEnvironment(ownerType, owner) {
-  if (ownerType === 'runner') {
-    return environmentById(owner?.environmentId) || null;
-  }
-  return performanceSelectedEnvironment(owner);
+  return activeEnvironment();
 }
 
 function authRefreshAutoDetectTarget(ownerType, requestKind = 'access', authRefresh = {}) {
@@ -11175,12 +11103,10 @@ async function runActivePerformanceTest() {
     return setStatus('Performance execution is unavailable in this runtime.');
   }
   const runId = crypto.randomUUID();
-  const runEnvironment = test.environmentId && test.environmentId !== 'none'
-    ? (workspace.environments || []).find((environment) => environment.id === test.environmentId) || null
-    : null;
+  const runEnvironment = activeEnvironment();
   let normalizedForRun;
   try {
-    normalizedForRun = normalizePerformanceTest(cloneJson(test), workspace);
+    normalizedForRun = normalizePerformanceTest(performanceTestWithRunEnvironment(test, runEnvironment), workspace);
   } catch (error) {
     return setStatus(error.message || String(error));
   }
@@ -11229,6 +11155,16 @@ async function runActivePerformanceTest() {
       renderPerformanceEditor();
     }
   }
+}
+
+function performanceTestWithRunEnvironment(test, environment) {
+  const payload = cloneJson(test);
+  const environmentId = environment?.id || 'none';
+  payload.environmentId = environmentId;
+  if (payload.type && payload.typeSettings?.[payload.type]) {
+    payload.typeSettings[payload.type].environmentId = environmentId;
+  }
+  return payload;
 }
 
 function performanceRunPreflightError(test = {}) {
@@ -19237,7 +19173,9 @@ async function runActiveRunner() {
     allowEnvironmentMutation: runner.allowEnvironmentMutation === true,
     capturePolicy: cloneJson(runner.capturePolicy || {})
   };
-  if (!(await confirmRuntimeResultStoreCapacity('runner', cloneJson(runner), runnerRunConfig))) {
+  const runnerEnvironment = activeEnvironment();
+  const runnerForRun = runnerWithRunEnvironment(runner, runnerEnvironment);
+  if (!(await confirmRuntimeResultStoreCapacity('runner', runnerForRun, runnerRunConfig))) {
     return setStatus('Runner cancelled.');
   }
   const runnerId = crypto.randomUUID();
@@ -19245,9 +19183,6 @@ async function runActiveRunner() {
     runnerConfigId: runner.id,
     workspaceId: activeWorkspaceId
   };
-  const runnerEnvironment = runner.environmentId && runner.environmentId !== 'none'
-    ? (workspace.environments || []).find((environment) => environment.id === runner.environmentId) || null
-    : null;
   lastRunnerResult = null;
   selectedRunnerExecutionIndex = 0;
   runnerExecutionPage = 0;
@@ -19259,7 +19194,7 @@ async function runActiveRunner() {
     $('cancelRunnerButton').disabled = false;
     renderRunnerExecutionMessage('Starting runner...');
     const startRunner = window.__postmeterStartRunner || window.postmeter.runner.start;
-    const result = await startRunner(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), runnerRunConfig);
+    const result = await startRunner(runnerId, runnerForRun, cloneJson(runnerEnvironment), runnerRunConfig);
     if (activeRunnerId !== runnerId || !isActiveRunnerContext(runnerContext)) {
       return;
     }
@@ -19300,6 +19235,13 @@ async function runActiveRunner() {
       $('cancelRunnerButton').disabled = true;
     }
   }
+}
+
+function runnerWithRunEnvironment(runner, environment) {
+  return {
+    ...cloneJson(runner),
+    environmentId: environment?.id || 'none'
+  };
 }
 
 function isActiveRunnerContext(context) {
@@ -21546,7 +21488,7 @@ function collectRunnerFromEditor() {
   const previousShowRefreshingAuthToggle = runnerRefreshingAuthToggleVisible(runner);
   const previousRefreshingAuthType = String(runner.authRefresh?.authType || '').trim();
   runner.name = runnerTitleInputValue() || 'Untitled Runner';
-  runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
+  runner.environmentId = 'none';
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
   runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
   runner.capturePolicy = collectCapturePolicyFromControls('runner', runner.capturePolicy || {});
@@ -21724,14 +21666,11 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel, editedElemen
     );
   }
   const panelIsActive = panel.classList.contains('active');
-  const environmentControl = panelIsActive
-    ? $('performanceEnvironmentSelect') || panel.querySelector('[data-performance-environment]')
-    : panel.querySelector('[data-performance-environment]');
   const mutationControl = panelIsActive
     ? $('performanceAllowEnvironmentMutationInput') || panel.querySelector('[data-performance-mutation]')
     : panel.querySelector('[data-performance-mutation]');
   test.typeSettings[type] = {
-    environmentId: environmentControl?.value || previous.environmentId || 'none',
+    environmentId: 'none',
     allowEnvironmentMutation: mutationControl?.checked === true,
     config,
     safetyLimits
@@ -22242,7 +22181,6 @@ function activateTab(groupName, tabName) {
       test.type = tabName;
       syncPerformanceActiveTypeSettings(test);
       renderPerformanceTypeTabs(test);
-      renderPerformanceEnvironmentControls(test);
       renderPerformanceMutationControls(test);
       if (changed) {
         markActivePerformanceDirty();

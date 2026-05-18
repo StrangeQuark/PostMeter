@@ -1119,12 +1119,7 @@ h2 {
   order: 4;
 }
 
-#runnerEnvironmentSelect {
-  min-height: 36px;
-}
-
-#performanceTypeSelect,
-#performanceEnvironmentSelect {
+#performanceTypeSelect {
   min-height: 36px;
 }
 

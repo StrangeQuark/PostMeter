@@ -350,9 +350,6 @@
     bindChange(doc, 'environmentSelect', () => {
       options.onEnvironmentSelectChange?.(getElement(doc, 'environmentSelect')?.value || 'none');
     });
-    bindChange(doc, 'runnerEnvironmentSelect', () => {
-      options.onRunnerEnvironmentSelectChange?.(getElement(doc, 'runnerEnvironmentSelect')?.value || 'none');
-    });
     bindChange(doc, 'runnerStopOnFailure', options.onRunnerConfigChange);
     bindChange(doc, 'runnerAllowEnvironmentMutation', options.onRunnerConfigChange);
     bindAll(doc, '#runnerCaptureSettingsPanel input, #runnerCaptureSettingsPanel select', 'change', options.onRunnerConfigChange);
@@ -360,7 +357,6 @@
     bindAll(doc, '#runnerAuthRefreshPanel input, #runnerAuthRefreshPanel select, #runnerAuthRefreshPanel textarea', 'change', options.onRunnerConfigChange);
     bindAll(doc, '#runnerAuthRefreshPanel input, #runnerAuthRefreshPanel textarea', 'input', options.onRunnerConfigChange);
     bindChange(doc, 'performanceTypeSelect', options.onPerformanceTypeChange || options.onPerformanceConfigChange);
-    bindAll(doc, '[data-performance-environment]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-mutation]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-config]', 'input', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-config]', 'change', options.onPerformanceConfigChange);

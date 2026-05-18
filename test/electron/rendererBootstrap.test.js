@@ -1765,7 +1765,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'performanceTypeSelect',
-    'performanceEnvironmentSelect',
     'performanceCaptureSettingsButton',
     'performanceAdvancedSettingsButton',
     'performanceAdvancedSettingsPanel',
@@ -1801,7 +1800,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceBinaryBodySourceInput'
   ];
   const elements = new Map(controlIds.map((id) => [id, createElement({ tagName: id.endsWith('Select') ? 'SELECT' : 'INPUT' })]));
-  const performanceEnvironmentControls = [elements.get('performanceEnvironmentSelect')];
   const performanceMutationControls = [elements.get('performanceAllowEnvironmentMutationInput')];
   const performanceConfigControls = Array.from({ length: 5 }, () => createElement({ tagName: 'INPUT' }));
   const performanceSafetyControls = Array.from({ length: 3 }, () => createElement({ tagName: 'INPUT' }));
@@ -1815,9 +1813,6 @@ test('renderer bootstrap binds performance creation import export run and config
         return elements.get(id) || null;
       },
       querySelectorAll(selector) {
-        if (selector === '[data-performance-environment]') {
-          return performanceEnvironmentControls;
-        }
         if (selector === '[data-performance-mutation]') {
           return performanceMutationControls;
         }
@@ -1909,7 +1904,7 @@ test('renderer bootstrap binds performance creation import export run and config
     elements.get(id).dispatch('click');
   }
   elements.get('performanceTypeSelect').dispatch('change');
-  for (const control of [...performanceEnvironmentControls, ...performanceMutationControls]) {
+  for (const control of performanceMutationControls) {
     control.dispatch('change');
   }
   for (const control of [...performanceConfigControls, ...performanceSafetyControls]) {
@@ -1955,7 +1950,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'close-calibration'
   ]);
   assert.ok(calls.includes('type'));
-  assert.equal(calls.filter((call) => call === 'config').length, 11);
+  assert.equal(calls.filter((call) => call === 'config').length, 10);
   assert.ok(calls.includes('beautify-performance'));
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
@@ -2629,6 +2624,8 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(indexHtml, /id="addRunnerRequestButton"/);
   assert.match(indexHtml, /id="runnerCsvVariablesButton"/);
   assert.match(indexHtml, /id="runnerAllowEnvironmentMutation"/);
+  assert.doesNotMatch(indexHtml, /id="runnerEnvironmentSelect"/);
+  assert.doesNotMatch(indexHtml, /id="performanceEnvironmentSelect"/);
   assert.match(indexHtml, /id="runnerToggleCsvVariablesButton"/);
   assert.match(indexHtml, /id="runnerEditCsvVariablesButton"/);
   assert.match(indexHtml, /id="csvVariablesModal"/);
@@ -2656,7 +2653,11 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.doesNotMatch(bootstrapSource, /newRunnerButton/);
   assert.doesNotMatch(indexHtml, /id="resultsRunnerTabButton"/);
   assert.match(rendererSource, /const startRunner = window\.__postmeterStartRunner \|\| window\.postmeter\.runner\.start/);
-  assert.match(rendererSource, /startRunner\(runnerId, cloneJson\(runner\), cloneJson\(runnerEnvironment\)/);
+  assert.match(rendererSource, /const runnerEnvironment = activeEnvironment\(\)/);
+  assert.match(rendererSource, /const runnerForRun = runnerWithRunEnvironment\(runner, runnerEnvironment\)/);
+  assert.match(rendererSource, /startRunner\(runnerId, runnerForRun, cloneJson\(runnerEnvironment\), runnerRunConfig\)/);
+  assert.match(rendererSource, /const runEnvironment = activeEnvironment\(\)/);
+  assert.match(rendererSource, /performanceTestWithRunEnvironment\(test, runEnvironment\)/);
   assert.match(rendererSource, /result\?\.environmentMutationAllowed === true/);
   assert.doesNotMatch(rendererSource, /const runnerCollection = \{/);
 });
