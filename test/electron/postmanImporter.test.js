@@ -135,6 +135,39 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(collection.requests[2].auth.tokenUrl, 'https://auth.example.test/token');
 });
 
+test('flips Postman disableCookieJar protocol setting at import and export boundaries', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Cookie Jar Settings',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'Cookie-disabled request',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/cookies',
+        protocolProfileBehavior: {
+          disableBodyPruning: true,
+          disableCookieJar: true
+        }
+      }
+    }]
+  });
+
+  const request = collection.requests[0];
+  assert.equal(request.cookieJar.enabled, false);
+  assert.equal(request.cookieJar.storeResponses, true);
+
+  let exported = exportPostmanCollection(collection);
+  assert.equal(exported.item[0].request.protocolProfileBehavior.disableCookieJar, true);
+  assert.equal(exported.item[0].request.protocolProfileBehavior.disableBodyPruning, true);
+
+  request.cookieJar.enabled = true;
+  exported = exportPostmanCollection(collection);
+  assert.equal(exported.item[0].request.protocolProfileBehavior.disableCookieJar, undefined);
+  assert.equal(exported.item[0].request.protocolProfileBehavior.disableBodyPruning, true);
+});
+
 test('imports and exports OAuth 2.0 Postman controls', () => {
   const authRequestParams = [
     { key: 'prompt', value: 'consent', enabled: true }

@@ -109,7 +109,10 @@ function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { 
     method: httpMethodForProtocol(requestNode.method, protocol),
     url: importUrl(requestNode.url),
     auth: requestNode.auth ? importAuth(requestNode.auth, inheritedAuth) : { type: 'none' },
-    cookieJar: { enabled: true, storeResponses: true },
+    cookieJar: {
+      enabled: !postmanProtocolProfileDisablesCookieJar(item, requestNode),
+      storeResponses: true
+    },
     variables: importVariables(requestNode.variable || item.variable),
     docs: postmanDescription(item.description || requestNode.description),
     scripts: {
@@ -1269,6 +1272,40 @@ function collectPostmanBindings(...sources) {
   return bindings;
 }
 
+function postmanProtocolProfileDisablesCookieJar(item, requestNode) {
+  const sources = [
+    requestNode?.protocolProfileBehavior,
+    requestNode?.protocolProfile,
+    item?.protocolProfileBehavior,
+    item?.protocolProfile
+  ];
+  return sources.some((source) => postmanBooleanValue(source?.disableCookieJar) === true);
+}
+
+function syncPostmanCookieJarProtocolProfile(protocolProfile, request) {
+  if (request?.cookieJar?.enabled === false) {
+    protocolProfile.disableCookieJar = true;
+    return;
+  }
+  delete protocolProfile.disableCookieJar;
+}
+
+function postmanBooleanValue(value) {
+  if (value === true || value === false) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return null;
+}
+
 function exportPostmanItems(container) {
   return orderedPostmanChildren(container).map((entry) => {
     if (entry.kind === 'folder') {
@@ -1388,6 +1425,7 @@ function exportPostmanRequest(request) {
   const protocolProfile = Object.keys(request?.protocolProfile || {}).length
     ? clonePostmanObject(request.protocolProfile)
     : clonePostmanObject(raw.protocolProfile || raw.protocolProfileBehavior || metadata.protocol?.protocolProfile || metadata.protocol?.protocolProfileBehavior);
+  syncPostmanCookieJarProtocolProfile(protocolProfile, request);
   if (Object.keys(protocolProfile).length) {
     exported.protocolProfileBehavior = protocolProfile;
   }
