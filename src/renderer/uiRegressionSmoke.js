@@ -4718,6 +4718,7 @@
       assertUiSmoke($('cancelRunnerButton').closest('.runner-run-actions'), 'Runner Cancel button should live on the right side of the settings row.');
       assertUiSmoke(Math.round($('runCollectionButton').getBoundingClientRect().height) >= 36, 'Runner Run button should match request and performance action height.');
       assertUiSmoke(Math.round($('cancelRunnerButton').getBoundingClientRect().height) >= 36, 'Runner Cancel button should match request and performance action height.');
+      assertUiSmoke(Math.round($('runnerCsvVariablesButton').getBoundingClientRect().height) >= 36, 'Runner settings controls should match the taller runner action height.');
       assertUiSmoke($('runnerCsvVariablesButton').closest('.runner-settings'), 'Runner CSV controls should live in the settings row.');
       assertUiSmoke($('runnerCaptureSettingsButton').closest('.runner-settings'), 'Runner Capture Settings should live in the settings row.');
       assertUiSmoke($('runnerAuthRefreshButton').closest('.runner-settings'), 'Runner Refreshing Auth should live in the settings row.');
@@ -4802,6 +4803,48 @@
       runnerLocalRow = runnerRows[0];
       assertUiSmoke(runnerLocalRow?.querySelector('.runner-row-iterations input')?.value === '2', 'Runner iteration edits should survive runner pane re-renders.');
       assertUiSmoke(runnerRows[1]?.querySelector('.runner-row-iterations input')?.value === '1', 'Runner iteration re-render should not copy the first row value to new rows.');
+      const runnerIterationLabel = runnerLocalRow?.querySelector('.runner-row-iterations span');
+      runnerIterationInput = runnerLocalRow?.querySelector('.runner-row-iterations input');
+      assertUiSmoke(
+        runnerIterationLabel?.getBoundingClientRect().right <= runnerIterationInput?.getBoundingClientRect().left,
+        'Runner request Iterations label should sit to the left of the input.'
+      );
+      const originalRunnerUiFontSize = document.documentElement.style.getPropertyValue('--ui-font-size');
+      runnerIterationInput.value = '1000000';
+      try {
+        document.documentElement.style.setProperty('--ui-font-size', '19px');
+        await nextPaint();
+        const inputStyle = getComputedStyle(runnerIterationInput);
+        const iterationTextProbe = document.createElement('span');
+        iterationTextProbe.style.position = 'absolute';
+        iterationTextProbe.style.visibility = 'hidden';
+        iterationTextProbe.style.whiteSpace = 'nowrap';
+        iterationTextProbe.style.fontFamily = inputStyle.fontFamily;
+        iterationTextProbe.style.fontSize = inputStyle.fontSize;
+        iterationTextProbe.style.fontWeight = inputStyle.fontWeight;
+        iterationTextProbe.style.letterSpacing = inputStyle.letterSpacing;
+        iterationTextProbe.textContent = '1000000';
+        document.body.appendChild(iterationTextProbe);
+        const iterationTextWidth = iterationTextProbe.getBoundingClientRect().width;
+        iterationTextProbe.remove();
+        const iterationInputPadding = (Number.parseFloat(inputStyle.paddingLeft) || 0)
+          + (Number.parseFloat(inputStyle.paddingRight) || 0);
+        const iterationInputTextCapacity = runnerIterationInput.getBoundingClientRect().width
+          - iterationInputPadding
+          - 24;
+        assertUiSmoke(
+          iterationInputTextCapacity >= iterationTextWidth,
+          'Runner request Iterations input should fit 1000000 at the largest interface font size.'
+        );
+      } finally {
+        if (originalRunnerUiFontSize) {
+          document.documentElement.style.setProperty('--ui-font-size', originalRunnerUiFontSize);
+        } else {
+          document.documentElement.style.removeProperty('--ui-font-size');
+        }
+        runnerIterationInput.value = '2';
+        await nextPaint();
+      }
       assertUiSmoke(
         Array.from(runnerLocalRow?.querySelectorAll('button') || []).some((button) => button.textContent.trim() === 'Delete' && button.classList.contains('danger-button')),
         'Runner request row delete button should use danger styling.'

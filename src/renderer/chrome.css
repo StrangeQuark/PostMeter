@@ -1067,7 +1067,7 @@ h2 {
 .runner-control-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px 18px;
 }
@@ -1082,7 +1082,13 @@ h2 {
 }
 
 #runnerEnvironmentSelect {
-  min-height: 30px;
+  min-height: 36px;
+}
+
+.runner-settings > .csv-variables-menu-group > .menu-trigger,
+.runner-settings > .capture-settings-menu-group > .capture-settings-trigger,
+.runner-settings > .auth-refresh-menu-group > .menu-trigger {
+  min-height: 36px;
 }
 
 .runner-run-actions {
@@ -1816,7 +1822,7 @@ h2 {
 
 .runner-request-row {
   display: grid;
-  grid-template-columns: 34px 62px minmax(130px, 1fr) minmax(180px, 1.4fr) 92px auto auto auto auto;
+  grid-template-columns: 34px 62px minmax(130px, 1fr) minmax(180px, 1.4fr) minmax(164px, auto) auto auto auto auto;
   gap: 8px;
   align-items: center;
   box-sizing: border-box;
@@ -1829,7 +1835,7 @@ h2 {
 }
 
 .runner-request-row.has-refresh-auth-toggle {
-  grid-template-columns: 34px 62px minmax(110px, 0.8fr) minmax(150px, 1.2fr) minmax(158px, auto) 92px auto auto auto auto;
+  grid-template-columns: 34px 62px minmax(110px, 0.8fr) minmax(150px, 1.2fr) minmax(158px, auto) minmax(164px, auto) auto auto auto auto;
 }
 
 .runner-request-row.is-dragging {
@@ -1881,12 +1887,14 @@ h2 {
 }
 
 .runner-row-iterations {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: max-content;
   color: var(--muted);
   font-size: var(--ui-font-size-xs);
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .runner-row-refresh-auth {
@@ -1905,8 +1913,8 @@ h2 {
 }
 
 .runner-row-iterations input {
-  width: 100%;
-  min-width: 0;
+  width: 13ch;
+  min-width: 124px;
   padding: 4px 6px;
 }
 
