@@ -67,6 +67,17 @@ test('renderer performance auth refresh normalization preserves raw body output 
   });
 });
 
+test('renderer performance auth refresh no longer accepts OAuth 2.0 as a refresh target', () => {
+  const normalized = normalizePerformanceTest({
+    authRefresh: {
+      enabled: true,
+      authType: 'oauth2'
+    }
+  });
+
+  assert.equal(normalized.authRefresh.authType, 'bearer');
+});
+
 test('renderer performance normalization preserves original auth for auto-refreshing request auth', () => {
   const normalized = normalizePerformanceTest({
     request: {

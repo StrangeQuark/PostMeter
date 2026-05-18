@@ -20,17 +20,35 @@ test('shared auth model normalizes runtime auth values by type', () => {
   assert.deepEqual(normalizeAuth({ type: 'Use Refreshing Access Token', token: 'ignored' }), { type: 'autoRefresh' });
   assert.deepEqual(normalizeAuth({ type: 'Use Refreshing API Key', token: 'ignored' }), { type: 'autoRefresh' });
   assert.deepEqual(normalizeAuth({ type: 'Refreshing Auth Refresh Token', token: 'ignored' }), { type: 'autoRefreshRefreshToken' });
+  assert.equal(normalizeAuth({ type: 'NTLM Authentication' }).type, 'ntlm');
+  assert.equal(normalizeAuth({ type: 'ASAP (Atlassian)' }).type, 'asap');
   assert.deepEqual(normalizeAuth({ type: 'oauth2', tokenType: 'Unknown', grantType: 'bad', redirectStrategy: 'bad' }), {
     type: 'oauth2',
     tokenType: 'Bearer',
+    headerPrefix: 'Bearer',
+    tokenName: '',
+    addAuthDataTo: 'header',
     accessToken: '',
     refreshToken: '',
+    autoRefreshToken: true,
+    shareToken: false,
     tokenUrl: '',
+    refreshTokenUrl: '',
     authorizationUrl: '',
     deviceAuthorizationUrl: '',
     clientId: '',
     clientSecret: '',
+    username: '',
+    password: '',
     scopes: '',
+    state: '',
+    codeChallengeMethod: 'S256',
+    codeVerifier: '',
+    authorizeUsingBrowser: false,
+    clientAuthentication: 'basic',
+    authRequestParams: [],
+    tokenRequestParams: [],
+    refreshRequestParams: [],
     grantType: 'authorizationCode',
     redirectStrategy: 'loopback',
     redirectUri: '',
@@ -41,6 +59,107 @@ test('shared auth model normalizes runtime auth values by type', () => {
     verificationUriComplete: '',
     deviceCodeExpiresAt: '',
     devicePollIntervalSeconds: ''
+  });
+  assert.deepEqual(normalizeAuth({
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetry: 'true',
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'SHA-256',
+    qop: '',
+    opaque: 'opaque-token',
+    clientNonce: '0a4f113b',
+    nonceCount: '00000005'
+  }), {
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'SHA-256',
+    qop: '',
+    opaque: 'opaque-token',
+    clientNonce: '0a4f113b',
+    nonceCount: '00000005'
+  });
+  assert.deepEqual(normalizeAuth({
+    type: 'oauth1',
+    signatureMethod: 'rsasha512',
+    addParamsToHeader: false,
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    callbackUrl: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    realm: 'postmeter',
+    includeBodyHash: 'true',
+    addEmptyParametersToSignature: 'true'
+  }), {
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    signatureMethod: 'RSA-SHA512',
+    addAuthDataTo: 'queryOrBody',
+    callback: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    version: '1.0',
+    realm: 'postmeter',
+    includeBodyHash: true,
+    addEmptyParamsToSign: true
+  });
+  assert.deepEqual(normalizeAuth({
+    type: 'Hawk Authentication',
+    id: 'hawk-id',
+    key: 'hawk-key',
+    algorithm: 'SHA-1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    ext: 'extra-data',
+    app: 'postmeter-app',
+    dlg: 'delegated-by',
+    ts: '1777291200',
+    includePayloadHash: 'true'
+  }), {
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-key',
+    algorithm: 'sha1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+  assert.deepEqual(normalizeAuth({
+    type: 'AWS Signature',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    serviceName: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataTo: 'Request URL'
+  }), {
+    type: 'aws',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataToQuery: true
   });
 });
 
@@ -75,22 +194,551 @@ test('shared auth model maps runtime auth to renderer editor fields', () => {
     cookieValue: '',
     oauthGrantType: 'deviceCode',
     oauthTokenType: 'MAC',
+    oauthHeaderPrefix: 'MAC',
+    oauthTokenName: '',
+    oauthAddAuthDataTo: 'header',
     oauthAccessToken: '',
     oauthRefreshToken: '',
+    oauthAutoRefreshToken: true,
+    oauthShareToken: false,
     oauthAuthorizationUrl: '',
+    oauthCallbackUrl: '',
+    oauthAuthorizeUsingBrowser: false,
     oauthRedirectStrategy: 'loopback',
     oauthDeviceAuthorizationUrl: '',
     oauthTokenUrl: '',
+    oauthRefreshTokenUrl: '',
     oauthClientId: 'client-id',
     oauthClientSecret: '',
+    oauthUsername: '',
+    oauthPassword: '',
     oauthScopes: '',
+    oauthState: '',
+    oauthCodeChallengeMethod: 'S256',
+    oauthCodeVerifier: '',
+    oauthClientAuthentication: 'basic',
+    oauthAuthRequestParamKey: '',
+    oauthAuthRequestParamValue: '',
+    oauthTokenRequestParamKey: '',
+    oauthTokenRequestParamValue: '',
+    oauthTokenRequestParamSendIn: 'body',
+    oauthRefreshRequestParamKey: '',
+    oauthRefreshRequestParamValue: '',
+    oauthRefreshRequestParamSendIn: 'body',
     oauthUserCode: 'ABCD-EFGH',
     oauthVerificationUri: 'https://example.test/device?code=ABCD-EFGH',
+    oauth1SignatureMethod: 'HMAC-SHA1',
+    oauth1ConsumerKey: '',
+    oauth1ConsumerSecret: '',
+    oauth1Token: '',
+    oauth1TokenSecret: '',
+    oauth1PrivateKey: '',
+    oauth1AddAuthDataTo: 'header',
+    oauth1Callback: '',
+    oauth1Verifier: '',
+    oauth1Timestamp: '',
+    oauth1Nonce: '',
+    oauth1Version: '1.0',
+    oauth1Realm: '',
+    oauth1IncludeBodyHash: false,
+    oauth1AddEmptyParamsToSign: false,
+    digestUsername: '',
+    digestPassword: '',
+    digestDisableRetryingRequest: false,
+    digestRealm: '',
+    digestNonce: '',
+    digestAlgorithm: 'MD5',
+    digestQop: 'auth',
+    digestNonceCount: '',
+    digestClientNonce: '',
+    digestOpaque: '',
+    hawkAuthId: '',
+    hawkAuthKey: '',
+    hawkAlgorithm: 'sha256',
+    hawkUser: '',
+    hawkNonce: '',
+    hawkExtraData: '',
+    hawkApp: '',
+    hawkDelegation: '',
+    hawkTimestamp: '',
+    hawkIncludePayloadHash: false,
+    awsAccessKey: '',
+    awsSecretKey: '',
+    awsAddAuthDataTo: 'header',
+    awsRegion: '',
+    awsService: '',
+    awsSessionToken: '',
     clientPfxPath: '',
     clientCertPath: '',
     clientKeyPath: '',
     clientCaPath: '',
-    clientPassphrase: ''
+    clientPassphrase: '',
+    ntlmUsername: '',
+    ntlmPassword: '',
+    ntlmDisableRetryingRequest: false,
+    ntlmDomain: '',
+    ntlmWorkstation: '',
+    akamaiAccessToken: '',
+    akamaiClientToken: '',
+    akamaiClientSecret: '',
+    akamaiNonce: '',
+    akamaiTimestamp: '',
+    akamaiBaseUrl: '',
+    akamaiHeadersToSign: '',
+    akamaiMaxBodySize: '',
+    jwtAlgorithm: 'HS256',
+    jwtSecret: '',
+    jwtSecretBase64Encoded: false,
+    jwtPrivateKey: '',
+    jwtAddTokenTo: 'header',
+    jwtPayload: '{}',
+    jwtHeaderPrefix: 'Bearer',
+    jwtHeaders: '{}',
+    asapAlgorithm: 'RS256',
+    asapIssuer: '',
+    asapAudience: '',
+    asapKeyId: '',
+    asapPrivateKey: '',
+    asapSubject: '',
+    asapExpiresIn: '3600',
+    asapAdditionalClaims: '{}'
+  });
+});
+
+test('shared auth model maps Digest auth to and from renderer editor fields', () => {
+  assert.deepEqual(authEditorState({
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'MD5-sess',
+    qop: 'auth',
+    nonceCount: '00000005',
+    clientNonce: '0a4f113b',
+    opaque: 'opaque-token'
+  }), {
+    type: 'digest',
+    bearerToken: '',
+    basicUsername: '',
+    basicPassword: '',
+    apiKeyLocation: 'header',
+    apiKeyName: '',
+    apiKeyValue: '',
+    cookieValue: '',
+    oauthGrantType: 'authorizationCode',
+    oauthTokenType: 'Bearer',
+    oauthHeaderPrefix: 'Bearer',
+    oauthTokenName: '',
+    oauthAddAuthDataTo: 'header',
+    oauthAccessToken: '',
+    oauthRefreshToken: '',
+    oauthAutoRefreshToken: true,
+    oauthShareToken: false,
+    oauthAuthorizationUrl: '',
+    oauthCallbackUrl: '',
+    oauthAuthorizeUsingBrowser: false,
+    oauthRedirectStrategy: 'loopback',
+    oauthDeviceAuthorizationUrl: '',
+    oauthTokenUrl: '',
+    oauthRefreshTokenUrl: '',
+    oauthClientId: '',
+    oauthClientSecret: '',
+    oauthUsername: '',
+    oauthPassword: '',
+    oauthScopes: '',
+    oauthState: '',
+    oauthCodeChallengeMethod: 'S256',
+    oauthCodeVerifier: '',
+    oauthClientAuthentication: 'basic',
+    oauthAuthRequestParamKey: '',
+    oauthAuthRequestParamValue: '',
+    oauthTokenRequestParamKey: '',
+    oauthTokenRequestParamValue: '',
+    oauthTokenRequestParamSendIn: 'body',
+    oauthRefreshRequestParamKey: '',
+    oauthRefreshRequestParamValue: '',
+    oauthRefreshRequestParamSendIn: 'body',
+    oauthUserCode: '',
+    oauthVerificationUri: '',
+    oauth1SignatureMethod: 'HMAC-SHA1',
+    oauth1ConsumerKey: '',
+    oauth1ConsumerSecret: '',
+    oauth1Token: '',
+    oauth1TokenSecret: '',
+    oauth1PrivateKey: '',
+    oauth1AddAuthDataTo: 'header',
+    oauth1Callback: '',
+    oauth1Verifier: '',
+    oauth1Timestamp: '',
+    oauth1Nonce: '',
+    oauth1Version: '1.0',
+    oauth1Realm: '',
+    oauth1IncludeBodyHash: false,
+    oauth1AddEmptyParamsToSign: false,
+    digestUsername: 'ada',
+    digestPassword: 'secret',
+    digestDisableRetryingRequest: true,
+    digestRealm: 'postmeter',
+    digestNonce: 'abc123',
+    digestAlgorithm: 'MD5-sess',
+    digestQop: 'auth',
+    digestNonceCount: '00000005',
+    digestClientNonce: '0a4f113b',
+    digestOpaque: 'opaque-token',
+    hawkAuthId: '',
+    hawkAuthKey: '',
+    hawkAlgorithm: 'sha256',
+    hawkUser: '',
+    hawkNonce: '',
+    hawkExtraData: '',
+    hawkApp: '',
+    hawkDelegation: '',
+    hawkTimestamp: '',
+    hawkIncludePayloadHash: false,
+    awsAccessKey: '',
+    awsSecretKey: '',
+    awsAddAuthDataTo: 'header',
+    awsRegion: '',
+    awsService: '',
+    awsSessionToken: '',
+    clientPfxPath: '',
+    clientCertPath: '',
+    clientKeyPath: '',
+    clientCaPath: '',
+    clientPassphrase: '',
+    ntlmUsername: '',
+    ntlmPassword: '',
+    ntlmDisableRetryingRequest: false,
+    ntlmDomain: '',
+    ntlmWorkstation: '',
+    akamaiAccessToken: '',
+    akamaiClientToken: '',
+    akamaiClientSecret: '',
+    akamaiNonce: '',
+    akamaiTimestamp: '',
+    akamaiBaseUrl: '',
+    akamaiHeadersToSign: '',
+    akamaiMaxBodySize: '',
+    jwtAlgorithm: 'HS256',
+    jwtSecret: '',
+    jwtSecretBase64Encoded: false,
+    jwtPrivateKey: '',
+    jwtAddTokenTo: 'header',
+    jwtPayload: '{}',
+    jwtHeaderPrefix: 'Bearer',
+    jwtHeaders: '{}',
+    asapAlgorithm: 'RS256',
+    asapIssuer: '',
+    asapAudience: '',
+    asapKeyId: '',
+    asapPrivateKey: '',
+    asapSubject: '',
+    asapExpiresIn: '3600',
+    asapAdditionalClaims: '{}'
+  });
+
+  assert.deepEqual(authFromEditorState({
+    type: 'digest',
+    digestUsername: 'ada',
+    digestPassword: 'secret',
+    digestDisableRetryingRequest: true,
+    digestRealm: 'postmeter',
+    digestNonce: 'abc123',
+    digestAlgorithm: 'MD5-sess',
+    digestQop: 'auth',
+    digestNonceCount: '00000005',
+    digestClientNonce: '0a4f113b',
+    digestOpaque: 'opaque-token'
+  }), {
+    type: 'digest',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    realm: 'postmeter',
+    nonce: 'abc123',
+    algorithm: 'MD5-sess',
+    qop: 'auth',
+    opaque: 'opaque-token',
+    clientNonce: '0a4f113b',
+    nonceCount: '00000005'
+  });
+});
+
+test('shared auth model maps Hawk auth to and from renderer editor fields', () => {
+  const editorState = authEditorState({
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-key',
+    algorithm: 'SHA-1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+  assert.equal(editorState.hawkAuthId, 'hawk-id');
+  assert.equal(editorState.hawkAlgorithm, 'sha1');
+  assert.equal(editorState.hawkIncludePayloadHash, true);
+
+  assert.deepEqual(authFromEditorState({
+    type: 'hawk',
+    hawkAuthId: 'hawk-id',
+    hawkAuthKey: 'hawk-key',
+    hawkAlgorithm: 'sha1',
+    hawkUser: 'ada',
+    hawkNonce: 'nonce-value',
+    hawkExtraData: 'extra-data',
+    hawkApp: 'postmeter-app',
+    hawkDelegation: 'delegated-by',
+    hawkTimestamp: '1777291200',
+    hawkIncludePayloadHash: true
+  }), {
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: 'hawk-key',
+    algorithm: 'sha1',
+    user: 'ada',
+    nonce: 'nonce-value',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+});
+
+test('shared auth model maps AWS Signature auth to and from renderer editor fields', () => {
+  const editorState = authEditorState({
+    type: 'aws',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataToQuery: true
+  });
+  assert.equal(editorState.awsAccessKey, 'AKIDEXAMPLE');
+  assert.equal(editorState.awsSecretKey, 'aws-secret');
+  assert.equal(editorState.awsAddAuthDataTo, 'query');
+  assert.equal(editorState.awsRegion, 'us-east-1');
+  assert.equal(editorState.awsService, 'execute-api');
+  assert.equal(editorState.awsSessionToken, 'session-token');
+
+  assert.deepEqual(authFromEditorState({
+    type: 'aws',
+    awsAccessKey: 'AKIDEXAMPLE',
+    awsSecretKey: 'aws-secret',
+    awsAddAuthDataTo: 'query',
+    awsRegion: 'us-east-1',
+    awsService: 'execute-api',
+    awsSessionToken: 'session-token'
+  }), {
+    type: 'aws',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'aws-secret',
+    region: 'us-east-1',
+    service: 'execute-api',
+    sessionToken: 'session-token',
+    addAuthDataToQuery: true
+  });
+});
+
+test('shared auth model maps NTLM Akamai JWT Bearer and ASAP editor fields', () => {
+  const ntlmState = authEditorState({
+    type: 'ntlm',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    domain: 'POSTMETER',
+    workstation: 'WORKSTATION'
+  });
+  assert.equal(ntlmState.ntlmUsername, 'ada');
+  assert.equal(ntlmState.ntlmDisableRetryingRequest, true);
+  assert.deepEqual(authFromEditorState({
+    type: 'ntlm',
+    ntlmUsername: 'ada',
+    ntlmPassword: 'secret',
+    ntlmDisableRetryingRequest: true,
+    ntlmDomain: 'POSTMETER',
+    ntlmWorkstation: 'WORKSTATION'
+  }), {
+    type: 'ntlm',
+    username: 'ada',
+    password: 'secret',
+    disableRetryingRequest: true,
+    domain: 'POSTMETER',
+    workstation: 'WORKSTATION'
+  });
+
+  const akamaiState = authEditorState({
+    type: 'akamaiEdgeGrid',
+    accessToken: 'access',
+    clientToken: 'client',
+    clientSecret: 'secret',
+    nonce: 'nonce',
+    timestamp: '20260427T12:00:00+0000',
+    baseUrl: 'https://edge.example.test',
+    headersToSign: 'x-one x-two',
+    maxBodySize: '1024'
+  });
+  assert.equal(akamaiState.akamaiAccessToken, 'access');
+  assert.equal(akamaiState.akamaiBaseUrl, 'https://edge.example.test');
+  assert.deepEqual(authFromEditorState({
+    type: 'akamaiEdgeGrid',
+    akamaiAccessToken: 'access',
+    akamaiClientToken: 'client',
+    akamaiClientSecret: 'secret',
+    akamaiNonce: 'nonce',
+    akamaiTimestamp: '20260427T12:00:00+0000',
+    akamaiBaseUrl: 'https://edge.example.test',
+    akamaiHeadersToSign: 'x-one x-two',
+    akamaiMaxBodySize: '1024'
+  }), {
+    type: 'akamaiEdgeGrid',
+    accessToken: 'access',
+    clientToken: 'client',
+    clientSecret: 'secret',
+    nonce: 'nonce',
+    timestamp: '20260427T12:00:00+0000',
+    baseUrl: 'https://edge.example.test',
+    headersToSign: 'x-one x-two',
+    maxBodySize: '1024'
+  });
+
+  const jwtState = authEditorState({
+    type: 'jwtBearer',
+    algorithm: 'PS256',
+    privateKey: 'private-key',
+    claims: '{"claim":true}',
+    jwtHeaders: '{"kid":"jwt-kid"}',
+    headerPrefix: 'JWT',
+    addTokenTo: 'Request URL'
+  });
+  assert.equal(jwtState.jwtAlgorithm, 'PS256');
+  assert.equal(jwtState.jwtAddTokenTo, 'query');
+  assert.equal(jwtState.jwtHeaders, '{"kid":"jwt-kid"}');
+  assert.deepEqual(authFromEditorState({
+    type: 'jwtBearer',
+    jwtAlgorithm: 'HS512',
+    jwtSecret: 'secret',
+    jwtSecretBase64Encoded: true,
+    jwtPayload: '{"claim":true}',
+    jwtHeaderPrefix: 'JWT',
+    jwtHeaders: '{"typ":"JWT"}',
+    jwtAddTokenTo: 'query'
+  }), {
+    type: 'jwtBearer',
+    algorithm: 'HS512',
+    secret: 'secret',
+    secretBase64Encoded: true,
+    privateKey: '',
+    keyId: '',
+    issuer: '',
+    subject: '',
+    audience: '',
+    expiresIn: '300',
+    claims: '{"claim":true}',
+    jwtHeaders: '{"typ":"JWT"}',
+    headerPrefix: 'JWT',
+    addTokenTo: 'query'
+  });
+
+  const asapState = authEditorState({
+    type: 'asap',
+    algorithm: 'ES256',
+    issuer: 'issuer',
+    audience: 'audience',
+    keyId: 'kid',
+    privateKey: 'private-key',
+    subject: 'subject',
+    expiresIn: '60',
+    additionalClaims: '{"scope":["read"],"tenant":"postmeter"}'
+  });
+  assert.equal(asapState.asapAlgorithm, 'ES256');
+  assert.equal(asapState.asapPrivateKey, 'private-key');
+  assert.equal(asapState.asapAdditionalClaims, '{"scope":["read"],"tenant":"postmeter"}');
+  assert.deepEqual(authFromEditorState({
+    type: 'asap',
+    asapAlgorithm: 'ES256',
+    asapIssuer: 'issuer',
+    asapAudience: 'audience',
+    asapKeyId: 'kid',
+    asapPrivateKey: 'private-key',
+    asapSubject: 'subject',
+    asapExpiresIn: '60',
+    asapAdditionalClaims: '{"scope":["read"],"tenant":"postmeter"}'
+  }), {
+    type: 'asap',
+    algorithm: 'ES256',
+    privateKey: 'private-key',
+    secret: '',
+    issuer: 'issuer',
+    subject: 'subject',
+    audience: 'audience',
+    keyId: 'kid',
+    expiresIn: '60',
+    additionalClaims: '{"scope":["read"],"tenant":"postmeter"}'
+  });
+});
+
+test('shared auth model maps OAuth 1.0 auth to and from renderer editor fields', () => {
+  assert.deepEqual(authEditorState({
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    signatureMethod: 'PLAINTEXT',
+    addAuthDataTo: 'queryOrBody',
+    callback: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    version: '1.0',
+    realm: 'postmeter',
+    includeBodyHash: true,
+    addEmptyParamsToSign: true
+  }).oauth1ConsumerKey, 'consumer');
+
+  assert.deepEqual(authFromEditorState({
+    type: 'oauth1',
+    oauth1SignatureMethod: 'PLAINTEXT',
+    oauth1ConsumerKey: 'consumer',
+    oauth1ConsumerSecret: 'consumer-secret',
+    oauth1Token: 'token',
+    oauth1TokenSecret: 'token-secret',
+    oauth1PrivateKey: 'private-key',
+    oauth1AddAuthDataTo: 'queryOrBody',
+    oauth1Callback: 'https://client.example.test/callback',
+    oauth1Verifier: 'verifier',
+    oauth1Timestamp: '1777291200',
+    oauth1Nonce: 'nonce',
+    oauth1Version: '1.0',
+    oauth1Realm: 'postmeter',
+    oauth1IncludeBodyHash: true,
+    oauth1AddEmptyParamsToSign: true
+  }), {
+    type: 'oauth1',
+    consumerKey: 'consumer',
+    consumerSecret: 'consumer-secret',
+    token: 'token',
+    tokenSecret: 'token-secret',
+    privateKey: 'private-key',
+    signatureMethod: 'PLAINTEXT',
+    addAuthDataTo: 'queryOrBody',
+    callback: 'https://client.example.test/callback',
+    verifier: 'verifier',
+    timestamp: '1777291200',
+    nonce: 'nonce',
+    version: '1.0',
+    realm: 'postmeter',
+    includeBodyHash: true,
+    addEmptyParamsToSign: true
   });
 });
 
@@ -106,15 +754,37 @@ test('shared auth model rebuilds OAuth editor state while preserving runtime-onl
     type: 'oauth2',
     oauthGrantType: 'deviceCode',
     oauthTokenType: 'MAC',
+    oauthHeaderPrefix: 'Token',
+    oauthTokenName: 'Local token',
+    oauthAddAuthDataTo: 'query',
     oauthAccessToken: 'access-token',
     oauthRefreshToken: 'refresh-token',
+    oauthAutoRefreshToken: false,
+    oauthShareToken: true,
     oauthAuthorizationUrl: 'https://auth.example.test/authorize',
+    oauthCallbackUrl: 'postmeter://oauth/callback',
+    oauthAuthorizeUsingBrowser: true,
     oauthRedirectStrategy: 'customScheme',
     oauthDeviceAuthorizationUrl: 'https://auth.example.test/device',
     oauthTokenUrl: 'https://auth.example.test/token',
+    oauthRefreshTokenUrl: 'https://auth.example.test/refresh',
     oauthClientId: 'client-id',
     oauthClientSecret: 'client-secret',
+    oauthUsername: '',
+    oauthPassword: '',
     oauthScopes: 'openid profile',
+    oauthState: 'configured-state',
+    oauthCodeChallengeMethod: 'S256',
+    oauthCodeVerifier: '',
+    oauthClientAuthentication: 'body',
+    oauthAuthRequestParamKey: 'prompt',
+    oauthAuthRequestParamValue: 'consent',
+    oauthTokenRequestParamKey: 'resource',
+    oauthTokenRequestParamValue: 'postmeter-api',
+    oauthTokenRequestParamSendIn: 'body',
+    oauthRefreshRequestParamKey: 'X-Refresh-Trace',
+    oauthRefreshRequestParamValue: 'trace',
+    oauthRefreshRequestParamSendIn: 'header',
     oauthUserCode: 'NEXT-CODE'
   }, {
     type: 'oauth2',
@@ -129,14 +799,36 @@ test('shared auth model rebuilds OAuth editor state while preserving runtime-onl
   }), {
     type: 'oauth2',
     tokenType: 'MAC',
+    headerPrefix: 'Token',
+    tokenName: 'Local token',
+    addAuthDataTo: 'query',
     accessToken: 'access-token',
     refreshToken: 'refresh-token',
+    autoRefreshToken: false,
+    shareToken: true,
     tokenUrl: 'https://auth.example.test/token',
+    refreshTokenUrl: 'https://auth.example.test/refresh',
     authorizationUrl: 'https://auth.example.test/authorize',
     deviceAuthorizationUrl: 'https://auth.example.test/device',
     clientId: 'client-id',
     clientSecret: 'client-secret',
+    username: '',
+    password: '',
     scopes: 'openid profile',
+    state: 'configured-state',
+    codeChallengeMethod: 'S256',
+    codeVerifier: '',
+    authorizeUsingBrowser: true,
+    clientAuthentication: 'body',
+    authRequestParams: [
+      { enabled: true, key: 'prompt', value: 'consent' }
+    ],
+    tokenRequestParams: [
+      { enabled: true, key: 'resource', value: 'postmeter-api', sendIn: 'body' }
+    ],
+    refreshRequestParams: [
+      { enabled: true, key: 'X-Refresh-Trace', value: 'trace', sendIn: 'header' }
+    ],
     grantType: 'deviceCode',
     redirectStrategy: 'customScheme',
     redirectUri: 'postmeter://oauth/callback',

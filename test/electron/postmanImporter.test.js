@@ -135,6 +135,175 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(collection.requests[2].auth.tokenUrl, 'https://auth.example.test/token');
 });
 
+test('imports and exports OAuth 2.0 Postman controls', () => {
+  const authRequestParams = [
+    { key: 'prompt', value: 'consent', enabled: true }
+  ];
+  const tokenRequestParams = [
+    { key: 'resource', value: 'postmeter-api', sendIn: 'body', enabled: true },
+    { key: 'X-OAuth-Trace', value: 'trace-token', sendIn: 'header', enabled: true }
+  ];
+  const refreshRequestParams = [
+    { key: 'resource', value: 'postmeter-api', sendIn: 'body', enabled: true },
+    { key: 'X-Refresh-Trace', value: 'refresh-trace', sendIn: 'header', enabled: false }
+  ];
+  const collection = importPostmanCollection({
+    info: {
+      name: 'OAuth 2.0 Controls',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'OAuth 2.0',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/oauth2',
+        auth: {
+          type: 'oauth2',
+          oauth2: [
+            { key: 'tokenType', value: 'Bearer' },
+            { key: 'headerPrefix', value: 'Token' },
+            { key: 'tokenName', value: 'Production token' },
+            { key: 'addTokenTo', value: 'Request URL' },
+            { key: 'accessToken', value: '{{accessToken}}' },
+            { key: 'refreshToken', value: '{{refreshToken}}' },
+            { key: 'autoRefreshToken', value: false, type: 'boolean' },
+            { key: 'shareToken', value: true, type: 'boolean' },
+            { key: 'authUrl', value: 'https://auth.example.test/authorize' },
+            { key: 'accessTokenUrl', value: 'https://auth.example.test/token' },
+            { key: 'refreshTokenUrl', value: 'https://auth.example.test/refresh' },
+            { key: 'callbackUrl', value: 'postmeter://oauth/callback' },
+            { key: 'clientId', value: 'client-id' },
+            { key: 'clientSecret', value: '{{clientSecret}}' },
+            { key: 'username', value: 'resource-owner' },
+            { key: 'password', value: '{{ownerPassword}}' },
+            { key: 'scope', value: 'openid profile' },
+            { key: 'state', value: 'configured-state' },
+            { key: 'codeChallengeMethod', value: 'plain' },
+            { key: 'codeVerifier', value: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ' },
+            { key: 'authorizeUsingBrowser', value: true, type: 'boolean' },
+            { key: 'clientAuthentication', value: 'Send client credentials in body' },
+            { key: 'authRequestParams', value: authRequestParams, type: 'any' },
+            { key: 'tokenRequestParams', value: tokenRequestParams, type: 'any' },
+            { key: 'refreshRequestParams', value: refreshRequestParams, type: 'any' },
+            { key: 'grant_type', value: 'authorization_code_with_pkce' }
+          ]
+        }
+      }
+    }]
+  });
+
+  const auth = collection.requests[0].auth;
+  assert.equal(auth.type, 'oauth2');
+  assert.equal(auth.tokenType, 'Bearer');
+  assert.equal(auth.headerPrefix, 'Token');
+  assert.equal(auth.tokenName, 'Production token');
+  assert.equal(auth.addAuthDataTo, 'query');
+  assert.equal(auth.accessToken, '{{accessToken}}');
+  assert.equal(auth.refreshToken, '{{refreshToken}}');
+  assert.equal(auth.autoRefreshToken, false);
+  assert.equal(auth.shareToken, true);
+  assert.equal(auth.authorizationUrl, 'https://auth.example.test/authorize');
+  assert.equal(auth.tokenUrl, 'https://auth.example.test/token');
+  assert.equal(auth.refreshTokenUrl, 'https://auth.example.test/refresh');
+  assert.equal(auth.redirectUri, 'postmeter://oauth/callback');
+  assert.equal(auth.clientId, 'client-id');
+  assert.equal(auth.clientSecret, '{{clientSecret}}');
+  assert.equal(auth.username, 'resource-owner');
+  assert.equal(auth.password, '{{ownerPassword}}');
+  assert.equal(auth.scopes, 'openid profile');
+  assert.equal(auth.state, 'configured-state');
+  assert.equal(auth.codeChallengeMethod, 'plain');
+  assert.equal(auth.codeVerifier, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ');
+  assert.equal(auth.authorizeUsingBrowser, true);
+  assert.equal(auth.clientAuthentication, 'body');
+  assert.equal(auth.grantType, 'authorizationCodePkce');
+  assert.deepEqual(auth.authRequestParams, authRequestParams);
+  assert.deepEqual(auth.tokenRequestParams, tokenRequestParams);
+  assert.deepEqual(auth.refreshRequestParams, refreshRequestParams);
+
+  const exported = exportPostmanCollection(collection);
+  const exportedAuth = Object.fromEntries(exported.item[0].request.auth.oauth2.map((item) => [item.key, item.value]));
+  assert.equal(exported.item[0].request.auth.type, 'oauth2');
+  assert.equal(exportedAuth.headerPrefix, 'Token');
+  assert.equal(exportedAuth.tokenName, 'Production token');
+  assert.equal(exportedAuth.addTokenTo, 'Request URL');
+  assert.equal(exportedAuth.autoRefreshToken, false);
+  assert.equal(exportedAuth.shareToken, true);
+  assert.equal(exportedAuth.refreshTokenUrl, 'https://auth.example.test/refresh');
+  assert.equal(exportedAuth.callbackUrl, 'postmeter://oauth/callback');
+  assert.equal(exportedAuth.state, 'configured-state');
+  assert.equal(exportedAuth.username, 'resource-owner');
+  assert.equal(exportedAuth.password, '{{ownerPassword}}');
+  assert.equal(exportedAuth.codeChallengeMethod, 'plain');
+  assert.equal(exportedAuth.codeVerifier, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ');
+  assert.equal(exportedAuth.authorizeUsingBrowser, true);
+  assert.equal(exportedAuth.clientAuthentication, 'Send client credentials in body');
+  assert.equal(exportedAuth.grant_type, 'authorization_code_with_pkce');
+  assert.deepEqual(exportedAuth.authRequestParams, authRequestParams);
+  assert.deepEqual(exportedAuth.tokenRequestParams, tokenRequestParams);
+  assert.deepEqual(exportedAuth.refreshRequestParams, refreshRequestParams);
+});
+
+test('imports and exports Hawk Postman controls', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Hawk Controls',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'Hawk',
+      request: {
+        method: 'POST',
+        url: 'https://api.example.test/hawk',
+        auth: {
+          type: 'hawk',
+          hawk: [
+            { key: 'authId', value: 'hawk-id' },
+            { key: 'authKey', value: '{{hawkKey}}' },
+            { key: 'algorithm', value: 'SHA-256' },
+            { key: 'user', value: 'ada' },
+            { key: 'nonce', value: 'fixed-nonce' },
+            { key: 'extraData', value: 'extra-data' },
+            { key: 'app', value: 'postmeter-app' },
+            { key: 'delegation', value: 'delegated-by' },
+            { key: 'timestamp', value: '1777291200' },
+            { key: 'includePayloadHash', value: true, type: 'boolean' }
+          ]
+        }
+      }
+    }]
+  });
+
+  const auth = collection.requests[0].auth;
+  assert.deepEqual(auth, {
+    type: 'hawk',
+    authId: 'hawk-id',
+    authKey: '{{hawkKey}}',
+    algorithm: 'sha256',
+    user: 'ada',
+    nonce: 'fixed-nonce',
+    extraData: 'extra-data',
+    app: 'postmeter-app',
+    delegation: 'delegated-by',
+    timestamp: '1777291200',
+    includePayloadHash: true
+  });
+
+  const exported = exportPostmanCollection(collection);
+  const exportedAuth = Object.fromEntries(exported.item[0].request.auth.hawk.map((item) => [item.key, item.value]));
+  assert.equal(exported.item[0].request.auth.type, 'hawk');
+  assert.equal(exportedAuth.authId, 'hawk-id');
+  assert.equal(exportedAuth.authKey, '{{hawkKey}}');
+  assert.equal(exportedAuth.algorithm, 'SHA-256');
+  assert.equal(exportedAuth.user, 'ada');
+  assert.equal(exportedAuth.nonce, 'fixed-nonce');
+  assert.equal(exportedAuth.extraData, 'extra-data');
+  assert.equal(exportedAuth.app, 'postmeter-app');
+  assert.equal(exportedAuth.delegation, 'delegated-by');
+  assert.equal(exportedAuth.timestamp, '1777291200');
+  assert.equal(exportedAuth.includePayloadHash, true);
+});
+
 test('round-trips Postman request cookie source metadata without promoting disabled cookies', () => {
   const sourceCookies = [{
     name: 'expiresCookie',
@@ -377,7 +546,41 @@ test('imports and exports advanced Postman auth helper shapes', () => {
             digest: [
               { key: 'username', value: 'ada' },
               { key: 'password', value: 'secret' },
-              { key: 'algorithm', value: 'MD5' }
+              { key: 'disableRetryingRequest', value: true, type: 'boolean' },
+              { key: 'realm', value: 'postmeter' },
+              { key: 'nonce', value: 'abc123' },
+              { key: 'algorithm', value: 'MD5' },
+              { key: 'qop', value: 'auth' },
+              { key: 'nonceCount', value: '00000005' },
+              { key: 'clientNonce', value: '0a4f113b' },
+              { key: 'opaque', value: 'opaque-token' }
+            ]
+          }
+        }
+      },
+      {
+        name: 'OAuth 1.0',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/oauth1',
+          auth: {
+            type: 'oauth1',
+            oauth1: [
+              { key: 'consumerKey', value: 'consumer' },
+              { key: 'consumerSecret', value: 'consumer-secret' },
+              { key: 'token', value: 'token' },
+              { key: 'tokenSecret', value: 'token-secret' },
+              { key: 'signatureMethod', value: 'HMAC-SHA256' },
+              { key: 'privateKey', value: 'private-key' },
+              { key: 'addParamsToHeader', value: false, type: 'boolean' },
+              { key: 'callback', value: 'https://client.example.test/callback' },
+              { key: 'verifier', value: 'verifier' },
+              { key: 'timestamp', value: '1777291200' },
+              { key: 'nonce', value: 'nonce' },
+              { key: 'version', value: '1.0' },
+              { key: 'realm', value: 'postmeter' },
+              { key: 'includeBodyHash', value: true, type: 'boolean' },
+              { key: 'addEmptyParamsToSign', value: true, type: 'boolean' }
             ]
           }
         }
@@ -393,7 +596,9 @@ test('imports and exports advanced Postman auth helper shapes', () => {
               { key: 'accessKey', value: '{{awsAccessKey}}' },
               { key: 'secretKey', value: '{{awsSecretKey}}' },
               { key: 'region', value: 'us-east-1' },
-              { key: 'service', value: 'execute-api' }
+              { key: 'service', value: 'execute-api' },
+              { key: 'sessionToken', value: '{{awsSessionToken}}' },
+              { key: 'addAuthDataTo', value: 'Request URL' }
             ]
           }
         }
@@ -408,7 +613,9 @@ test('imports and exports advanced Postman auth helper shapes', () => {
             ntlm: [
               { key: 'username', value: 'user' },
               { key: 'password', value: 'pass' },
-              { key: 'domain', value: 'EXAMPLE' }
+              { key: 'disableRetryingRequest', value: true, type: 'boolean' },
+              { key: 'domain', value: 'EXAMPLE' },
+              { key: 'workstation', value: 'WORKSTATION' }
             ]
           }
         }
@@ -424,7 +631,11 @@ test('imports and exports advanced Postman auth helper shapes', () => {
               { key: 'accessToken', value: 'access' },
               { key: 'clientToken', value: 'client' },
               { key: 'clientSecret', value: 'secret' },
-              { key: 'headersToSign', value: 'host;x-test' }
+              { key: 'nonce', value: 'nonce-1' },
+              { key: 'timestamp', value: '20260427T120000+0000' },
+              { key: 'baseUrl', value: 'https://api.example.test' },
+              { key: 'headersToSign', value: 'host;x-test' },
+              { key: 'maxBodySize', value: '2048' }
             ]
           }
         }
@@ -439,9 +650,18 @@ test('imports and exports advanced Postman auth helper shapes', () => {
             'jwt-bearer': [
               { key: 'algorithm', value: 'HS256' },
               { key: 'secret', value: 'jwt-secret' },
+              { key: 'secretBase64Encoded', value: true, type: 'boolean' },
+              { key: 'privateKey', value: 'jwt-private-key' },
+              { key: 'keyId', value: 'jwt-kid' },
               { key: 'issuer', value: 'issuer' },
+              { key: 'subject', value: 'subject' },
               { key: 'audience', value: 'audience' },
-              { key: 'claims', value: '{"scope":"read"}' }
+              { key: 'expiresIn', value: '120' },
+              { key: 'claims', value: '{"scope":"read"}' },
+              { key: 'jwtHeaders', value: '{"typ":"JWT","kid":"custom"}' },
+              { key: 'headerPrefix', value: 'JWT' },
+              { key: 'addTokenTo', value: 'Query Param' },
+              { key: 'queryParamName', value: 'legacy-token' }
             ]
           }
         }
@@ -458,7 +678,10 @@ test('imports and exports advanced Postman auth helper shapes', () => {
               { key: 'secret', value: 'asap-secret' },
               { key: 'issuer', value: 'issuer' },
               { key: 'audience', value: 'audience' },
-              { key: 'keyId', value: 'kid-1' }
+              { key: 'keyId', value: 'kid-1' },
+              { key: 'expiry', value: '120' },
+              { key: 'headerPrefix', value: 'Legacy' },
+              { key: 'additionalClaims', value: '{"tenant":"postmeter"}' }
             ]
           }
         }
@@ -468,24 +691,223 @@ test('imports and exports advanced Postman auth helper shapes', () => {
 
   assert.equal(collection.requests[0].auth.type, 'digest');
   assert.equal(collection.requests[0].auth.username, 'ada');
-  assert.equal(collection.requests[1].auth.type, 'aws');
-  assert.equal(collection.requests[1].auth.service, 'execute-api');
-  assert.equal(collection.requests[2].auth.type, 'ntlm');
-  assert.equal(collection.requests[2].auth.domain, 'EXAMPLE');
-  assert.equal(collection.requests[3].auth.type, 'akamaiEdgeGrid');
-  assert.equal(collection.requests[3].auth.headersToSign, 'host;x-test');
-  assert.equal(collection.requests[4].auth.type, 'jwtBearer');
-  assert.equal(collection.requests[4].auth.issuer, 'issuer');
-  assert.equal(collection.requests[5].auth.type, 'asap');
-  assert.equal(collection.requests[5].auth.keyId, 'kid-1');
+  assert.equal(collection.requests[0].auth.disableRetryingRequest, true);
+  assert.equal(collection.requests[0].auth.realm, 'postmeter');
+  assert.equal(collection.requests[0].auth.nonceCount, '00000005');
+  assert.equal(collection.requests[0].auth.clientNonce, '0a4f113b');
+  assert.equal(collection.requests[0].auth.opaque, 'opaque-token');
+  assert.equal(collection.requests[1].auth.type, 'oauth1');
+  assert.equal(collection.requests[1].auth.signatureMethod, 'HMAC-SHA256');
+  assert.equal(collection.requests[1].auth.privateKey, 'private-key');
+  assert.equal(collection.requests[1].auth.addAuthDataTo, 'queryOrBody');
+  assert.equal(collection.requests[1].auth.callback, 'https://client.example.test/callback');
+  assert.equal(collection.requests[1].auth.includeBodyHash, true);
+  assert.equal(collection.requests[1].auth.addEmptyParamsToSign, true);
+  assert.equal(collection.requests[2].auth.type, 'aws');
+  assert.equal(collection.requests[2].auth.service, 'execute-api');
+  assert.equal(collection.requests[2].auth.sessionToken, '{{awsSessionToken}}');
+  assert.equal(collection.requests[2].auth.addAuthDataToQuery, true);
+  assert.equal(collection.requests[3].auth.type, 'ntlm');
+  assert.equal(collection.requests[3].auth.disableRetryingRequest, true);
+  assert.equal(collection.requests[3].auth.domain, 'EXAMPLE');
+  assert.equal(collection.requests[3].auth.workstation, 'WORKSTATION');
+  assert.equal(collection.requests[4].auth.type, 'akamaiEdgeGrid');
+  assert.equal(collection.requests[4].auth.nonce, 'nonce-1');
+  assert.equal(collection.requests[4].auth.timestamp, '20260427T120000+0000');
+  assert.equal(collection.requests[4].auth.baseUrl, 'https://api.example.test');
+  assert.equal(collection.requests[4].auth.headersToSign, 'host;x-test');
+  assert.equal(collection.requests[4].auth.maxBodySize, '2048');
+  assert.equal(collection.requests[5].auth.type, 'jwtBearer');
+  assert.equal(collection.requests[5].auth.secretBase64Encoded, true);
+  assert.equal(collection.requests[5].auth.keyId, 'jwt-kid');
+  assert.equal(collection.requests[5].auth.issuer, 'issuer');
+  assert.equal(collection.requests[5].auth.subject, 'subject');
+  assert.equal(collection.requests[5].auth.expiresIn, '120');
+  assert.equal(collection.requests[5].auth.jwtHeaders, '{"typ":"JWT","kid":"custom"}');
+  assert.equal(collection.requests[5].auth.addTokenTo, 'query');
+  assert.equal(collection.requests[6].auth.type, 'asap');
+  assert.equal(collection.requests[6].auth.keyId, 'kid-1');
+  assert.equal(collection.requests[6].auth.expiresIn, '120');
+  assert.equal(collection.requests[6].auth.additionalClaims, '{"tenant":"postmeter"}');
 
   const exported = exportPostmanCollection(collection);
   assert.equal(exported.item[0].request.auth.type, 'digest');
-  assert.equal(exported.item[1].request.auth.type, 'awsv4');
-  assert.equal(exported.item[2].request.auth.type, 'ntlm');
-  assert.equal(exported.item[3].request.auth.type, 'akamaiEdgeGrid');
-  assert.equal(exported.item[4].request.auth.type, 'jwt-bearer');
-  assert.equal(exported.item[5].request.auth.type, 'asap');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[0].request.auth.digest.map((item) => [item.key, item.value])),
+    {
+      username: 'ada',
+      password: 'secret',
+      disableRetryingRequest: true,
+      realm: 'postmeter',
+      nonce: 'abc123',
+      algorithm: 'MD5',
+      qop: 'auth',
+      nonceCount: '00000005',
+      clientNonce: '0a4f113b',
+      opaque: 'opaque-token'
+    }
+  );
+  assert.equal(exported.item[1].request.auth.type, 'oauth1');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[1].request.auth.oauth1.map((item) => [item.key, item.value])),
+    {
+      consumerKey: 'consumer',
+      consumerSecret: 'consumer-secret',
+      token: 'token',
+      tokenSecret: 'token-secret',
+      signatureMethod: 'HMAC-SHA256',
+      privateKey: 'private-key',
+      addParamsToHeader: false,
+      callback: 'https://client.example.test/callback',
+      verifier: 'verifier',
+      timestamp: '1777291200',
+      nonce: 'nonce',
+      version: '1.0',
+      realm: 'postmeter',
+      includeBodyHash: true,
+      addEmptyParamsToSign: true
+    }
+  );
+  assert.equal(exported.item[2].request.auth.type, 'awsv4');
+  assert.equal(
+    Object.fromEntries(exported.item[2].request.auth.awsv4.map((item) => [item.key, item.value])).addAuthDataTo,
+    'Request URL'
+  );
+  assert.equal(exported.item[3].request.auth.type, 'ntlm');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[3].request.auth.ntlm.map((item) => [item.key, item.value])),
+    {
+      username: 'user',
+      password: 'pass',
+      disableRetryingRequest: true,
+      domain: 'EXAMPLE',
+      workstation: 'WORKSTATION'
+    }
+  );
+  assert.equal(exported.item[4].request.auth.type, 'akamaiEdgeGrid');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[4].request.auth.akamaiEdgeGrid.map((item) => [item.key, item.value])),
+    {
+      accessToken: 'access',
+      clientToken: 'client',
+      clientSecret: 'secret',
+      nonce: 'nonce-1',
+      timestamp: '20260427T120000+0000',
+      baseUrl: 'https://api.example.test',
+      headersToSign: 'host;x-test',
+      maxBodySize: '2048'
+    }
+  );
+  assert.equal(exported.item[5].request.auth.type, 'jwt-bearer');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[5].request.auth['jwt-bearer'].map((item) => [item.key, item.value])),
+    {
+      algorithm: 'HS256',
+      secret: 'jwt-secret',
+      secretBase64Encoded: true,
+      privateKey: 'jwt-private-key',
+      keyId: 'jwt-kid',
+      issuer: 'issuer',
+      subject: 'subject',
+      audience: 'audience',
+      expiresIn: '120',
+      claims: '{"scope":"read"}',
+      jwtHeaders: '{"typ":"JWT","kid":"custom"}',
+      headerPrefix: 'JWT',
+      addTokenTo: 'Query Param'
+    }
+  );
+  assert.equal(exported.item[5].request.auth['jwt-bearer'].some((item) => item.key === 'queryParamName'), false);
+  assert.equal(exported.item[6].request.auth.type, 'asap');
+  assert.deepEqual(
+    Object.fromEntries(exported.item[6].request.auth.asap.map((item) => [item.key, item.value])),
+    {
+      algorithm: 'HS256',
+      secret: 'asap-secret',
+      issuer: 'issuer',
+      audience: 'audience',
+      keyId: 'kid-1',
+      expiry: '120',
+      additionalClaims: '{"tenant":"postmeter"}'
+    }
+  );
+  assert.equal(exported.item[6].request.auth.asap.some((item) => item.key === 'headerPrefix'), false);
+});
+
+test('exports current auth model fields after editing imported Postman auth', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Edited Auth Export',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'JWT',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/jwt',
+        auth: {
+          type: 'jwt-bearer',
+          'jwt-bearer': [
+            { key: 'algorithm', value: 'HS256' },
+            { key: 'secret', value: 'old-secret' },
+            { key: 'queryParamName', value: 'legacy-token' }
+          ]
+        }
+      }
+    }, {
+      name: 'AWS',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/aws',
+        auth: {
+          type: 'awsv4',
+          awsv4: [
+            { key: 'accessKey', value: 'old-access' },
+            { key: 'secretKey', value: 'old-secret' }
+          ]
+        }
+      }
+    }]
+  });
+
+  collection.requests[0].auth = {
+    type: 'jwtBearer',
+    algorithm: 'HS512',
+    secret: 'new-secret',
+    secretBase64Encoded: true,
+    claims: '{"edited":true}',
+    jwtHeaders: '{"kid":"edited"}',
+    headerPrefix: 'JWT',
+    addTokenTo: 'query'
+  };
+  collection.requests[1].auth = {
+    type: 'aws',
+    accessKey: 'new-access',
+    secretKey: 'new-secret',
+    region: 'us-west-2',
+    service: 'execute-api',
+    sessionToken: 'session',
+    addAuthDataToQuery: true
+  };
+
+  const exported = exportPostmanCollection(collection);
+  const jwt = Object.fromEntries(exported.item[0].request.auth['jwt-bearer'].map((item) => [item.key, item.value]));
+  assert.equal(jwt.algorithm, 'HS512');
+  assert.equal(jwt.secret, 'new-secret');
+  assert.equal(jwt.secretBase64Encoded, 'true');
+  assert.equal(jwt.claims, '{"edited":true}');
+  assert.equal(jwt.jwtHeaders, '{"kid":"edited"}');
+  assert.equal(jwt.addTokenTo, 'Query Param');
+  assert.equal(Object.hasOwn(jwt, 'queryParamName'), false);
+
+  const aws = Object.fromEntries(exported.item[1].request.auth.awsv4.map((item) => [item.key, item.value]));
+  assert.equal(aws.accessKey, 'new-access');
+  assert.equal(aws.secretKey, 'new-secret');
+  assert.equal(aws.region, 'us-west-2');
+  assert.equal(aws.service, 'execute-api');
+  assert.equal(aws.sessionToken, 'session');
+  assert.equal(aws.addAuthDataTo, 'Request URL');
+  assert.equal(Object.hasOwn(aws, 'addAuthDataToQuery'), false);
 });
 
 test('imports Postman collection certificates without request examples', () => {

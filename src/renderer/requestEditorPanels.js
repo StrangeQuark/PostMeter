@@ -22,8 +22,46 @@
     }
   }
 
+  function setOptionElementChecked(doc, options, id, value) {
+    const target = optionElement(doc, options, id);
+    if (target) {
+      target.checked = value === true;
+    }
+  }
+
   function optionElementValue(doc, options, id) {
     return optionElement(doc, options, id)?.value || '';
+  }
+
+  function optionElementChecked(doc, options, id) {
+    return optionElement(doc, options, id)?.checked === true;
+  }
+
+  function syncOauth1SignatureFields(options = {}) {
+    const doc = options.doc || document;
+    const signatureMethod = optionElementValue(doc, options, 'authOauth1SignatureMethodSelect') || 'HMAC-SHA1';
+    const section = optionElement(doc, options, 'authOauth1SignatureMethodSelect')?.closest?.('[data-auth-section="oauth1"]');
+    if (section) {
+      section.dataset.oauth1SignatureKind = String(signatureMethod).toUpperCase().startsWith('RSA-') ? 'rsa' : 'shared';
+    }
+  }
+
+  function syncOauth2GrantFields(options = {}) {
+    const doc = options.doc || document;
+    const grantType = optionElementValue(doc, options, 'authOauthGrantTypeSelect') || 'authorizationCode';
+    const section = optionElement(doc, options, 'authOauthGrantTypeSelect')?.closest?.('[data-auth-section="oauth2"]');
+    if (section) {
+      section.dataset.oauth2GrantType = grantType;
+    }
+  }
+
+  function syncJwtAlgorithmFields(options = {}) {
+    const doc = options.doc || document;
+    const algorithm = String(optionElementValue(doc, options, 'authJwtAlgorithmSelect') || 'HS256').toUpperCase();
+    const section = optionElement(doc, options, 'authJwtAlgorithmSelect')?.closest?.('[data-auth-section="jwtBearer"]');
+    if (section) {
+      section.dataset.jwtAlgorithmKind = algorithm.startsWith('HS') ? 'secret' : 'private';
+    }
   }
 
   function bodyTypeCodeLanguage(bodyType) {
@@ -422,17 +460,112 @@
     setOptionElementValue(doc, options, 'authCookieValueInput', fields.cookieValue);
     setOptionElementValue(doc, options, 'authOauthGrantTypeSelect', fields.oauthGrantType);
     setOptionElementValue(doc, options, 'authOauthTokenTypeSelect', fields.oauthTokenType);
+    setOptionElementValue(doc, options, 'authOauthHeaderPrefixInput', fields.oauthHeaderPrefix);
+    setOptionElementValue(doc, options, 'authOauthTokenNameInput', fields.oauthTokenName);
+    setOptionElementValue(doc, options, 'authOauthAddAuthDataToSelect', fields.oauthAddAuthDataTo);
     setOptionElementValue(doc, options, 'authOauthAccessTokenInput', fields.oauthAccessToken);
     setOptionElementValue(doc, options, 'authOauthRefreshTokenInput', fields.oauthRefreshToken);
+    setOptionElementChecked(doc, options, 'authOauthAutoRefreshTokenInput', fields.oauthAutoRefreshToken);
+    setOptionElementChecked(doc, options, 'authOauthShareTokenInput', fields.oauthShareToken);
     setOptionElementValue(doc, options, 'authOauthAuthorizationUrlInput', fields.oauthAuthorizationUrl);
+    setOptionElementValue(doc, options, 'authOauthCallbackUrlInput', fields.oauthCallbackUrl);
+    setOptionElementChecked(doc, options, 'authOauthAuthorizeUsingBrowserInput', fields.oauthAuthorizeUsingBrowser);
     setOptionElementValue(doc, options, 'authOauthRedirectStrategySelect', fields.oauthRedirectStrategy);
     setOptionElementValue(doc, options, 'authOauthDeviceAuthorizationUrlInput', fields.oauthDeviceAuthorizationUrl);
     setOptionElementValue(doc, options, 'authOauthTokenUrlInput', fields.oauthTokenUrl);
+    setOptionElementValue(doc, options, 'authOauthRefreshTokenUrlInput', fields.oauthRefreshTokenUrl);
     setOptionElementValue(doc, options, 'authOauthClientIdInput', fields.oauthClientId);
     setOptionElementValue(doc, options, 'authOauthClientSecretInput', fields.oauthClientSecret);
+    setOptionElementValue(doc, options, 'authOauthUsernameInput', fields.oauthUsername);
+    setOptionElementValue(doc, options, 'authOauthPasswordInput', fields.oauthPassword);
     setOptionElementValue(doc, options, 'authOauthScopesInput', fields.oauthScopes);
+    setOptionElementValue(doc, options, 'authOauthStateInput', fields.oauthState);
+    setOptionElementValue(doc, options, 'authOauthCodeChallengeMethodSelect', fields.oauthCodeChallengeMethod);
+    setOptionElementValue(doc, options, 'authOauthCodeVerifierInput', fields.oauthCodeVerifier);
+    setOptionElementValue(doc, options, 'authOauthClientAuthenticationSelect', fields.oauthClientAuthentication);
+    setOptionElementValue(doc, options, 'authOauthAuthRequestParamKeyInput', fields.oauthAuthRequestParamKey);
+    setOptionElementValue(doc, options, 'authOauthAuthRequestParamValueInput', fields.oauthAuthRequestParamValue);
+    setOptionElementValue(doc, options, 'authOauthTokenRequestParamKeyInput', fields.oauthTokenRequestParamKey);
+    setOptionElementValue(doc, options, 'authOauthTokenRequestParamValueInput', fields.oauthTokenRequestParamValue);
+    setOptionElementValue(doc, options, 'authOauthTokenRequestParamSendInSelect', fields.oauthTokenRequestParamSendIn);
+    setOptionElementValue(doc, options, 'authOauthRefreshRequestParamKeyInput', fields.oauthRefreshRequestParamKey);
+    setOptionElementValue(doc, options, 'authOauthRefreshRequestParamValueInput', fields.oauthRefreshRequestParamValue);
+    setOptionElementValue(doc, options, 'authOauthRefreshRequestParamSendInSelect', fields.oauthRefreshRequestParamSendIn);
     setOptionElementValue(doc, options, 'authOauthUserCodeInput', fields.oauthUserCode);
     setOptionElementValue(doc, options, 'authOauthVerificationUriInput', fields.oauthVerificationUri);
+    syncOauth2GrantFields({ ...options, doc });
+    setOptionElementValue(doc, options, 'authOauth1SignatureMethodSelect', fields.oauth1SignatureMethod);
+    setOptionElementValue(doc, options, 'authOauth1ConsumerKeyInput', fields.oauth1ConsumerKey);
+    setOptionElementValue(doc, options, 'authOauth1ConsumerSecretInput', fields.oauth1ConsumerSecret);
+    setOptionElementValue(doc, options, 'authOauth1TokenInput', fields.oauth1Token);
+    setOptionElementValue(doc, options, 'authOauth1TokenSecretInput', fields.oauth1TokenSecret);
+    setOptionElementValue(doc, options, 'authOauth1PrivateKeyInput', fields.oauth1PrivateKey);
+    setOptionElementValue(doc, options, 'authOauth1AddAuthDataToSelect', fields.oauth1AddAuthDataTo);
+    setOptionElementValue(doc, options, 'authOauth1CallbackInput', fields.oauth1Callback);
+    setOptionElementValue(doc, options, 'authOauth1VerifierInput', fields.oauth1Verifier);
+    setOptionElementValue(doc, options, 'authOauth1TimestampInput', fields.oauth1Timestamp);
+    setOptionElementValue(doc, options, 'authOauth1NonceInput', fields.oauth1Nonce);
+    setOptionElementValue(doc, options, 'authOauth1VersionInput', fields.oauth1Version);
+    setOptionElementValue(doc, options, 'authOauth1RealmInput', fields.oauth1Realm);
+    setOptionElementChecked(doc, options, 'authOauth1IncludeBodyHashInput', fields.oauth1IncludeBodyHash);
+    setOptionElementChecked(doc, options, 'authOauth1AddEmptyParamsToSignInput', fields.oauth1AddEmptyParamsToSign);
+    syncOauth1SignatureFields({ ...options, doc });
+    setOptionElementValue(doc, options, 'authDigestUsernameInput', fields.digestUsername);
+    setOptionElementValue(doc, options, 'authDigestPasswordInput', fields.digestPassword);
+    setOptionElementChecked(doc, options, 'authDigestDisableRetryingRequestInput', fields.digestDisableRetryingRequest);
+    setOptionElementValue(doc, options, 'authDigestRealmInput', fields.digestRealm);
+    setOptionElementValue(doc, options, 'authDigestNonceInput', fields.digestNonce);
+    setOptionElementValue(doc, options, 'authDigestAlgorithmSelect', fields.digestAlgorithm);
+    setOptionElementValue(doc, options, 'authDigestQopInput', fields.digestQop);
+    setOptionElementValue(doc, options, 'authDigestNonceCountInput', fields.digestNonceCount);
+    setOptionElementValue(doc, options, 'authDigestClientNonceInput', fields.digestClientNonce);
+    setOptionElementValue(doc, options, 'authDigestOpaqueInput', fields.digestOpaque);
+    setOptionElementValue(doc, options, 'authHawkAuthIdInput', fields.hawkAuthId);
+    setOptionElementValue(doc, options, 'authHawkAuthKeyInput', fields.hawkAuthKey);
+    setOptionElementValue(doc, options, 'authHawkAlgorithmSelect', fields.hawkAlgorithm);
+    setOptionElementValue(doc, options, 'authHawkUserInput', fields.hawkUser);
+    setOptionElementValue(doc, options, 'authHawkNonceInput', fields.hawkNonce);
+    setOptionElementValue(doc, options, 'authHawkExtraDataInput', fields.hawkExtraData);
+    setOptionElementValue(doc, options, 'authHawkAppInput', fields.hawkApp);
+    setOptionElementValue(doc, options, 'authHawkDelegationInput', fields.hawkDelegation);
+    setOptionElementValue(doc, options, 'authHawkTimestampInput', fields.hawkTimestamp);
+    setOptionElementChecked(doc, options, 'authHawkIncludePayloadHashInput', fields.hawkIncludePayloadHash);
+    setOptionElementValue(doc, options, 'authAwsAccessKeyInput', fields.awsAccessKey);
+    setOptionElementValue(doc, options, 'authAwsSecretKeyInput', fields.awsSecretKey);
+    setOptionElementValue(doc, options, 'authAwsAddAuthDataToSelect', fields.awsAddAuthDataTo);
+    setOptionElementValue(doc, options, 'authAwsRegionInput', fields.awsRegion);
+    setOptionElementValue(doc, options, 'authAwsServiceInput', fields.awsService);
+    setOptionElementValue(doc, options, 'authAwsSessionTokenInput', fields.awsSessionToken);
+    setOptionElementValue(doc, options, 'authNtlmUsernameInput', fields.ntlmUsername);
+    setOptionElementValue(doc, options, 'authNtlmPasswordInput', fields.ntlmPassword);
+    setOptionElementChecked(doc, options, 'authNtlmDisableRetryingRequestInput', fields.ntlmDisableRetryingRequest);
+    setOptionElementValue(doc, options, 'authNtlmDomainInput', fields.ntlmDomain);
+    setOptionElementValue(doc, options, 'authNtlmWorkstationInput', fields.ntlmWorkstation);
+    setOptionElementValue(doc, options, 'authAkamaiAccessTokenInput', fields.akamaiAccessToken);
+    setOptionElementValue(doc, options, 'authAkamaiClientTokenInput', fields.akamaiClientToken);
+    setOptionElementValue(doc, options, 'authAkamaiClientSecretInput', fields.akamaiClientSecret);
+    setOptionElementValue(doc, options, 'authAkamaiNonceInput', fields.akamaiNonce);
+    setOptionElementValue(doc, options, 'authAkamaiTimestampInput', fields.akamaiTimestamp);
+    setOptionElementValue(doc, options, 'authAkamaiBaseUrlInput', fields.akamaiBaseUrl);
+    setOptionElementValue(doc, options, 'authAkamaiHeadersToSignInput', fields.akamaiHeadersToSign);
+    setOptionElementValue(doc, options, 'authAkamaiMaxBodySizeInput', fields.akamaiMaxBodySize);
+    setOptionElementValue(doc, options, 'authJwtAlgorithmSelect', fields.jwtAlgorithm);
+    setOptionElementValue(doc, options, 'authJwtSecretInput', fields.jwtSecret);
+    setOptionElementChecked(doc, options, 'authJwtSecretBase64EncodedInput', fields.jwtSecretBase64Encoded);
+    setOptionElementValue(doc, options, 'authJwtPrivateKeyInput', fields.jwtPrivateKey);
+    setOptionElementValue(doc, options, 'authJwtAddTokenToSelect', fields.jwtAddTokenTo);
+    setOptionElementValue(doc, options, 'authJwtPayloadInput', fields.jwtPayload);
+    setOptionElementValue(doc, options, 'authJwtHeaderPrefixInput', fields.jwtHeaderPrefix);
+    setOptionElementValue(doc, options, 'authJwtHeadersInput', fields.jwtHeaders);
+    syncJwtAlgorithmFields({ ...options, doc });
+    setOptionElementValue(doc, options, 'authAsapAlgorithmSelect', fields.asapAlgorithm);
+    setOptionElementValue(doc, options, 'authAsapIssuerInput', fields.asapIssuer);
+    setOptionElementValue(doc, options, 'authAsapAudienceInput', fields.asapAudience);
+    setOptionElementValue(doc, options, 'authAsapKeyIdInput', fields.asapKeyId);
+    setOptionElementValue(doc, options, 'authAsapPrivateKeyInput', fields.asapPrivateKey);
+    setOptionElementValue(doc, options, 'authAsapSubjectInput', fields.asapSubject);
+    setOptionElementValue(doc, options, 'authAsapAdditionalClaimsInput', fields.asapAdditionalClaims);
+    setOptionElementValue(doc, options, 'authAsapExpiresInInput', fields.asapExpiresIn);
     setOptionElementValue(doc, options, 'authClientPfxPathInput', fields.clientPfxPath);
     setOptionElementValue(doc, options, 'authClientCertPathInput', fields.clientCertPath);
     setOptionElementValue(doc, options, 'authClientKeyPathInput', fields.clientKeyPath);
@@ -442,6 +575,9 @@
 
   function collectAuthFromEditor(options = {}) {
     const doc = options.doc || document;
+    syncOauth1SignatureFields({ ...options, doc });
+    syncOauth2GrantFields({ ...options, doc });
+    syncJwtAlgorithmFields({ ...options, doc });
     return authFromEditorState({
       type: optionElementValue(doc, options, 'authTypeSelect'),
       bearerToken: optionElementValue(doc, options, 'authBearerTokenInput'),
@@ -453,16 +589,108 @@
       cookieValue: optionElementValue(doc, options, 'authCookieValueInput'),
       oauthGrantType: optionElementValue(doc, options, 'authOauthGrantTypeSelect'),
       oauthTokenType: optionElementValue(doc, options, 'authOauthTokenTypeSelect'),
+      oauthHeaderPrefix: optionElementValue(doc, options, 'authOauthHeaderPrefixInput'),
+      oauthTokenName: optionElementValue(doc, options, 'authOauthTokenNameInput'),
+      oauthAddAuthDataTo: optionElementValue(doc, options, 'authOauthAddAuthDataToSelect'),
       oauthAccessToken: optionElementValue(doc, options, 'authOauthAccessTokenInput'),
       oauthRefreshToken: optionElementValue(doc, options, 'authOauthRefreshTokenInput'),
+      oauthAutoRefreshToken: optionElementChecked(doc, options, 'authOauthAutoRefreshTokenInput'),
+      oauthShareToken: optionElementChecked(doc, options, 'authOauthShareTokenInput'),
       oauthAuthorizationUrl: optionElementValue(doc, options, 'authOauthAuthorizationUrlInput'),
+      oauthCallbackUrl: optionElementValue(doc, options, 'authOauthCallbackUrlInput'),
+      oauthAuthorizeUsingBrowser: optionElementChecked(doc, options, 'authOauthAuthorizeUsingBrowserInput'),
       oauthRedirectStrategy: optionElementValue(doc, options, 'authOauthRedirectStrategySelect'),
       oauthDeviceAuthorizationUrl: optionElementValue(doc, options, 'authOauthDeviceAuthorizationUrlInput'),
       oauthTokenUrl: optionElementValue(doc, options, 'authOauthTokenUrlInput'),
+      oauthRefreshTokenUrl: optionElementValue(doc, options, 'authOauthRefreshTokenUrlInput'),
       oauthClientId: optionElementValue(doc, options, 'authOauthClientIdInput'),
       oauthClientSecret: optionElementValue(doc, options, 'authOauthClientSecretInput'),
+      oauthUsername: optionElementValue(doc, options, 'authOauthUsernameInput'),
+      oauthPassword: optionElementValue(doc, options, 'authOauthPasswordInput'),
       oauthScopes: optionElementValue(doc, options, 'authOauthScopesInput'),
+      oauthState: optionElementValue(doc, options, 'authOauthStateInput'),
+      oauthCodeChallengeMethod: optionElementValue(doc, options, 'authOauthCodeChallengeMethodSelect'),
+      oauthCodeVerifier: optionElementValue(doc, options, 'authOauthCodeVerifierInput'),
+      oauthClientAuthentication: optionElementValue(doc, options, 'authOauthClientAuthenticationSelect'),
+      oauthAuthRequestParamKey: optionElementValue(doc, options, 'authOauthAuthRequestParamKeyInput'),
+      oauthAuthRequestParamValue: optionElementValue(doc, options, 'authOauthAuthRequestParamValueInput'),
+      oauthTokenRequestParamKey: optionElementValue(doc, options, 'authOauthTokenRequestParamKeyInput'),
+      oauthTokenRequestParamValue: optionElementValue(doc, options, 'authOauthTokenRequestParamValueInput'),
+      oauthTokenRequestParamSendIn: optionElementValue(doc, options, 'authOauthTokenRequestParamSendInSelect'),
+      oauthRefreshRequestParamKey: optionElementValue(doc, options, 'authOauthRefreshRequestParamKeyInput'),
+      oauthRefreshRequestParamValue: optionElementValue(doc, options, 'authOauthRefreshRequestParamValueInput'),
+      oauthRefreshRequestParamSendIn: optionElementValue(doc, options, 'authOauthRefreshRequestParamSendInSelect'),
       oauthUserCode: optionElementValue(doc, options, 'authOauthUserCodeInput'),
+      oauth1SignatureMethod: optionElementValue(doc, options, 'authOauth1SignatureMethodSelect'),
+      oauth1ConsumerKey: optionElementValue(doc, options, 'authOauth1ConsumerKeyInput'),
+      oauth1ConsumerSecret: optionElementValue(doc, options, 'authOauth1ConsumerSecretInput'),
+      oauth1Token: optionElementValue(doc, options, 'authOauth1TokenInput'),
+      oauth1TokenSecret: optionElementValue(doc, options, 'authOauth1TokenSecretInput'),
+      oauth1PrivateKey: optionElementValue(doc, options, 'authOauth1PrivateKeyInput'),
+      oauth1AddAuthDataTo: optionElementValue(doc, options, 'authOauth1AddAuthDataToSelect'),
+      oauth1Callback: optionElementValue(doc, options, 'authOauth1CallbackInput'),
+      oauth1Verifier: optionElementValue(doc, options, 'authOauth1VerifierInput'),
+      oauth1Timestamp: optionElementValue(doc, options, 'authOauth1TimestampInput'),
+      oauth1Nonce: optionElementValue(doc, options, 'authOauth1NonceInput'),
+      oauth1Version: optionElementValue(doc, options, 'authOauth1VersionInput'),
+      oauth1Realm: optionElementValue(doc, options, 'authOauth1RealmInput'),
+      oauth1IncludeBodyHash: optionElementChecked(doc, options, 'authOauth1IncludeBodyHashInput'),
+      oauth1AddEmptyParamsToSign: optionElementChecked(doc, options, 'authOauth1AddEmptyParamsToSignInput'),
+      digestUsername: optionElementValue(doc, options, 'authDigestUsernameInput'),
+      digestPassword: optionElementValue(doc, options, 'authDigestPasswordInput'),
+      digestDisableRetryingRequest: optionElementChecked(doc, options, 'authDigestDisableRetryingRequestInput'),
+      digestRealm: optionElementValue(doc, options, 'authDigestRealmInput'),
+      digestNonce: optionElementValue(doc, options, 'authDigestNonceInput'),
+      digestAlgorithm: optionElementValue(doc, options, 'authDigestAlgorithmSelect'),
+      digestQop: optionElementValue(doc, options, 'authDigestQopInput'),
+      digestNonceCount: optionElementValue(doc, options, 'authDigestNonceCountInput'),
+      digestClientNonce: optionElementValue(doc, options, 'authDigestClientNonceInput'),
+      digestOpaque: optionElementValue(doc, options, 'authDigestOpaqueInput'),
+      hawkAuthId: optionElementValue(doc, options, 'authHawkAuthIdInput'),
+      hawkAuthKey: optionElementValue(doc, options, 'authHawkAuthKeyInput'),
+      hawkAlgorithm: optionElementValue(doc, options, 'authHawkAlgorithmSelect'),
+      hawkUser: optionElementValue(doc, options, 'authHawkUserInput'),
+      hawkNonce: optionElementValue(doc, options, 'authHawkNonceInput'),
+      hawkExtraData: optionElementValue(doc, options, 'authHawkExtraDataInput'),
+      hawkApp: optionElementValue(doc, options, 'authHawkAppInput'),
+      hawkDelegation: optionElementValue(doc, options, 'authHawkDelegationInput'),
+      hawkTimestamp: optionElementValue(doc, options, 'authHawkTimestampInput'),
+      hawkIncludePayloadHash: optionElementChecked(doc, options, 'authHawkIncludePayloadHashInput'),
+      awsAccessKey: optionElementValue(doc, options, 'authAwsAccessKeyInput'),
+      awsSecretKey: optionElementValue(doc, options, 'authAwsSecretKeyInput'),
+      awsAddAuthDataTo: optionElementValue(doc, options, 'authAwsAddAuthDataToSelect'),
+      awsRegion: optionElementValue(doc, options, 'authAwsRegionInput'),
+      awsService: optionElementValue(doc, options, 'authAwsServiceInput'),
+      awsSessionToken: optionElementValue(doc, options, 'authAwsSessionTokenInput'),
+      ntlmUsername: optionElementValue(doc, options, 'authNtlmUsernameInput'),
+      ntlmPassword: optionElementValue(doc, options, 'authNtlmPasswordInput'),
+      ntlmDisableRetryingRequest: optionElementChecked(doc, options, 'authNtlmDisableRetryingRequestInput'),
+      ntlmDomain: optionElementValue(doc, options, 'authNtlmDomainInput'),
+      ntlmWorkstation: optionElementValue(doc, options, 'authNtlmWorkstationInput'),
+      akamaiAccessToken: optionElementValue(doc, options, 'authAkamaiAccessTokenInput'),
+      akamaiClientToken: optionElementValue(doc, options, 'authAkamaiClientTokenInput'),
+      akamaiClientSecret: optionElementValue(doc, options, 'authAkamaiClientSecretInput'),
+      akamaiNonce: optionElementValue(doc, options, 'authAkamaiNonceInput'),
+      akamaiTimestamp: optionElementValue(doc, options, 'authAkamaiTimestampInput'),
+      akamaiBaseUrl: optionElementValue(doc, options, 'authAkamaiBaseUrlInput'),
+      akamaiHeadersToSign: optionElementValue(doc, options, 'authAkamaiHeadersToSignInput'),
+      akamaiMaxBodySize: optionElementValue(doc, options, 'authAkamaiMaxBodySizeInput'),
+      jwtAlgorithm: optionElementValue(doc, options, 'authJwtAlgorithmSelect'),
+      jwtSecret: optionElementValue(doc, options, 'authJwtSecretInput'),
+      jwtSecretBase64Encoded: optionElementChecked(doc, options, 'authJwtSecretBase64EncodedInput'),
+      jwtPrivateKey: optionElementValue(doc, options, 'authJwtPrivateKeyInput'),
+      jwtAddTokenTo: optionElementValue(doc, options, 'authJwtAddTokenToSelect'),
+      jwtPayload: optionElementValue(doc, options, 'authJwtPayloadInput'),
+      jwtHeaderPrefix: optionElementValue(doc, options, 'authJwtHeaderPrefixInput'),
+      jwtHeaders: optionElementValue(doc, options, 'authJwtHeadersInput'),
+      asapAlgorithm: optionElementValue(doc, options, 'authAsapAlgorithmSelect'),
+      asapIssuer: optionElementValue(doc, options, 'authAsapIssuerInput'),
+      asapAudience: optionElementValue(doc, options, 'authAsapAudienceInput'),
+      asapKeyId: optionElementValue(doc, options, 'authAsapKeyIdInput'),
+      asapPrivateKey: optionElementValue(doc, options, 'authAsapPrivateKeyInput'),
+      asapSubject: optionElementValue(doc, options, 'authAsapSubjectInput'),
+      asapAdditionalClaims: optionElementValue(doc, options, 'authAsapAdditionalClaimsInput'),
+      asapExpiresIn: optionElementValue(doc, options, 'authAsapExpiresInInput'),
       clientPfxPath: optionElementValue(doc, options, 'authClientPfxPathInput'),
       clientCertPath: optionElementValue(doc, options, 'authClientCertPathInput'),
       clientKeyPath: optionElementValue(doc, options, 'authClientKeyPathInput'),
@@ -657,8 +885,10 @@
     const filterInput = element(doc, options.filterInputId || 'filterCookiesToRequestHostInput');
     const filterLabel = element(doc, options.filterLabelId || 'cookieHostFilterLabel');
 
+    if (!workspace) {
+      return;
+    }
     workspace.cookies ||= [];
-    container.textContent = '';
 
     const activeHost = domainFromRequestUrl(options.activeRequestUrl);
     const managedCookieNames = new Set((options.managedCookieNames || [])
@@ -675,6 +905,10 @@
     if (filterLabel) {
       filterLabel.textContent = activeHost ? `Host: ${activeHost}` : 'No active host';
     }
+    if (!container) {
+      return;
+    }
+    container.textContent = '';
 
     const visibleCookies = workspace.cookies
       .map((cookie, index) => ({ cookie, index }))
@@ -914,6 +1148,9 @@
     renderAuthEditor,
     renderCookieJarEditor,
     renderRequestPairs,
+    syncJwtAlgorithmFields,
+    syncOauth1SignatureFields,
+    syncOauth2GrantFields,
     syncRefreshingAuthSelectOptions,
     renderVariablePairs,
     renderVariablePreview

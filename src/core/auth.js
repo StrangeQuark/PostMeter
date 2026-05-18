@@ -230,7 +230,15 @@ const DIGEST_SUPPORTED_ALGORITHMS = new Map([
   ['sha-512-256-sess', 'sha512-256']
 ]);
 const AWS_ALGORITHM = 'AWS4-HMAC-SHA256';
-const OAUTH1_SIGNATURE_METHODS = new Set(['HMAC-SHA1', 'HMAC-SHA256', 'PLAINTEXT']);
+const OAUTH1_SIGNATURE_METHODS = new Set([
+  'HMAC-SHA1',
+  'HMAC-SHA256',
+  'HMAC-SHA512',
+  'RSA-SHA1',
+  'RSA-SHA256',
+  'RSA-SHA512',
+  'PLAINTEXT'
+]);
 
 function validateAuth(auth = {}, environment) {
   const normalized = normalizeAuth(auth);
@@ -259,9 +267,13 @@ function validateAuth(auth = {}, environment) {
       requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
       requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
       requireResolved(normalized.clientSecret, environment, 'OAuth 2.0 client secret', errors);
+    } else if (normalized.grantType === 'passwordCredentials') {
+      requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
+      requireResolved(normalized.username, environment, 'OAuth 2.0 username', errors);
+      requireResolved(normalized.password, environment, 'OAuth 2.0 password', errors);
     } else if (normalized.grantType === 'deviceCode') {
       if (resolveEnvironmentValue(normalized.deviceCode, environment).trim()) {
-        requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
+        requireResolved(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
         requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
       } else {
         requireResolved(normalized.deviceAuthorizationUrl, environment, 'OAuth 2.0 device authorization URL', errors);
@@ -269,10 +281,14 @@ function validateAuth(auth = {}, environment) {
         requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
         errors.push('Start and complete the OAuth 2.0 device-code flow before sending this request.');
       }
+    } else if (normalized.grantType === 'implicit') {
+      requireResolved(normalized.authorizationUrl, environment, 'OAuth 2.0 authorization URL', errors);
+      requireResolved(normalized.clientId, environment, 'OAuth 2.0 client ID', errors);
+      errors.push('Start and complete the OAuth 2.0 implicit flow before sending this request.');
     } else {
       const refreshToken = resolveEnvironmentValue(normalized.refreshToken, environment).trim();
       if (refreshToken) {
-        requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
+        requireResolved(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
       } else {
         requireResolved(normalized.authorizationUrl, environment, 'OAuth 2.0 authorization URL', errors);
         requireResolved(normalized.tokenUrl, environment, 'OAuth 2.0 token URL', errors);
@@ -310,8 +326,8 @@ function validateAuth(auth = {}, environment) {
   } else if (normalized.type === 'hawk') {
     requireResolved(normalized.authId, environment, 'Hawk auth ID', errors);
     requireResolved(normalized.authKey, environment, 'Hawk auth key', errors);
-    const algorithm = String(resolveEnvironmentValue(normalized.algorithm, environment) || 'sha256').toLowerCase();
-    if (algorithm !== 'sha1' && algorithm !== 'sha256') {
+    const algorithm = normalizeHawkAlgorithm(resolveEnvironmentValue(normalized.algorithm, environment));
+    if (!algorithm) {
       errors.push(`Unsupported Hawk auth algorithm: ${normalized.algorithm}.`);
     }
   } else if (normalized.type === 'aws') {
@@ -321,10 +337,13 @@ function validateAuth(auth = {}, environment) {
     requireResolved(normalized.service, environment, 'AWS service', errors);
   } else if (normalized.type === 'oauth1') {
     requireResolved(normalized.consumerKey, environment, 'OAuth 1.0 consumer key', errors);
-    requireResolved(normalized.consumerSecret, environment, 'OAuth 1.0 consumer secret', errors);
     const signatureMethod = normalizeOAuth1SignatureMethod(resolveEnvironmentValue(normalized.signatureMethod, environment));
     if (!OAUTH1_SIGNATURE_METHODS.has(signatureMethod)) {
       errors.push(`Unsupported OAuth 1.0 signature method: ${normalized.signatureMethod}.`);
+    } else if (signatureMethod.startsWith('RSA-')) {
+      requireResolved(normalized.privateKey || normalized.consumerSecret, environment, 'OAuth 1.0 private key', errors);
+    } else {
+      requireResolved(normalized.consumerSecret, environment, 'OAuth 1.0 consumer secret', errors);
     }
   } else if (normalized.type === 'ntlm') {
     requireResolved(normalized.username, environment, 'NTLM auth username', errors);
@@ -362,12 +381,24 @@ async function maybeRefreshOAuthToken(auth = {}, environment, options = {}) {
   if (normalized.type !== 'oauth2') {
     return { auth: normalized, refreshed: false };
   }
+  if (normalized.autoRefreshToken === false) {
+    return { auth: normalized, refreshed: false };
+  }
   if (normalized.grantType === 'clientCredentials') {
     if (!shouldRequestClientCredentialsToken(normalized, environment, options.now)) {
       return { auth: normalized, refreshed: false };
     }
     return {
       auth: await requestOAuthClientCredentialsToken(normalized, environment, options),
+      refreshed: true
+    };
+  }
+  if (normalized.grantType === 'passwordCredentials') {
+    if (!shouldRequestPasswordCredentialsToken(normalized, environment, options.now)) {
+      return { auth: normalized, refreshed: false };
+    }
+    return {
+      auth: await requestOAuthPasswordCredentialsToken(normalized, environment, options),
       refreshed: true
     };
   }
@@ -401,32 +432,28 @@ async function refreshOAuthToken(auth = {}, environment, options = {}) {
     throw new Error('OAuth 2.0 auth is required for token refresh.');
   }
 
-  const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
+  const tokenUrl = requireResolvedValue(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const refreshToken = requireResolvedValue(normalized.refreshToken, environment, 'OAuth 2.0 refresh token');
   const url = parseTokenUrl(tokenUrl);
   const body = new URLSearchParams();
+  const headers = {};
   body.set('grant_type', 'refresh_token');
   body.set('refresh_token', refreshToken);
 
-  const clientId = resolveEnvironmentValue(normalized.clientId, environment).trim();
-  const clientSecret = resolveEnvironmentValue(normalized.clientSecret, environment);
   const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
-  if (clientId) {
-    body.set('client_id', clientId);
-  }
-  if (clientSecret) {
-    body.set('client_secret', clientSecret);
-  }
+  applyOAuth2ClientAuthentication(normalized, environment, body, headers);
   if (scopes) {
     body.set('scope', scopes);
   }
+  applyOAuth2RequestParams(normalized.refreshRequestParams, environment, body, headers);
 
-  const payload = await postOAuthTokenRequest(url, body, options, 'OAuth 2.0 token refresh');
+  const payload = await postOAuthTokenRequest(url, body, options, 'OAuth 2.0 token refresh', { headers });
 
   const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
   return normalizeAuth({
     ...normalized,
     tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
     accessToken: String(payload.access_token),
     refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
     expiresAt: expiresAtFromPayload(payload, options.now)
@@ -444,21 +471,59 @@ async function requestOAuthClientCredentialsToken(auth = {}, environment, option
 
   const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const clientId = requireResolvedValue(normalized.clientId, environment, 'OAuth 2.0 client ID');
-  const clientSecret = requireResolvedValue(normalized.clientSecret, environment, 'OAuth 2.0 client secret');
+  requireResolvedValue(normalized.clientSecret, environment, 'OAuth 2.0 client secret');
   const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
   const body = new URLSearchParams();
+  const headers = {};
   body.set('grant_type', 'client_credentials');
-  body.set('client_id', clientId);
-  body.set('client_secret', clientSecret);
+  applyOAuth2ClientAuthentication({ ...normalized, clientId }, environment, body, headers);
   if (scopes) {
     body.set('scope', scopes);
   }
+  applyOAuth2RequestParams(normalized.tokenRequestParams, environment, body, headers);
 
-  const payload = await postOAuthTokenRequest(parseTokenUrl(tokenUrl), body, options, 'OAuth 2.0 client credentials token request');
+  const payload = await postOAuthTokenRequest(parseTokenUrl(tokenUrl), body, options, 'OAuth 2.0 client credentials token request', { headers });
   const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
   return normalizeAuth({
     ...normalized,
     tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
+    accessToken: String(payload.access_token),
+    refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
+    expiresAt: expiresAtFromPayload(payload, options.now)
+  });
+}
+
+async function requestOAuthPasswordCredentialsToken(auth = {}, environment, options = {}) {
+  const normalized = normalizeAuth(auth);
+  if (normalized.type !== 'oauth2') {
+    throw new Error('OAuth 2.0 auth is required for password credentials token requests.');
+  }
+  if (normalized.grantType !== 'passwordCredentials') {
+    throw new Error('OAuth 2.0 password credentials grant is required for password credentials token requests.');
+  }
+
+  const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
+  const username = requireResolvedValue(normalized.username, environment, 'OAuth 2.0 username');
+  const password = requireResolvedValue(normalized.password, environment, 'OAuth 2.0 password');
+  const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
+  const body = new URLSearchParams();
+  const headers = {};
+  body.set('grant_type', 'password');
+  body.set('username', username);
+  body.set('password', password);
+  applyOAuth2ClientAuthentication(normalized, environment, body, headers);
+  if (scopes) {
+    body.set('scope', scopes);
+  }
+  applyOAuth2RequestParams(normalized.tokenRequestParams, environment, body, headers);
+
+  const payload = await postOAuthTokenRequest(parseTokenUrl(tokenUrl), body, options, 'OAuth 2.0 password credentials token request', { headers });
+  const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
+  return normalizeAuth({
+    ...normalized,
+    tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
     accessToken: String(payload.access_token),
     refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
     expiresAt: expiresAtFromPayload(payload, options.now)
@@ -470,7 +535,7 @@ function createOAuthPkceSession(auth = {}, environment, options = {}) {
   if (normalized.type !== 'oauth2') {
     throw new Error('OAuth 2.0 auth is required for authorization-code PKCE.');
   }
-  if (normalized.grantType !== 'authorizationCode') {
+  if (!isAuthorizationCodeGrant(normalized.grantType)) {
     throw new Error('OAuth 2.0 authorization-code grant is required for PKCE.');
   }
 
@@ -479,21 +544,32 @@ function createOAuthPkceSession(auth = {}, environment, options = {}) {
   const clientId = requireResolvedValue(normalized.clientId, environment, 'OAuth 2.0 client ID');
   const redirectUri = requireResolvedValue(options.redirectUri || normalized.redirectUri, environment, 'OAuth 2.0 redirect URI');
   const scopes = resolveEnvironmentValue(normalized.scopes, environment).trim();
-  const state = options.state || randomBase64Url(OAUTH_PKCE_STATE_BYTES);
-  const codeVerifier = options.codeVerifier || randomBase64Url(OAUTH_PKCE_CODE_VERIFIER_BYTES);
-  validatePkceCodeVerifier(codeVerifier);
-  const codeChallenge = pkceChallengeForVerifier(codeVerifier);
+  const state = options.state || resolveEnvironmentValue(normalized.state, environment).trim() || randomBase64Url(OAUTH_PKCE_STATE_BYTES);
+  const usesPkce = normalized.grantType === 'authorizationCodePkce';
+  const codeVerifier = usesPkce
+    ? (options.codeVerifier || resolveEnvironmentValue(normalized.codeVerifier, environment).trim() || randomBase64Url(OAUTH_PKCE_CODE_VERIFIER_BYTES))
+    : '';
+  const codeChallengeMethod = usesPkce && normalized.codeChallengeMethod === 'plain' ? 'plain' : 'S256';
+  const codeChallenge = usesPkce
+    ? (codeChallengeMethod === 'plain' ? codeVerifier : pkceChallengeForVerifier(codeVerifier))
+    : '';
+  if (usesPkce) {
+    validatePkceCodeVerifier(codeVerifier);
+  }
 
   const url = parseTokenUrl(authorizationUrl, 'OAuth 2.0 authorization URL');
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('code_challenge', codeChallenge);
-  url.searchParams.set('code_challenge_method', 'S256');
   url.searchParams.set('state', state);
+  if (usesPkce) {
+    url.searchParams.set('code_challenge', codeChallenge);
+    url.searchParams.set('code_challenge_method', codeChallengeMethod);
+  }
   if (scopes) {
     url.searchParams.set('scope', scopes);
   }
+  applyOAuth2AuthRequestParams(normalized.authRequestParams, environment, url);
 
   return {
     authorizationUrl: url.toString(),
@@ -502,8 +578,11 @@ function createOAuthPkceSession(auth = {}, environment, options = {}) {
     clientId,
     clientSecret: resolveEnvironmentValue(normalized.clientSecret, environment),
     scopes,
+    clientAuthentication: normalized.clientAuthentication,
+    tokenRequestParams: normalized.tokenRequestParams,
     state,
     codeVerifier,
+    codeChallengeMethod: usesPkce ? codeChallengeMethod : '',
     codeChallenge
   };
 }
@@ -535,29 +614,38 @@ async function exchangeOAuthAuthorizationCode(auth = {}, session, callbackUrl, e
   const tokenUrl = requireResolvedValue(session.tokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const clientId = requireResolvedValue(session.clientId || normalized.clientId, environment, 'OAuth 2.0 client ID');
   const redirectUri = requireResolvedValue(session.redirectUri || normalized.redirectUri, environment, 'OAuth 2.0 redirect URI');
-  const codeVerifier = requireResolvedValue(session.codeVerifier, environment, 'OAuth 2.0 PKCE code verifier');
-  validatePkceCodeVerifier(codeVerifier);
+  const codeVerifier = resolveEnvironmentValue(session.codeVerifier, environment).trim();
+  if (codeVerifier) {
+    validatePkceCodeVerifier(codeVerifier);
+  }
   const body = new URLSearchParams();
+  const headers = {};
   body.set('grant_type', 'authorization_code');
   body.set('code', code);
   body.set('redirect_uri', redirectUri);
-  body.set('client_id', clientId);
-  body.set('code_verifier', codeVerifier);
-  const clientSecret = resolveEnvironmentValue(session.clientSecret || normalized.clientSecret, environment);
-  if (clientSecret) {
-    body.set('client_secret', clientSecret);
+  if (codeVerifier) {
+    body.set('code_verifier', codeVerifier);
   }
+  applyOAuth2ClientAuthentication({
+    ...normalized,
+    clientAuthentication: session.clientAuthentication || normalized.clientAuthentication,
+    clientId,
+    clientSecret: session.clientSecret || normalized.clientSecret
+  }, environment, body, headers);
+  applyOAuth2RequestParams(session.tokenRequestParams || normalized.tokenRequestParams, environment, body, headers);
 
   const payload = await postOAuthTokenRequest(
     parseTokenUrl(tokenUrl),
     body,
     options,
-    'OAuth 2.0 authorization-code token request'
+    'OAuth 2.0 authorization-code token request',
+    { headers }
   );
   const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
   return normalizeAuth({
     ...normalized,
     tokenType,
+    headerPrefix: normalized.headerPrefix || tokenType,
     accessToken: String(payload.access_token),
     refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
     expiresAt: expiresAtFromPayload(payload, options.now),
@@ -582,6 +670,7 @@ async function requestOAuthDeviceAuthorization(auth = {}, environment, options =
   if (scopes) {
     body.set('scope', scopes);
   }
+  applyOAuth2RequestParams(normalized.authRequestParams, environment, body, {});
 
   const payload = await postOAuthTokenRequest(
     parseTokenUrl(deviceAuthorizationUrl, 'OAuth 2.0 device authorization URL'),
@@ -617,10 +706,9 @@ async function pollOAuthDeviceToken(auth = {}, environment, options = {}) {
     throw new Error('OAuth 2.0 device-code auth is required for device token polling.');
   }
 
-  const tokenUrl = requireResolvedValue(normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
+  const tokenUrl = requireResolvedValue(normalized.refreshTokenUrl || normalized.tokenUrl, environment, 'OAuth 2.0 token URL');
   const deviceCode = requireResolvedValue(normalized.deviceCode, environment, 'OAuth 2.0 device code');
   const clientId = requireResolvedValue(normalized.clientId, environment, 'OAuth 2.0 client ID');
-  const clientSecret = resolveEnvironmentValue(normalized.clientSecret, environment);
   let intervalMillis = positiveNumberOrDefault(normalized.devicePollIntervalSeconds, OAUTH_DEVICE_DEFAULT_INTERVAL_SECONDS) * 1000;
   const now = Number(options.now || Date.now());
   const deadline = deviceCodeDeadlineMillis(normalized, now);
@@ -633,24 +721,25 @@ async function pollOAuthDeviceToken(auth = {}, environment, options = {}) {
       nextAttemptAt: new Date(Date.now() + intervalMillis).toISOString()
     });
     const body = new URLSearchParams();
+    const headers = {};
     body.set('grant_type', OAUTH_DEVICE_GRANT_TYPE);
     body.set('device_code', deviceCode);
-    body.set('client_id', clientId);
-    if (clientSecret) {
-      body.set('client_secret', clientSecret);
-    }
+    applyOAuth2ClientAuthentication({ ...normalized, clientId }, environment, body, headers);
+    applyOAuth2RequestParams(normalized.tokenRequestParams, environment, body, headers);
 
     try {
       const payload = await postOAuthTokenRequest(
         parseTokenUrl(tokenUrl),
         body,
         fetchOptions,
-        'OAuth 2.0 device token request'
+        'OAuth 2.0 device token request',
+        { headers }
       );
       const tokenType = normalizeTokenType(payload.token_type || normalized.tokenType);
       return normalizeAuth({
         ...normalized,
         tokenType,
+        headerPrefix: normalized.headerPrefix || tokenType,
         accessToken: String(payload.access_token),
         refreshToken: payload.refresh_token ? String(payload.refresh_token) : normalized.refreshToken,
         expiresAt: expiresAtFromPayload(payload, Date.now()),
@@ -685,7 +774,11 @@ async function pollOAuthDeviceToken(auth = {}, environment, options = {}) {
 }
 
 function shouldRefreshOAuthToken(auth, environment, now = Date.now()) {
-  if (!resolveEnvironmentValue(auth.refreshToken, environment).trim() || !resolveEnvironmentValue(auth.tokenUrl, environment).trim()) {
+  if (auth.autoRefreshToken === false) {
+    return false;
+  }
+  if (!resolveEnvironmentValue(auth.refreshToken, environment).trim()
+    || !resolveEnvironmentValue(auth.refreshTokenUrl || auth.tokenUrl, environment).trim()) {
     return false;
   }
   if (!resolveEnvironmentValue(auth.accessToken, environment).trim()) {
@@ -698,8 +791,28 @@ function shouldRefreshOAuthToken(auth, environment, now = Date.now()) {
   return Number.isFinite(expiresAtMillis) && expiresAtMillis <= Number(now) + OAUTH_REFRESH_WINDOW_MILLIS;
 }
 
-function shouldPollOAuthDeviceToken(auth, environment, now = Date.now()) {
+function shouldRequestPasswordCredentialsToken(auth, environment, now = Date.now()) {
   if (!resolveEnvironmentValue(auth.tokenUrl, environment).trim()
+    || !resolveEnvironmentValue(auth.username, environment).trim()
+    || !resolveEnvironmentValue(auth.password, environment).trim()) {
+    return false;
+  }
+  if (!resolveEnvironmentValue(auth.accessToken, environment).trim()) {
+    return true;
+  }
+  return tokenExpiresSoon(auth.expiresAt, now);
+}
+
+function tokenExpiresSoon(expiresAt, now = Date.now()) {
+  if (!expiresAt) {
+    return false;
+  }
+  const expiresAtMillis = Date.parse(expiresAt);
+  return Number.isFinite(expiresAtMillis) && expiresAtMillis <= Number(now) + OAUTH_REFRESH_WINDOW_MILLIS;
+}
+
+function shouldPollOAuthDeviceToken(auth, environment, now = Date.now()) {
+  if (!resolveEnvironmentValue(auth.refreshTokenUrl || auth.tokenUrl, environment).trim()
     || !resolveEnvironmentValue(auth.clientId, environment).trim()
     || !resolveEnvironmentValue(auth.deviceCode, environment).trim()) {
     return false;
@@ -709,6 +822,10 @@ function shouldPollOAuthDeviceToken(auth, environment, now = Date.now()) {
   }
   const deadline = deviceCodeDeadlineMillis(auth, Number(now));
   return deadline > Number(now);
+}
+
+function isAuthorizationCodeGrant(grantType) {
+  return grantType === 'authorizationCode' || grantType === 'authorizationCodePkce';
 }
 
 function shouldRequestClientCredentialsToken(auth, environment, now = Date.now()) {
@@ -723,8 +840,7 @@ function shouldRequestClientCredentialsToken(auth, environment, now = Date.now()
   if (!auth.expiresAt) {
     return false;
   }
-  const expiresAtMillis = Date.parse(auth.expiresAt);
-  return Number.isFinite(expiresAtMillis) && expiresAtMillis <= Number(now) + OAUTH_REFRESH_WINDOW_MILLIS;
+  return tokenExpiresSoon(auth.expiresAt, now);
 }
 
 function applyAuth(request, environment, target) {
@@ -750,7 +866,12 @@ function applyAuth(request, environment, target) {
     target.headers.Cookie = resolveEnvironmentValue(auth.value, environment);
   } else if (auth.type === 'oauth2') {
     const accessToken = resolveEnvironmentValue(auth.accessToken, environment);
-    target.headers.Authorization = `${auth.tokenType} ${accessToken}`;
+    if (auth.addAuthDataTo === 'query') {
+      target.url.searchParams.set('access_token', accessToken);
+    } else {
+      const headerPrefix = resolveEnvironmentValue(auth.headerPrefix || auth.tokenType, environment).trim();
+      target.headers.Authorization = headerPrefix ? `${headerPrefix} ${accessToken}` : accessToken;
+    }
   } else if (auth.type === 'digest') {
     if (auth.realm && auth.nonce) {
       setHeader(target.headers, 'Authorization', buildDigestAuthorizationHeader(auth, environment, target));
@@ -876,15 +997,19 @@ function digestHash(algorithm, value) {
 function buildHawkAuthorizationHeader(auth, environment, target) {
   const id = resolveEnvironmentValue(auth.authId, environment);
   const key = resolveEnvironmentValue(auth.authKey, environment);
-  const algorithm = String(resolveEnvironmentValue(auth.algorithm, environment) || 'sha256').toLowerCase();
-  if (algorithm !== 'sha1' && algorithm !== 'sha256') {
-    throw new Error(`Unsupported Hawk auth algorithm: ${auth.algorithm}.`);
+  const algorithmName = resolveEnvironmentValue(auth.algorithm, environment);
+  const algorithm = normalizeHawkAlgorithm(algorithmName);
+  if (!algorithm) {
+    throw new Error(`Unsupported Hawk auth algorithm: ${algorithmName || auth.algorithm}.`);
   }
-  const ts = String(Math.floor(Number(target.now || Date.now()) / 1000));
+  const ts = resolveEnvironmentValue(auth.timestamp, environment).trim() || String(Math.floor(Number(target.now || Date.now()) / 1000));
   const nonce = resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(6).toString('hex');
   const ext = resolveEnvironmentValue(auth.extraData, environment);
   const app = resolveEnvironmentValue(auth.app, environment);
   const dlg = resolveEnvironmentValue(auth.delegation, environment);
+  const hash = auth.includePayloadHash === true
+    ? hawkPayloadHash(algorithm, target.body || '', headerValue(target.headers || {}, 'Content-Type'))
+    : '';
   const port = target.url.port || (target.url.protocol === 'https:' ? '443' : '80');
   const normalized = [
     'hawk.1.header',
@@ -894,7 +1019,7 @@ function buildHawkAuthorizationHeader(auth, environment, target) {
     `${target.url.pathname}${target.url.search}`,
     target.url.hostname.toLowerCase(),
     port,
-    '',
+    hash,
     ext,
     app,
     dlg,
@@ -907,6 +1032,9 @@ function buildHawkAuthorizationHeader(auth, environment, target) {
     ['nonce', nonce],
     ['mac', mac]
   ];
+  if (hash) {
+    fields.push(['hash', hash]);
+  }
   if (ext) {
     fields.push(['ext', ext]);
   }
@@ -917,6 +1045,38 @@ function buildHawkAuthorizationHeader(auth, environment, target) {
     fields.push(['dlg', dlg]);
   }
   return `Hawk ${fields.map(([name, value]) => `${name}=${quoteAuthValue(value)}`).join(', ')}`;
+}
+
+function hawkPayloadHash(algorithm, body, contentType = '') {
+  const hash = crypto.createHash(algorithm);
+  hash.update('hawk.1.payload\n', 'utf8');
+  hash.update(normalizeHawkContentType(contentType), 'utf8');
+  hash.update('\n', 'utf8');
+  if (Buffer.isBuffer(body)) {
+    hash.update(body);
+  } else {
+    hash.update(String(body || ''), 'utf8');
+  }
+  hash.update('\n', 'utf8');
+  return hash.digest('base64');
+}
+
+function normalizeHawkAlgorithm(value) {
+  const normalized = String(value || 'sha256').trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (normalized === 'sha1') {
+    return 'sha1';
+  }
+  if (normalized === 'sha256') {
+    return 'sha256';
+  }
+  return null;
+}
+
+function normalizeHawkContentType(contentType = '') {
+  return String(contentType || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
 }
 
 function applyAwsSignature(auth, environment, target) {
@@ -981,6 +1141,7 @@ function applyOAuth1Signature(auth, environment, target) {
   if (!OAUTH1_SIGNATURE_METHODS.has(signatureMethod)) {
     throw new Error(`Unsupported OAuth 1.0 signature method: ${auth.signatureMethod}.`);
   }
+  const addEmptyParamsToSign = auth.addEmptyParamsToSign === true;
   const params = {
     oauth_consumer_key: resolveEnvironmentValue(auth.consumerKey, environment),
     oauth_nonce: resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(12).toString('hex'),
@@ -988,16 +1149,15 @@ function applyOAuth1Signature(auth, environment, target) {
     oauth_timestamp: resolveEnvironmentValue(auth.timestamp, environment).trim() || String(Math.floor(Number(target.now || Date.now()) / 1000)),
     oauth_version: resolveEnvironmentValue(auth.version, environment).trim() || '1.0'
   };
-  const token = resolveEnvironmentValue(auth.token, environment);
-  if (token) {
-    params.oauth_token = token;
+  appendOptionalOAuth1Param(params, 'oauth_token', resolveEnvironmentValue(auth.token, environment), addEmptyParamsToSign);
+  appendOptionalOAuth1Param(params, 'oauth_callback', resolveEnvironmentValue(auth.callback, environment), addEmptyParamsToSign);
+  appendOptionalOAuth1Param(params, 'oauth_verifier', resolveEnvironmentValue(auth.verifier, environment), addEmptyParamsToSign);
+  if (auth.includeBodyHash === true) {
+    params.oauth_body_hash = oauth1BodyHash(target.body);
   }
-  const baseParams = new URLSearchParams(target.url.search);
-  for (const [key, value] of Object.entries(params)) {
-    baseParams.append(key, value);
-  }
+  const baseParams = oauth1SignatureBaseParams(target, params, addEmptyParamsToSign);
   const baseUrl = `${target.url.protocol}//${target.url.host}${target.url.pathname}`;
-  const normalizedParams = [...baseParams.entries()]
+  const normalizedParams = baseParams
     .map(([key, value]) => [oauthPercentEncode(key), oauthPercentEncode(value)])
     .sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey))
     .map(([key, value]) => `${key}=${value}`)
@@ -1007,23 +1167,133 @@ function applyOAuth1Signature(auth, environment, target) {
     oauthPercentEncode(baseUrl),
     oauthPercentEncode(normalizedParams)
   ].join('&');
-  const signingKey = `${oauthPercentEncode(resolveEnvironmentValue(auth.consumerSecret, environment))}&${oauthPercentEncode(resolveEnvironmentValue(auth.tokenSecret, environment))}`;
-  const signature = signatureMethod === 'PLAINTEXT'
-    ? signingKey
-    : crypto
-      .createHmac(signatureMethod === 'HMAC-SHA256' ? 'sha256' : 'sha1', signingKey)
-      .update(baseString, 'utf8')
-      .digest('base64');
+  const signature = oauth1Signature(signatureMethod, baseString, auth, environment);
   const headerParams = {
     ...params,
     oauth_signature: signature
   };
+  if (auth.addAuthDataTo === 'queryOrBody') {
+    appendOAuth1ParamsToRequest(target, headerParams);
+    return;
+  }
   const realm = resolveEnvironmentValue(auth.realm, environment);
   const parts = realm ? [`realm=${quoteAuthValue(realm)}`] : [];
   for (const key of Object.keys(headerParams).sort()) {
     parts.push(`${oauthPercentEncode(key)}=${quoteAuthValue(oauthPercentEncode(headerParams[key]))}`);
   }
   setHeader(target.headers, 'Authorization', `OAuth ${parts.join(', ')}`);
+}
+
+function appendOptionalOAuth1Param(params, key, value, includeEmpty) {
+  const resolved = String(value ?? '');
+  if (resolved || includeEmpty) {
+    params[key] = resolved;
+  }
+}
+
+function oauth1Signature(signatureMethod, baseString, auth, environment) {
+  const consumerSecret = resolveEnvironmentValue(auth.consumerSecret, environment);
+  const tokenSecret = resolveEnvironmentValue(auth.tokenSecret, environment);
+  const signingKey = `${oauthPercentEncode(consumerSecret)}&${oauthPercentEncode(tokenSecret)}`;
+  if (signatureMethod === 'PLAINTEXT') {
+    return signingKey;
+  }
+  if (signatureMethod.startsWith('RSA-')) {
+    return crypto
+      .createSign(oauth1RsaSignatureAlgorithm(signatureMethod))
+      .update(baseString, 'utf8')
+      .sign(resolveEnvironmentValue(auth.privateKey, environment) || consumerSecret, 'base64');
+  }
+  return crypto
+    .createHmac(oauth1HmacHashAlgorithm(signatureMethod), signingKey)
+    .update(baseString, 'utf8')
+    .digest('base64');
+}
+
+function oauth1HmacHashAlgorithm(signatureMethod) {
+  if (signatureMethod === 'HMAC-SHA512') {
+    return 'sha512';
+  }
+  if (signatureMethod === 'HMAC-SHA256') {
+    return 'sha256';
+  }
+  return 'sha1';
+}
+
+function oauth1RsaSignatureAlgorithm(signatureMethod) {
+  if (signatureMethod === 'RSA-SHA512') {
+    return 'RSA-SHA512';
+  }
+  if (signatureMethod === 'RSA-SHA256') {
+    return 'RSA-SHA256';
+  }
+  return 'RSA-SHA1';
+}
+
+function oauth1SignatureBaseParams(target, oauthParams, includeEmpty) {
+  const params = [];
+  appendOAuth1SearchParams(params, target.url.searchParams, includeEmpty, { excludeOAuthSignature: false });
+  if (oauth1BodyContributesToSignature(target)) {
+    appendOAuth1SearchParams(params, new URLSearchParams(oauth1BodyText(target.body)), includeEmpty, { excludeOAuthSignature: false });
+  }
+  for (const [key, value] of Object.entries(oauthParams)) {
+    if (key !== 'oauth_signature' && (includeEmpty || String(value) !== '')) {
+      params.push([key, value]);
+    }
+  }
+  return params;
+}
+
+function appendOAuth1ParamsToRequest(target, params) {
+  if (oauth1ShouldPlaceParamsInBody(target)) {
+    const bodyParams = new URLSearchParams(oauth1BodyText(target.body));
+    for (const [key, value] of Object.entries(params)) {
+      bodyParams.append(key, value);
+    }
+    target.body = bodyParams.toString();
+    return;
+  }
+  for (const [key, value] of Object.entries(params)) {
+    target.url.searchParams.append(key, value);
+  }
+}
+
+function oauth1ShouldPlaceParamsInBody(target) {
+  return String(target.method || 'GET').toUpperCase() !== 'GET' && oauth1BodyContributesToSignature(target);
+}
+
+function oauth1BodyContributesToSignature(target) {
+  return target.body != null
+    && (
+      target.bodyType === 'URLENCODED'
+      || String(headerValue(target.headers, 'Content-Type') || '').toLowerCase().split(';')[0].trim() === 'application/x-www-form-urlencoded'
+    );
+}
+
+function appendOAuth1SearchParams(target, source, includeEmpty, options = {}) {
+  for (const [key, value] of source.entries()) {
+    if (options.excludeOAuthSignature && key === 'oauth_signature') {
+      continue;
+    }
+    if (includeEmpty || String(value) !== '') {
+      target.push([key, value]);
+    }
+  }
+}
+
+function oauth1BodyText(body) {
+  if (Buffer.isBuffer(body)) {
+    return body.toString('utf8');
+  }
+  return String(body ?? '');
+}
+
+function oauth1BodyHash(body) {
+  const hash = crypto.createHash('sha1');
+  if (Buffer.isBuffer(body)) {
+    return hash.update(body).digest('base64');
+  }
+  return hash.update(String(body ?? ''), 'utf8').digest('base64');
 }
 
 function buildNtlmType1AuthorizationHeader(auth, environment) {
@@ -1121,16 +1391,17 @@ function applyAkamaiEdgeGridSignature(auth, environment, target) {
   const accessToken = resolveEnvironmentValue(auth.accessToken, environment);
   const clientToken = resolveEnvironmentValue(auth.clientToken, environment);
   const clientSecret = resolveEnvironmentValue(auth.clientSecret, environment);
-  const timestamp = edgeGridTimestamp(target.now || Date.now());
+  const timestamp = resolveEnvironmentValue(auth.timestamp, environment).trim() || edgeGridTimestamp(target.now || Date.now());
   const nonce = resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(16).toString('hex');
+  const signingUrl = edgeGridSigningUrl(target.url, auth.baseUrl, environment);
   const authPrefix = `EG1-HMAC-SHA256 client_token=${clientToken};access_token=${accessToken};timestamp=${timestamp};nonce=${nonce};`;
   const dataToSign = [
     String(target.method || 'GET').toUpperCase(),
-    target.url.protocol.replace(/:$/, ''),
-    target.url.hostname.toLowerCase(),
+    signingUrl.protocol.replace(/:$/, ''),
+    signingUrl.hostname.toLowerCase(),
     `${target.url.pathname}${target.url.search}`,
     edgeGridCanonicalHeaders(target.headers, auth.headersToSign, environment),
-    sha256Base64(target.body || ''),
+    sha256Base64(edgeGridBodyForHash(target.body || '', auth.maxBodySize, environment)),
     authPrefix
   ].join('\t');
   const signingKey = crypto.createHmac('sha256', clientSecret).update(timestamp, 'utf8').digest('base64');
@@ -1140,9 +1411,9 @@ function applyAkamaiEdgeGridSignature(auth, environment, target) {
 
 function applyJwtBearerAuth(auth, environment, target) {
   const token = buildJwtToken(auth, environment, target.now || Date.now());
-  const location = String(resolveEnvironmentValue(auth.addTokenTo, environment) || 'header').toLowerCase();
+  const location = normalizeJwtTokenPlacement(resolveEnvironmentValue(auth.addTokenTo, environment) || 'header');
   if (location === 'query') {
-    target.url.searchParams.set(resolveEnvironmentValue(auth.queryParamName, environment).trim() || 'token', token);
+    target.url.searchParams.set('token', token);
     return;
   }
   const prefix = resolveEnvironmentValue(auth.headerPrefix, environment).trim() || 'Bearer';
@@ -1150,17 +1421,24 @@ function applyJwtBearerAuth(auth, environment, target) {
 }
 
 function applyAsapAuth(auth, environment, target) {
+  const issuer = resolveEnvironmentValue(auth.issuer, environment);
+  const subject = resolveEnvironmentValue(auth.subject, environment) || issuer;
+  const audience = resolveEnvironmentValue(auth.audience, environment);
+  const configuredClaims = {
+    iss: issuer,
+    sub: subject,
+    aud: audience,
+    ...parseJwtClaims(resolveEnvironmentValue(auth.additionalClaims || auth.claims || '{}', environment))
+  };
   const token = buildJwtToken({
     ...auth,
-    claims: JSON.stringify({
-      iss: resolveEnvironmentValue(auth.issuer, environment),
-      sub: resolveEnvironmentValue(auth.subject, environment) || resolveEnvironmentValue(auth.issuer, environment),
-      aud: resolveEnvironmentValue(auth.audience, environment)
-    }),
-    headerPrefix: auth.headerPrefix || 'Bearer'
+    issuer: '',
+    subject: '',
+    audience: '',
+    expiresIn: auth.expiresIn || auth.expiry || '3600',
+    claims: JSON.stringify(configuredClaims)
   }, environment, target.now || Date.now());
-  const prefix = resolveEnvironmentValue(auth.headerPrefix, environment).trim() || 'Bearer';
-  setHeader(target.headers, 'Authorization', `${prefix} ${token}`);
+  setHeader(target.headers, 'Authorization', `Bearer ${token}`);
 }
 
 function buildJwtToken(auth, environment, now = Date.now()) {
@@ -1181,7 +1459,8 @@ function buildJwtToken(auth, environment, now = Date.now()) {
   if (issuer) { payload.iss = issuer; }
   if (subject) { payload.sub = subject; }
   if (audience) { payload.aud = audience; }
-  const header = { alg: algorithm, typ: 'JWT' };
+  const customHeaders = parseJwtHeaders(resolveEnvironmentValue(auth.jwtHeaders, environment));
+  const header = { typ: 'JWT', ...customHeaders, alg: algorithm };
   const keyId = resolveEnvironmentValue(auth.keyId, environment);
   if (keyId) { header.kid = keyId; }
   const signingInput = `${base64UrlJson(header)}.${base64UrlJson(payload)}`;
@@ -1193,11 +1472,22 @@ function jwtSignature(algorithm, signingInput, auth, environment) {
     return '';
   }
   if (algorithm.startsWith('HS')) {
-    const secret = requireResolvedValue(auth.secret || auth.clientSecret, environment, 'JWT secret');
+    const secret = jwtHmacSecret(auth, environment);
     return crypto.createHmac(jwtHashForAlgorithm(algorithm), secret).update(signingInput, 'utf8').digest('base64url');
   }
   const privateKey = requireResolvedValue(auth.privateKey, environment, 'JWT private key');
-  return crypto.sign(jwtHashForAlgorithm(algorithm), Buffer.from(signingInput, 'utf8'), privateKey).toString('base64url');
+  const input = Buffer.from(signingInput, 'utf8');
+  if (algorithm.startsWith('PS')) {
+    return crypto.sign(jwtHashForAlgorithm(algorithm), input, {
+      key: privateKey,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
+    }).toString('base64url');
+  }
+  if (algorithm.startsWith('ES')) {
+    return ecdsaDerToJose(crypto.sign(jwtHashForAlgorithm(algorithm), input, privateKey), ecdsaPartLength(algorithm)).toString('base64url');
+  }
+  return crypto.sign(jwtHashForAlgorithm(algorithm), input, privateKey).toString('base64url');
 }
 
 function normalizeJwtAlgorithm(value) {
@@ -1205,10 +1495,40 @@ function normalizeJwtAlgorithm(value) {
   if (algorithm === 'NONE') {
     return 'none';
   }
-  if (['HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512'].includes(algorithm)) {
+  if ([
+    'HS256',
+    'HS384',
+    'HS512',
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ].includes(algorithm)) {
     return algorithm;
   }
   return '';
+}
+
+function normalizeJwtTokenPlacement(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+  if (normalized === 'query' || normalized === 'queryparam' || normalized === 'requesturl' || normalized === 'url') {
+    return 'query';
+  }
+  return 'header';
+}
+
+function jwtHmacSecret(auth, environment) {
+  const raw = requireResolvedValue(auth.secret || auth.clientSecret, environment, 'JWT secret');
+  if (auth.secretBase64Encoded !== true) {
+    return raw;
+  }
+  const normalized = raw.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(normalized, 'base64');
 }
 
 function jwtHashForAlgorithm(algorithm) {
@@ -1232,6 +1552,80 @@ function parseJwtClaims(value) {
   } catch {
     return {};
   }
+}
+
+function parseJwtHeaders(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function ecdsaPartLength(algorithm) {
+  if (algorithm.endsWith('384')) {
+    return 48;
+  }
+  if (algorithm.endsWith('512')) {
+    return 66;
+  }
+  return 32;
+}
+
+function ecdsaDerToJose(signature, partLength) {
+  const der = Buffer.from(signature);
+  let offset = 0;
+  if (der[offset++] !== 0x30) {
+    return der;
+  }
+  const sequenceLength = readDerLength(der, offset);
+  offset = sequenceLength.offset;
+  if (der[offset++] !== 0x02) {
+    return der;
+  }
+  const rLength = readDerLength(der, offset);
+  offset = rLength.offset;
+  const r = der.slice(offset, offset + rLength.length);
+  offset += rLength.length;
+  if (der[offset++] !== 0x02) {
+    return der;
+  }
+  const sLength = readDerLength(der, offset);
+  offset = sLength.offset;
+  const s = der.slice(offset, offset + sLength.length);
+  return Buffer.concat([leftPadEcdsaPart(r, partLength), leftPadEcdsaPart(s, partLength)]);
+}
+
+function readDerLength(buffer, offset) {
+  const first = buffer[offset];
+  if ((first & 0x80) === 0) {
+    return { length: first, offset: offset + 1 };
+  }
+  const bytes = first & 0x7f;
+  let length = 0;
+  for (let index = 0; index < bytes; index += 1) {
+    length = (length << 8) | buffer[offset + 1 + index];
+  }
+  return { length, offset: offset + 1 + bytes };
+}
+
+function leftPadEcdsaPart(value, partLength) {
+  let part = Buffer.from(value);
+  while (part.length > partLength && part[0] === 0) {
+    part = part.slice(1);
+  }
+  if (part.length > partLength) {
+    return part.slice(part.length - partLength);
+  }
+  if (part.length === partLength) {
+    return part;
+  }
+  return Buffer.concat([Buffer.alloc(partLength - part.length), part]);
 }
 
 function base64UrlJson(value) {
@@ -1316,6 +1710,18 @@ function normalizeOAuth1SignatureMethod(value) {
   }
   if (method === 'HMACSHA256') {
     return 'HMAC-SHA256';
+  }
+  if (method === 'HMACSHA512') {
+    return 'HMAC-SHA512';
+  }
+  if (method === 'RSASHA1') {
+    return 'RSA-SHA1';
+  }
+  if (method === 'RSASHA256') {
+    return 'RSA-SHA256';
+  }
+  if (method === 'RSASHA512') {
+    return 'RSA-SHA512';
   }
   return method;
 }
@@ -1449,6 +1855,18 @@ function edgeGridTimestamp(now) {
   return new Date(Number(now)).toISOString().replace(/\.\d{3}Z$/, '+0000');
 }
 
+function edgeGridSigningUrl(requestUrl, baseUrl, environment) {
+  const rawBaseUrl = resolveEnvironmentValue(baseUrl, environment).trim();
+  if (!rawBaseUrl) {
+    return requestUrl;
+  }
+  try {
+    return new URL(rawBaseUrl);
+  } catch {
+    return requestUrl;
+  }
+}
+
 function edgeGridCanonicalHeaders(headers, headersToSign, environment) {
   const names = String(resolveEnvironmentValue(headersToSign || '', environment) || '')
     .split(/[,\s]+/)
@@ -1461,6 +1879,19 @@ function edgeGridCanonicalHeaders(headers, headersToSign, environment) {
     })
     .filter(Boolean)
     .join('\t');
+}
+
+function edgeGridBodyForHash(body, maxBodySize, environment) {
+  const rawMaxBodySize = resolveEnvironmentValue(maxBodySize, environment).trim();
+  const parsed = Number(rawMaxBodySize);
+  if (!rawMaxBodySize || !Number.isFinite(parsed) || parsed < 0) {
+    return body;
+  }
+  const size = Math.floor(parsed);
+  if (Buffer.isBuffer(body)) {
+    return body.slice(0, size);
+  }
+  return Buffer.from(String(body || ''), 'utf8').slice(0, size);
 }
 
 function sha256Base64(value) {
@@ -1505,6 +1936,49 @@ function parseCallbackUrl(value) {
   }
 }
 
+function applyOAuth2ClientAuthentication(auth, environment, body, headers) {
+  const clientId = resolveEnvironmentValue(auth.clientId, environment).trim();
+  const clientSecret = resolveEnvironmentValue(auth.clientSecret, environment);
+  if (!clientId) {
+    return;
+  }
+  if (auth.clientAuthentication === 'basic' && clientSecret) {
+    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`, 'utf8').toString('base64')}`;
+    return;
+  }
+  body.set('client_id', clientId);
+  if (clientSecret) {
+    body.set('client_secret', clientSecret);
+  }
+}
+
+function applyOAuth2AuthRequestParams(params, environment, url) {
+  for (const param of oauth2RequestParams(params, environment)) {
+    url.searchParams.set(param.key, param.value);
+  }
+}
+
+function applyOAuth2RequestParams(params, environment, body, headers) {
+  for (const param of oauth2RequestParams(params, environment)) {
+    if (param.sendIn === 'header') {
+      headers[param.key] = param.value;
+    } else {
+      body.set(param.key, param.value);
+    }
+  }
+}
+
+function oauth2RequestParams(params, environment) {
+  return (Array.isArray(params) ? params : [])
+    .filter((param) => param && param.enabled !== false)
+    .map((param) => ({
+      key: resolveEnvironmentValue(param.key, environment).trim(),
+      value: resolveEnvironmentValue(param.value, environment),
+      sendIn: String(param.sendIn || 'body').toLowerCase() === 'header' ? 'header' : 'body'
+    }))
+    .filter((param) => param.key);
+}
+
 async function postOAuthTokenRequest(url, body, options, label, requestOptions = {}) {
   const fetchImpl = options.fetchImpl || fetch;
   const response = await fetchImpl(url, {
@@ -1512,7 +1986,8 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
     redirect: 'manual',
     headers: {
       Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...(requestOptions.headers || {})
     },
     body,
     signal: options.signal
@@ -1884,8 +2359,10 @@ module.exports = {
   refreshOAuthToken,
   requestOAuthClientCredentialsToken,
   requestOAuthDeviceAuthorization,
+  requestOAuthPasswordCredentialsToken,
   shouldPollOAuthDeviceToken,
   shouldRequestClientCredentialsToken,
+  shouldRequestPasswordCredentialsToken,
   shouldRefreshOAuthToken,
   validateAuth
 };

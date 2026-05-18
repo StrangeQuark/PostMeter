@@ -12,6 +12,18 @@
   display: none;
 }
 
+.modal-backdrop.is-stacked .modal:not([hidden]) {
+  grid-area: 1 / 1;
+}
+
+.modal-backdrop.is-stacked .modal.is-stack-parent {
+  z-index: 1;
+}
+
+.modal-backdrop.is-stacked .modal.is-stack-top {
+  z-index: 2;
+}
+
 .modal {
   width: min(520px, 100%);
   padding: 18px;
@@ -891,6 +903,226 @@
   margin: 0;
   color: var(--muted);
   font-size: var(--ui-font-size-sm);
+}
+
+.cookies-manager-modal {
+  width: min(860px, 100%);
+  max-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.cookies-modal-tabs {
+  display: flex;
+  gap: 12px;
+  margin: 4px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cookie-modal-tab {
+  min-height: 34px;
+  padding: 0 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.cookie-modal-tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.cookie-domain-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+
+.cookie-domain-add-row input,
+.cookie-domain-add-row button {
+  min-height: 34px;
+}
+
+.cookies-domain-list {
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.cookie-domain-section {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.cookie-domain-section[open] {
+  background: color-mix(in srgb, var(--surface-muted) 78%, var(--surface));
+}
+
+.cookie-domain-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cookie-domain-summary::-webkit-details-marker {
+  display: none;
+}
+
+.cookie-domain-summary::before {
+  content: ">";
+  color: var(--muted);
+  font-size: var(--ui-font-size-md);
+  transform: rotate(0deg);
+  transition: transform 0.12s ease;
+}
+
+.cookie-domain-section[open] .cookie-domain-summary::before {
+  transform: rotate(90deg);
+}
+
+.cookie-domain-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cookie-domain-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--ui-font-size-xs);
+}
+
+.cookie-domain-remove-button {
+  flex: 0 0 auto;
+  min-width: 28px;
+  min-height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--ui-font-size-md);
+}
+
+.cookie-domain-remove-button:hover:not(:disabled),
+.cookie-domain-remove-button:focus-visible {
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface) 76%, var(--surface-muted));
+  color: var(--danger);
+}
+
+.cookie-domain-body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 12px 12px;
+}
+
+.cookie-name-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.cookie-name-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cookie-name-button {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.cookie-name-button:hover:not(:disabled),
+.cookie-name-button:focus-visible,
+.cookie-name-button.is-active {
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface) 76%, var(--surface-muted));
+  color: var(--text);
+}
+
+.cookie-name-button.is-managed {
+  color: var(--muted);
+}
+
+.cookie-remove-button {
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--ui-font-size-md);
+}
+
+.cookie-add-inline-button {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.cookie-add-inline-button:hover:not(:disabled),
+.cookie-add-inline-button:focus-visible {
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface) 76%, var(--surface-muted));
+  color: var(--text);
+}
+
+.cookie-text-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.cookie-text-editor textarea {
+  min-height: 110px;
+  resize: vertical;
+  font-family: var(--mono);
+}
+
+.cookie-text-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cookie-manager-empty,
+.cookie-manager-error {
+  color: var(--muted);
+  font-size: var(--ui-font-size-sm);
+}
+
+.cookie-manager-error {
+  margin-bottom: 10px;
+  color: var(--danger);
+}
+
+.cookie-clear-menu-group .toolbar-menu {
+  right: 0;
+  left: auto;
+  min-width: 150px;
 }
 
 .file-picker-modal {

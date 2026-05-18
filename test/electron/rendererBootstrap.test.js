@@ -15,6 +15,134 @@ function selectOptionValues(source, id) {
   return [...match[1].matchAll(/<option value="([^"]+)"/g)].map((optionMatch) => optionMatch[1]);
 }
 
+function assertDigestAdvancedMarkup(source, ids) {
+  const usernameIndex = source.indexOf(`id="${ids.username}"`);
+  assert.notEqual(usernameIndex, -1, `Expected ${ids.username} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', usernameIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.username} Digest advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.username} Digest advanced disclosure to close.`);
+
+  const visibleSource = source.slice(usernameIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+  const retryTooltip = 'PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.';
+
+  assert.match(visibleSource, new RegExp(`id="${ids.password}"`));
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the Digest advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /class="checkbox-line auth-wide"/);
+  assert.match(advancedSource, /<span>Disable retry<\/span>/);
+  assert.ok(advancedSource.includes(`title="${retryTooltip}"`));
+}
+
+function assertHawkAdvancedMarkup(source, ids) {
+  const authIdIndex = source.indexOf(`id="${ids.authId}"`);
+  assert.notEqual(authIdIndex, -1, `Expected ${ids.authId} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', authIdIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.authId} Hawk advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.authId} Hawk advanced disclosure to close.`);
+
+  const visibleSource = source.slice(authIdIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the Hawk advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /Include payload hash/);
+}
+
+function assertAwsAdvancedMarkup(source, ids) {
+  const accessKeyIndex = source.indexOf(`id="${ids.accessKey}"`);
+  assert.notEqual(accessKeyIndex, -1, `Expected ${ids.accessKey} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', accessKeyIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.accessKey} AWS advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.accessKey} AWS advanced disclosure to close.`);
+
+  const visibleSource = source.slice(accessKeyIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the AWS advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+}
+
+function assertOauth1AdvancedMarkup(source, ids) {
+  const signatureIndex = source.indexOf(`id="${ids.signatureMethod}"`);
+  assert.notEqual(signatureIndex, -1, `Expected ${ids.signatureMethod} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', signatureIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.signatureMethod} OAuth 1.0 advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.signatureMethod} OAuth 1.0 advanced disclosure to close.`);
+
+  const visibleSource = source.slice(signatureIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the OAuth 1.0 advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /Include body hash/);
+  assert.match(advancedSource, /Add empty parameters to signature/);
+}
+
+function assertOauth2AdvancedMarkup(source, ids) {
+  const startId = ids.start || ids.grantType;
+  const grantIndex = source.indexOf(`id="${startId}"`);
+  assert.notEqual(grantIndex, -1, `Expected ${startId} to exist.`);
+
+  const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', grantIndex);
+  assert.notEqual(advancedStart, -1, `Expected ${ids.grantType} OAuth 2.0 advanced disclosure to exist.`);
+
+  const advancedEnd = source.indexOf('</details>', advancedStart);
+  assert.notEqual(advancedEnd, -1, `Expected ${ids.grantType} OAuth 2.0 advanced disclosure to close.`);
+
+  const visibleSource = source.slice(grantIndex, advancedStart);
+  const advancedSource = source.slice(advancedStart, advancedEnd);
+
+  for (const id of ids.main) {
+    assert.match(visibleSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ids.advanced) {
+    assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the OAuth 2.0 advanced disclosure.`);
+    assert.match(advancedSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(advancedSource, /<summary>Advanced<\/summary>/);
+  assert.match(advancedSource, /Refresh Token URL/);
+  assert.match(advancedSource, /Auth Request/);
+  assert.match(advancedSource, /Token Request/);
+  assert.match(advancedSource, /Refresh Request/);
+  if (ids.advanced.includes('clearOauthCookiesButton')) {
+    assert.match(advancedSource, /Clear cookies/);
+  }
+}
+
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
   const windowListeners = new Map();
@@ -134,7 +262,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerAuthRefreshTokenManageRequestButton"[^>]*>Manage<\/button>/);
   assert.match(indexSource, /id="runnerAuthRefreshTokenAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
   assert.match(indexSource, /id="runnerAuthRefreshTokenRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
-  assert.match(indexSource, /class="auth-refresh-refresh-token" data-auth-refresh-types="bearer oauth2 cookie"/);
+  assert.match(indexSource, /class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie"/);
   assert.match(indexSource, /id="performanceAuthRefreshManageRequestButton"[^>]*>Manage<\/button>/);
   assert.match(indexSource, /id="performanceAuthRefreshAutoDetectRequestButton"[^>]*>Auto-Detect<\/button>/);
   assert.match(indexSource, /id="performanceAuthRefreshRemoveRequestButton"[^>]*class="danger-button"[^>]*>Remove<\/button>/);
@@ -163,6 +291,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /buildAuthRefreshAutoDetectCandidates\(response\)/);
   assert.match(rendererSource, /function confirmAuthRefreshAutoDetectModal\(\)/);
   assert.match(rendererSource, /apiKey:\s*\{\s*label:\s*'API key',\s*controlName:\s*'ApiKey'\s*\}/);
+  assert.doesNotMatch(rendererSource, /oauth2:\s*\{\s*label:\s*'OAuth access token'/);
   assert.match(rendererSource, /aws:\s*\{\s*label:\s*'AWS access key ID',\s*controlName:\s*'AwsAccessKey'\s*\}/);
   assert.match(rendererSource, /custom:\s*\{\s*label:\s*'custom header value',\s*controlName:\s*'Custom'\s*\}/);
   assert.match(rendererSource, /REFRESHING_AUTH_API_KEY_LABEL = 'Use Refreshing API Key'/);
@@ -172,10 +301,370 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /Refresh token request/);
   assert.match(indexSource, /id="runnerAuthRefreshTypeSelect"[\s\S]*Bearer \/ JWT[\s\S]*AWS Temporary Credentials/);
   assert.match(indexSource, /id="performanceAuthRefreshTypeSelect"[\s\S]*API Key[\s\S]*Custom Header/);
+  assert.doesNotMatch(indexSource, /OAuth 2\.0 Request Auth/);
   assert.equal(selectOptionValues(indexSource, 'authTypeSelect').includes('cookie'), false);
   assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('cookie'), false);
+  const postmanAuthOrder = [
+    'none',
+    'basic',
+    'bearer',
+    'jwtBearer',
+    'digest',
+    'oauth1',
+    'oauth2',
+    'hawk',
+    'aws',
+    'ntlm',
+    'apiKey',
+    'akamaiEdgeGrid',
+    'asap'
+  ];
+  assert.deepEqual(selectOptionValues(indexSource, 'authTypeSelect'), postmanAuthOrder);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthTypeSelect'), postmanAuthOrder);
+  assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshTypeSelect'), ['bearer', 'apiKey', 'cookie', 'aws', 'custom']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshTypeSelect'), ['bearer', 'apiKey', 'cookie', 'aws', 'custom']);
+  assert.doesNotMatch(indexSource, /<option value="oauth2">OAuth 2<\/option>/);
   assert.equal(selectOptionValues(indexSource, 'runnerAuthRefreshTypeSelect').includes('cookie'), true);
   assert.equal(selectOptionValues(indexSource, 'performanceAuthRefreshTypeSelect').includes('cookie'), true);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthGrantTypeSelect'), [
+    'authorizationCode',
+    'authorizationCodePkce',
+    'implicit',
+    'passwordCredentials',
+    'clientCredentials'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthGrantTypeSelect'), [
+    'authorizationCode',
+    'authorizationCodePkce',
+    'implicit',
+    'passwordCredentials',
+    'clientCredentials'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthClientAuthenticationSelect'), ['basic', 'body']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthClientAuthenticationSelect'), ['basic', 'body']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauthCodeChallengeMethodSelect'), ['S256', 'plain']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauthCodeChallengeMethodSelect'), ['S256', 'plain']);
+  assert.doesNotMatch(indexSource, />Device Authorization URL</);
+  assert.doesNotMatch(indexSource, />Redirect Strategy</);
+  assert.doesNotMatch(indexSource, />User Code</);
+  assert.doesNotMatch(indexSource, />Verification URL</);
+  assert.doesNotMatch(indexSource, />Start Device Flow</);
+  assert.doesNotMatch(indexSource, />Cancel OAuth</);
+  assert.doesNotMatch(indexSource, /id="startDeviceFlowButton"/);
+  assert.doesNotMatch(indexSource, /id="cancelOauthFlowButton"/);
+  assert.deepEqual(selectOptionValues(indexSource, 'authDigestAlgorithmSelect'), [
+    'MD5',
+    'MD5-sess',
+    'SHA-256',
+    'SHA-256-sess',
+    'SHA-512-256',
+    'SHA-512-256-sess'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthDigestAlgorithmSelect'), [
+    'MD5',
+    'MD5-sess',
+    'SHA-256',
+    'SHA-256-sess',
+    'SHA-512-256',
+    'SHA-512-256-sess'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authHawkAlgorithmSelect'), ['sha256', 'sha1']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthHawkAlgorithmSelect'), ['sha256', 'sha1']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authAwsAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthAwsAddAuthDataToSelect'), ['header', 'query']);
+  assert.deepEqual(selectOptionValues(indexSource, 'authJwtAlgorithmSelect'), [
+    'HS256',
+    'HS384',
+    'HS512',
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthJwtAlgorithmSelect'), [
+    'HS256',
+    'HS384',
+    'HS512',
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authAsapAlgorithmSelect'), [
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthAsapAlgorithmSelect'), [
+    'RS256',
+    'RS384',
+    'RS512',
+    'PS256',
+    'PS384',
+    'PS512',
+    'ES256',
+    'ES384',
+    'ES512'
+  ]);
+  assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="jwtBearer"\]:not\(\[data-jwt-algorithm-kind="private"\]\) \[data-jwt-mode="private"\]/);
+  assert.match(indexSource, /data-auth-section="ntlm"[\s\S]*id="authNtlmUsernameInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authNtlmDomainInput"[\s\S]*id="authNtlmWorkstationInput"/);
+  assert.match(indexSource, /data-auth-section="akamaiEdgeGrid"[\s\S]*id="authAkamaiAccessTokenInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authAkamaiNonceInput"[\s\S]*id="authAkamaiMaxBodySizeInput"/);
+  assert.match(indexSource, /data-auth-section="asap"[\s\S]*id="authAsapAlgorithmSelect"[\s\S]*id="authAsapPrivateKeyInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authAsapSubjectInput"[\s\S]*id="authAsapAdditionalClaimsInput"[\s\S]*id="authAsapExpiresInInput"/);
+  assert.doesNotMatch(indexSource, /id="authAsapHeaderPrefixInput"|id="performanceAuthAsapHeaderPrefixInput"/);
+  assert.match(indexSource, /data-auth-section="jwtBearer"[\s\S]*id="authJwtAlgorithmSelect"[\s\S]*id="authJwtPayloadInput"[\s\S]*<summary>Advanced<\/summary>[\s\S]*id="authJwtHeadersInput"/);
+  assert.doesNotMatch(indexSource, /id="authJwtQueryParamNameInput"|id="performanceAuthJwtQueryParamNameInput"|Query param name/);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauth1SignatureMethodSelect'), [
+    'HMAC-SHA1',
+    'HMAC-SHA256',
+    'HMAC-SHA512',
+    'RSA-SHA1',
+    'RSA-SHA256',
+    'RSA-SHA512',
+    'PLAINTEXT'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauth1SignatureMethodSelect'), [
+    'HMAC-SHA1',
+    'HMAC-SHA256',
+    'HMAC-SHA512',
+    'RSA-SHA1',
+    'RSA-SHA256',
+    'RSA-SHA512',
+    'PLAINTEXT'
+  ]);
+  assert.deepEqual(selectOptionValues(indexSource, 'authOauth1AddAuthDataToSelect'), ['header', 'queryOrBody']);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthOauth1AddAuthDataToSelect'), ['header', 'queryOrBody']);
+  assertOauth2AdvancedMarkup(indexSource, {
+    start: 'authOauthTokenNameInput',
+    grantType: 'authOauthGrantTypeSelect',
+    main: [
+      'authOauthTokenNameInput',
+      'authOauthGrantTypeSelect',
+      'authOauthCallbackUrlInput',
+      'authOauthAuthorizeUsingBrowserInput',
+      'authOauthAuthorizationUrlInput',
+      'authOauthTokenUrlInput',
+      'authOauthClientIdInput',
+      'authOauthClientSecretInput',
+      'authOauthUsernameInput',
+      'authOauthPasswordInput',
+      'authOauthScopesInput',
+      'authOauthStateInput',
+      'authOauthCodeChallengeMethodSelect',
+      'authOauthCodeVerifierInput',
+      'authOauthClientAuthenticationSelect'
+    ],
+    advanced: [
+      'authOauthRefreshTokenUrlInput',
+      'authOauthAuthRequestParamKeyInput',
+      'authOauthAuthRequestParamValueInput',
+      'authOauthTokenRequestParamKeyInput',
+      'authOauthTokenRequestParamValueInput',
+      'authOauthTokenRequestParamSendInSelect',
+      'authOauthRefreshRequestParamKeyInput',
+      'authOauthRefreshRequestParamValueInput',
+      'authOauthRefreshRequestParamSendInSelect',
+      'clearOauthCookiesButton'
+    ]
+  });
+  assert.match(indexSource, /id="authOauthRefreshTokenInput" type="hidden"/);
+  assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="authOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="authOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
+  assert.match(indexSource, /id="authOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);
+  assertOauth2AdvancedMarkup(indexSource, {
+    start: 'performanceAuthOauthTokenNameInput',
+    grantType: 'performanceAuthOauthGrantTypeSelect',
+    main: [
+      'performanceAuthOauthTokenNameInput',
+      'performanceAuthOauthGrantTypeSelect',
+      'performanceAuthOauthCallbackUrlInput',
+      'performanceAuthOauthAuthorizeUsingBrowserInput',
+      'performanceAuthOauthAuthorizationUrlInput',
+      'performanceAuthOauthTokenUrlInput',
+      'performanceAuthOauthClientIdInput',
+      'performanceAuthOauthClientSecretInput',
+      'performanceAuthOauthUsernameInput',
+      'performanceAuthOauthPasswordInput',
+      'performanceAuthOauthScopesInput',
+      'performanceAuthOauthStateInput',
+      'performanceAuthOauthCodeChallengeMethodSelect',
+      'performanceAuthOauthCodeVerifierInput',
+      'performanceAuthOauthClientAuthenticationSelect'
+    ],
+    advanced: [
+      'performanceAuthOauthRefreshTokenUrlInput',
+      'performanceAuthOauthAuthRequestParamKeyInput',
+      'performanceAuthOauthAuthRequestParamValueInput',
+      'performanceAuthOauthTokenRequestParamKeyInput',
+      'performanceAuthOauthTokenRequestParamValueInput',
+      'performanceAuthOauthTokenRequestParamSendInSelect',
+      'performanceAuthOauthRefreshRequestParamKeyInput',
+      'performanceAuthOauthRefreshRequestParamValueInput',
+      'performanceAuthOauthRefreshRequestParamSendInSelect'
+    ]
+  });
+  assert.match(indexSource, /id="performanceAuthOauthRefreshTokenInput" type="hidden"/);
+  assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="performanceAuthOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="performanceAuthOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
+  assert.match(indexSource, /id="performanceAuthOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);
+  assert.match(editorPanelsSource, /\[data-oauth2-grant-field\]\s*\{/);
+  assert.match(editorPanelsSource, /data-oauth2-grant-type="passwordCredentials"/);
+  assert.match(editorPanelsSource, /data-oauth2-grant-type="authorizationCodePkce"/);
+  assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="oauth1"\]:not\(\[data-oauth1-signature-kind="rsa"\]\) \[data-oauth1-mode="rsa"\]/);
+  assert.match(editorPanelsSource, /\.auth-section\[data-auth-section="oauth1"\]\[data-oauth1-signature-kind="rsa"\] \[data-oauth1-mode="shared"\]/);
+  assert.match(indexSource, /data-oauth1-mode="shared"[\s\S]*id="authOauth1ConsumerSecretInput"/);
+  assert.match(indexSource, /data-oauth1-mode="shared"[\s\S]*id="authOauth1TokenSecretInput"/);
+  assert.match(indexSource, /data-oauth1-mode="rsa"[\s\S]*id="authOauth1PrivateKeyInput"/);
+  assert.match(indexSource, /data-oauth1-mode="rsa"[\s\S]*id="performanceAuthOauth1PrivateKeyInput"/);
+  assertOauth1AdvancedMarkup(indexSource, {
+    signatureMethod: 'authOauth1SignatureMethodSelect',
+    main: [
+      'authOauth1ConsumerKeyInput',
+      'authOauth1ConsumerSecretInput',
+      'authOauth1TokenInput',
+      'authOauth1TokenSecretInput',
+      'authOauth1PrivateKeyInput',
+      'authOauth1AddAuthDataToSelect'
+    ],
+    advanced: [
+      'authOauth1CallbackInput',
+      'authOauth1VerifierInput',
+      'authOauth1TimestampInput',
+      'authOauth1NonceInput',
+      'authOauth1VersionInput',
+      'authOauth1RealmInput',
+      'authOauth1IncludeBodyHashInput',
+      'authOauth1AddEmptyParamsToSignInput'
+    ]
+  });
+  assertOauth1AdvancedMarkup(indexSource, {
+    signatureMethod: 'performanceAuthOauth1SignatureMethodSelect',
+    main: [
+      'performanceAuthOauth1ConsumerKeyInput',
+      'performanceAuthOauth1ConsumerSecretInput',
+      'performanceAuthOauth1TokenInput',
+      'performanceAuthOauth1TokenSecretInput',
+      'performanceAuthOauth1PrivateKeyInput',
+      'performanceAuthOauth1AddAuthDataToSelect'
+    ],
+    advanced: [
+      'performanceAuthOauth1CallbackInput',
+      'performanceAuthOauth1VerifierInput',
+      'performanceAuthOauth1TimestampInput',
+      'performanceAuthOauth1NonceInput',
+      'performanceAuthOauth1VersionInput',
+      'performanceAuthOauth1RealmInput',
+      'performanceAuthOauth1IncludeBodyHashInput',
+      'performanceAuthOauth1AddEmptyParamsToSignInput'
+    ]
+  });
+  assertDigestAdvancedMarkup(indexSource, {
+    username: 'authDigestUsernameInput',
+    password: 'authDigestPasswordInput',
+    advanced: [
+      'authDigestDisableRetryingRequestInput',
+      'authDigestRealmInput',
+      'authDigestNonceInput',
+      'authDigestAlgorithmSelect',
+      'authDigestQopInput',
+      'authDigestNonceCountInput',
+      'authDigestClientNonceInput',
+      'authDigestOpaqueInput'
+    ]
+  });
+  assertDigestAdvancedMarkup(indexSource, {
+    username: 'performanceAuthDigestUsernameInput',
+    password: 'performanceAuthDigestPasswordInput',
+    advanced: [
+      'performanceAuthDigestDisableRetryingRequestInput',
+      'performanceAuthDigestRealmInput',
+      'performanceAuthDigestNonceInput',
+      'performanceAuthDigestAlgorithmSelect',
+      'performanceAuthDigestQopInput',
+      'performanceAuthDigestNonceCountInput',
+      'performanceAuthDigestClientNonceInput',
+      'performanceAuthDigestOpaqueInput'
+    ]
+  });
+  assertHawkAdvancedMarkup(indexSource, {
+    authId: 'authHawkAuthIdInput',
+    main: [
+      'authHawkAuthIdInput',
+      'authHawkAuthKeyInput',
+      'authHawkAlgorithmSelect'
+    ],
+    advanced: [
+      'authHawkUserInput',
+      'authHawkNonceInput',
+      'authHawkExtraDataInput',
+      'authHawkAppInput',
+      'authHawkDelegationInput',
+      'authHawkTimestampInput',
+      'authHawkIncludePayloadHashInput'
+    ]
+  });
+  assertHawkAdvancedMarkup(indexSource, {
+    authId: 'performanceAuthHawkAuthIdInput',
+    main: [
+      'performanceAuthHawkAuthIdInput',
+      'performanceAuthHawkAuthKeyInput',
+      'performanceAuthHawkAlgorithmSelect'
+    ],
+    advanced: [
+      'performanceAuthHawkUserInput',
+      'performanceAuthHawkNonceInput',
+      'performanceAuthHawkExtraDataInput',
+      'performanceAuthHawkAppInput',
+      'performanceAuthHawkDelegationInput',
+      'performanceAuthHawkTimestampInput',
+      'performanceAuthHawkIncludePayloadHashInput'
+    ]
+  });
+  assertAwsAdvancedMarkup(indexSource, {
+    accessKey: 'authAwsAccessKeyInput',
+    main: [
+      'authAwsAccessKeyInput',
+      'authAwsSecretKeyInput',
+      'authAwsAddAuthDataToSelect'
+    ],
+    advanced: [
+      'authAwsRegionInput',
+      'authAwsServiceInput',
+      'authAwsSessionTokenInput'
+    ]
+  });
+  assertAwsAdvancedMarkup(indexSource, {
+    accessKey: 'performanceAuthAwsAccessKeyInput',
+    main: [
+      'performanceAuthAwsAccessKeyInput',
+      'performanceAuthAwsSecretKeyInput',
+      'performanceAuthAwsAddAuthDataToSelect'
+    ],
+    advanced: [
+      'performanceAuthAwsRegionInput',
+      'performanceAuthAwsServiceInput',
+      'performanceAuthAwsSessionTokenInput'
+    ]
+  });
+  assert.doesNotMatch(indexSource, /Yes, disable retrying the request/);
+  assert.match(editorPanelsSource, /\.auth-advanced-grid\s*\{/);
   assert.deepEqual(selectOptionValues(indexSource, 'runnerAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
   assert.deepEqual(selectOptionValues(indexSource, 'performanceAuthRefreshAccessTokenSourceSelect'), ['body', 'rawBody', 'header', 'cookie']);
   for (const id of [
@@ -196,7 +685,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /AUTH_REFRESH_OUTPUT_SOURCE_VALUES = new Set\(\['body', 'rawBody', 'header', 'cookie'\]\)/);
   assert.match(rendererSource, /source === 'rawBody'/);
   assert.match(indexSource, /Save Access Token To/);
-  assert.match(indexSource, /Save API Key To/);
+  assert.doesNotMatch(indexSource, /Save API Key To/);
   assert.match(indexSource, /API Key Name/);
   assert.match(indexSource, /Send API Key As/);
   assert.match(indexSource, /Save Access Key ID To/);
@@ -370,6 +859,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   };
   const elements = new Map([
     ['authTypeSelect', createElement({ tagName: 'SELECT', value: 'oauth2' })],
+    ['authDigestUsernameInput', createElement({ value: 'ada' })],
     ['performanceAuthTypeSelect', createElement({ tagName: 'SELECT', value: 'apiKey' })],
     ['performanceAuthApiKeyNameInput', createElement({ value: 'api_key' })],
     ['confirmSaveDraftButton', createElement()],
@@ -412,6 +902,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   });
 
   elements.get('authTypeSelect').dispatch('change');
+  elements.get('authDigestUsernameInput').dispatch('input');
   elements.get('performanceAuthTypeSelect').dispatch('change');
   elements.get('performanceAuthApiKeyNameInput').dispatch('input');
   elements.get('confirmSaveDraftButton').dispatch('click');
@@ -421,7 +912,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   elements.get('confirmRunnerImportButton').dispatch('click');
 
   assert.deepEqual(calls.authType, ['oauth2']);
-  assert.equal(calls.authInput, 1);
+  assert.equal(calls.authInput, 2);
   assert.deepEqual(calls.performanceAuthType, ['apiKey']);
   assert.equal(calls.performanceAuthInput, 2);
   assert.deepEqual(calls.resolveModal, [
@@ -478,6 +969,7 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
     ['cancelAuthRefreshAutoDetectButton', createElement()],
     ['confirmAuthRefreshAutoDetectButton', createElement()],
     ['closeNotificationModalButton', createElement()],
+    ['closeCookiesModalButton', createElement()],
     ['cancelRunnerImportButton', createElement()],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
@@ -515,9 +1007,88 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('cancelAuthRefreshAutoDetectButton').dispatch('click');
   elements.get('confirmAuthRefreshAutoDetectButton').dispatch('click');
   elements.get('closeNotificationModalButton').dispatch('click');
+  elements.get('closeCookiesModalButton').dispatch('click');
   elements.get('cancelRunnerImportButton').dispatch('click');
 
-  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, null, null, 'auth-auto-detect-confirm', true, null]);
+  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, null, null, 'auth-auto-detect-confirm', true, true, null]);
+});
+
+test('renderer bootstrap binds workspace cookie manager controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['openCookiesButton', createElement()],
+    ['openRequestCookiesButton', createElement()],
+    ['openPerformanceCookiesButton', createElement()],
+    ['cookiesDomainInput', createElement({ tagName: 'INPUT' })],
+    ['cookiesAddDomainButton', createElement()],
+    ['clearExpiredWorkspaceCookiesButton', createElement()],
+    ['clearAllWorkspaceCookiesButton', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onOpenCookies: () => calls.push('open'),
+    onAddCookieDomain: () => calls.push('add-domain'),
+    onClearExpiredWorkspaceCookies: () => calls.push('clear'),
+    onClearAllWorkspaceCookies: () => calls.push('clear-all')
+  });
+
+  elements.get('openCookiesButton').dispatch('click');
+  elements.get('openRequestCookiesButton').dispatch('click');
+  elements.get('openPerformanceCookiesButton').dispatch('click');
+  elements.get('cookiesAddDomainButton').dispatch('click');
+  elements.get('cookiesDomainInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('clearExpiredWorkspaceCookiesButton').dispatch('click');
+  elements.get('clearAllWorkspaceCookiesButton').dispatch('click');
+
+  assert.deepEqual(calls, ['open', 'open', 'open', 'add-domain', 'add-domain', 'clear', 'clear-all']);
+});
+
+test('renderer bootstrap opens toolbar menus inside active modals', () => {
+  const elements = new Map([
+    ['cookiesClearMenuButton', createElement()],
+    ['cookiesClearMenu', createElement({ closest: (selector) => selector === '.modal' ? elements.get('cookiesModal') : null })],
+    ['cookiesModal', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+  elements.get('modalBackdrop').hidden = false;
+  elements.get('cookiesModal').hidden = false;
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [elements.get('cookiesClearMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('cookiesClearMenuButton')];
+        }
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  });
+
+  elements.get('cookiesClearMenuButton').dispatch('click');
+
+  assert.equal(elements.get('cookiesClearMenu').hidden, false);
+  assert.equal(elements.get('cookiesClearMenuButton').getAttribute('aria-expanded'), 'true');
 });
 
 test('renderer bootstrap binds CSV variable edit buttons and modal controls', () => {
@@ -1194,8 +1765,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
     'addPerformanceRequestVariableButton',
-    'addPerformanceCookieButton',
-    'clearExpiredPerformanceCookiesButton',
+    'openPerformanceCookiesButton',
     'performanceMethodSelect',
     'performanceUrlInput',
     'performanceBodyTypeSelect',
@@ -1270,8 +1840,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onAddPerformanceParam: () => calls.push('add-param'),
     onAddPerformanceHeader: () => calls.push('add-header'),
     onAddPerformanceRequestVariable: () => calls.push('add-variable'),
-    onAddPerformanceCookie: () => calls.push('add-cookie'),
-    onClearExpiredPerformanceCookies: () => calls.push('clear-cookies'),
+    onOpenCookies: () => calls.push('open-cookies'),
     onCalibratePerformance: () => calls.push('calibrate'),
     onClosePerformanceCalibration: () => calls.push('close-calibration'),
     onPerformanceConfigChange: () => calls.push('config'),
@@ -1308,8 +1877,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
     'addPerformanceRequestVariableButton',
-    'addPerformanceCookieButton',
-    'clearExpiredPerformanceCookiesButton',
+    'openPerformanceCookiesButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton',
     'performanceBeautifyBodyButton',
@@ -1337,7 +1905,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 25), [
+  assert.deepEqual(calls.slice(0, 24), [
     'new',
     'new',
     'import-test',
@@ -1359,8 +1927,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'add-param',
     'add-header',
     'add-variable',
-    'add-cookie',
-    'clear-cookies',
+    'open-cookies',
     'calibrate',
     'close-calibration'
   ]);
@@ -2090,7 +2657,7 @@ test('renderer loads code editor helpers before request editor panels and render
   assert.ok(codeEditorIndex < rendererIndex, 'codeEditor.js should load before renderer.js initializes textareas.');
 });
 
-function createElement({ tagName = 'BUTTON', value = '' } = {}) {
+function createElement({ tagName = 'BUTTON', value = '', closest = null } = {}) {
   const listeners = new Map();
   return {
     attributes: {},
@@ -2115,6 +2682,9 @@ function createElement({ tagName = 'BUTTON', value = '' } = {}) {
     },
     matches(selector) {
       return selector === 'button' && this.tagName === 'BUTTON';
+    },
+    closest(selector) {
+      return typeof closest === 'function' ? closest(selector) : null;
     },
     querySelector() {
       return null;

@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { BODY_TYPES, collectionModel, folderModel, keyValue, requestModel } = require('./models');
+const { normalizeAuth } = require('./authModel');
 const { collectSandboxPackageReferencesFromCollection } = require('./sandboxPackageCache');
 const { clientCertificateMatchesUrl, findMatchingClientCertificate } = require('./tlsSettings');
 
@@ -720,13 +721,32 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
     return {
       type: 'oauth2',
       tokenType: authParam(authNode.oauth2, 'tokenType') || 'Bearer',
+      headerPrefix: authParam(authNode.oauth2, 'headerPrefix') || authParam(authNode.oauth2, 'tokenType') || 'Bearer',
+      tokenName: authParam(authNode.oauth2, 'tokenName'),
+      addAuthDataTo: postmanOauth2AddAuthDataTo(authParam(authNode.oauth2, 'addTokenTo') || authParam(authNode.oauth2, 'addAuthDataTo')),
       accessToken: authParam(authNode.oauth2, 'accessToken'),
       refreshToken: authParam(authNode.oauth2, 'refreshToken'),
+      autoRefreshToken: authRawParam(authNode.oauth2, 'autoRefreshToken') == null
+        ? true
+        : authBooleanParam(authNode.oauth2, 'autoRefreshToken'),
+      shareToken: authBooleanParam(authNode.oauth2, 'shareToken'),
       authorizationUrl: authParam(authNode.oauth2, 'authUrl'),
       tokenUrl: authParam(authNode.oauth2, 'accessTokenUrl'),
+      refreshTokenUrl: authParam(authNode.oauth2, 'refreshTokenUrl'),
+      redirectUri: authParam(authNode.oauth2, 'callbackUrl'),
       clientId: authParam(authNode.oauth2, 'clientId'),
       clientSecret: authParam(authNode.oauth2, 'clientSecret'),
+      username: authParam(authNode.oauth2, 'username'),
+      password: authParam(authNode.oauth2, 'password'),
       scopes: authParam(authNode.oauth2, 'scope'),
+      state: authParam(authNode.oauth2, 'state'),
+      codeChallengeMethod: postmanOauth2CodeChallengeMethod(authParam(authNode.oauth2, 'codeChallengeMethod')),
+      codeVerifier: authParam(authNode.oauth2, 'codeVerifier'),
+      authorizeUsingBrowser: authBooleanParam(authNode.oauth2, 'authorizeUsingBrowser'),
+      clientAuthentication: postmanOauth2ClientAuthentication(authParam(authNode.oauth2, 'clientAuthentication') || authParam(authNode.oauth2, 'client_authentication')),
+      authRequestParams: postmanOauth2ParamList(authNode.oauth2, 'authRequestParams'),
+      tokenRequestParams: postmanOauth2ParamList(authNode.oauth2, 'tokenRequestParams', true),
+      refreshRequestParams: postmanOauth2ParamList(authNode.oauth2, 'refreshRequestParams', true),
       grantType: postmanOauthGrantType(authParam(authNode.oauth2, 'grant_type'))
     };
   }
@@ -735,11 +755,16 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'digest',
       username: authParam(authNode.digest, 'username'),
       password: authParam(authNode.digest, 'password'),
+      disableRetryingRequest: authBooleanParam(authNode.digest, 'disableRetryingRequest')
+        || authBooleanParam(authNode.digest, 'disableRetryRequest')
+        || authBooleanParam(authNode.digest, 'disableRetrying'),
       realm: authParam(authNode.digest, 'realm'),
       nonce: authParam(authNode.digest, 'nonce'),
       algorithm: authParam(authNode.digest, 'algorithm') || 'MD5',
       qop: authParam(authNode.digest, 'qop') || 'auth',
-      opaque: authParam(authNode.digest, 'opaque')
+      opaque: authParam(authNode.digest, 'opaque'),
+      clientNonce: authParam(authNode.digest, 'clientNonce') || authParam(authNode.digest, 'cnonce'),
+      nonceCount: authParam(authNode.digest, 'nonceCount') || authParam(authNode.digest, 'nc')
     };
   }
   if (type === 'hawk') {
@@ -747,26 +772,30 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'hawk',
       authId: authParam(authNode.hawk, 'authId') || authParam(authNode.hawk, 'id'),
       authKey: authParam(authNode.hawk, 'authKey') || authParam(authNode.hawk, 'key'),
-      algorithm: authParam(authNode.hawk, 'algorithm') || 'sha256',
+      algorithm: normalizeHawkAlgorithm(authParam(authNode.hawk, 'algorithm')),
       user: authParam(authNode.hawk, 'user'),
       nonce: authParam(authNode.hawk, 'nonce'),
       extraData: authParam(authNode.hawk, 'extraData') || authParam(authNode.hawk, 'ext'),
       app: authParam(authNode.hawk, 'app'),
-      delegation: authParam(authNode.hawk, 'delegation') || authParam(authNode.hawk, 'dlg')
+      delegation: authParam(authNode.hawk, 'delegation') || authParam(authNode.hawk, 'dlg'),
+      timestamp: authParam(authNode.hawk, 'timestamp') || authParam(authNode.hawk, 'ts'),
+      includePayloadHash: String(authParam(authNode.hawk, 'includePayloadHash') || authParam(authNode.hawk, 'includePayloadHas')).toLowerCase() === 'true'
     };
   }
   if (type === 'awsv4' || type === 'aws') {
+    const awsParams = authNode.awsv4 || authNode.aws;
     return {
       type: 'aws',
-      accessKey: authParam(authNode.awsv4 || authNode.aws, 'accessKey'),
-      secretKey: authParam(authNode.awsv4 || authNode.aws, 'secretKey'),
-      region: authParam(authNode.awsv4 || authNode.aws, 'region'),
-      service: authParam(authNode.awsv4 || authNode.aws, 'service') || authParam(authNode.awsv4 || authNode.aws, 'serviceName'),
-      sessionToken: authParam(authNode.awsv4 || authNode.aws, 'sessionToken'),
-      addAuthDataToQuery: String(authParam(authNode.awsv4 || authNode.aws, 'addAuthDataToQuery')).toLowerCase() === 'true'
+      accessKey: authParam(awsParams, 'accessKey'),
+      secretKey: authParam(awsParams, 'secretKey'),
+      region: authParam(awsParams, 'region'),
+      service: authParam(awsParams, 'service') || authParam(awsParams, 'serviceName'),
+      sessionToken: authParam(awsParams, 'sessionToken'),
+      addAuthDataToQuery: postmanAwsAddAuthDataToQuery(awsParams)
     };
   }
   if (type === 'oauth1') {
+    const addParamsToHeader = authParam(authNode.oauth1, 'addParamsToHeader');
     return {
       type: 'oauth1',
       consumerKey: authParam(authNode.oauth1, 'consumerKey'),
@@ -774,10 +803,19 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       token: authParam(authNode.oauth1, 'token'),
       tokenSecret: authParam(authNode.oauth1, 'tokenSecret'),
       signatureMethod: authParam(authNode.oauth1, 'signatureMethod') || 'HMAC-SHA1',
+      privateKey: authParam(authNode.oauth1, 'privateKey'),
+      addAuthDataTo: addParamsToHeader === ''
+        ? (authParam(authNode.oauth1, 'addAuthDataTo') || 'header')
+        : (String(addParamsToHeader).trim().toLowerCase() === 'false' ? 'queryOrBody' : 'header'),
+      callback: authParam(authNode.oauth1, 'callback') || authParam(authNode.oauth1, 'callbackUrl'),
+      verifier: authParam(authNode.oauth1, 'verifier'),
       timestamp: authParam(authNode.oauth1, 'timestamp'),
       nonce: authParam(authNode.oauth1, 'nonce'),
       version: authParam(authNode.oauth1, 'version') || '1.0',
-      realm: authParam(authNode.oauth1, 'realm')
+      realm: authParam(authNode.oauth1, 'realm'),
+      includeBodyHash: authBooleanParam(authNode.oauth1, 'includeBodyHash'),
+      addEmptyParamsToSign: authBooleanParam(authNode.oauth1, 'addEmptyParamsToSign')
+        || authBooleanParam(authNode.oauth1, 'addEmptyParametersToSignature')
     };
   }
   if (type === 'ntlm') {
@@ -785,17 +823,23 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'ntlm',
       username: authParam(authNode.ntlm, 'username'),
       password: authParam(authNode.ntlm, 'password'),
+      disableRetryingRequest: authBooleanParam(authNode.ntlm, 'disableRetryingRequest'),
       domain: authParam(authNode.ntlm, 'domain'),
       workstation: authParam(authNode.ntlm, 'workstation')
     };
   }
   if (type === 'akamai' || type === 'edgegrid' || type === 'akamaiedgegrid') {
+    const edgeGrid = authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid;
     return {
       type: 'akamaiEdgeGrid',
-      accessToken: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'accessToken'),
-      clientToken: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'clientToken'),
-      clientSecret: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'clientSecret'),
-      headersToSign: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'headersToSign')
+      accessToken: authParam(edgeGrid, 'accessToken'),
+      clientToken: authParam(edgeGrid, 'clientToken'),
+      clientSecret: authParam(edgeGrid, 'clientSecret'),
+      nonce: authParam(edgeGrid, 'nonce'),
+      timestamp: authParam(edgeGrid, 'timestamp'),
+      baseUrl: authParam(edgeGrid, 'baseUrl') || authParam(edgeGrid, 'baseURL'),
+      headersToSign: authParam(edgeGrid, 'headersToSign'),
+      maxBodySize: authParam(edgeGrid, 'maxBodySize') || authParam(edgeGrid, 'maxBodySizeBytes')
     };
   }
   if (type === 'jwt' || type === 'jwtbearer' || type === 'jwt-bearer') {
@@ -804,6 +848,7 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       type: 'jwtBearer',
       algorithm: authParam(jwt, 'algorithm') || authParam(jwt, 'alg') || 'HS256',
       secret: authParam(jwt, 'secret') || authParam(jwt, 'clientSecret'),
+      secretBase64Encoded: authBooleanParam(jwt, 'secretBase64Encoded') || authBooleanParam(jwt, 'secretBase64'),
       privateKey: authParam(jwt, 'privateKey') || authParam(jwt, 'key'),
       keyId: authParam(jwt, 'keyId') || authParam(jwt, 'kid'),
       issuer: authParam(jwt, 'issuer') || authParam(jwt, 'iss'),
@@ -811,9 +856,9 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       audience: authParam(jwt, 'audience') || authParam(jwt, 'aud'),
       expiresIn: authParam(jwt, 'expiresIn') || '300',
       claims: authParam(jwt, 'claims') || authParam(jwt, 'payload'),
+      jwtHeaders: authParam(jwt, 'jwtHeaders') || authParam(jwt, 'headers'),
       headerPrefix: authParam(jwt, 'headerPrefix') || 'Bearer',
-      addTokenTo: authParam(jwt, 'addTokenTo') || 'header',
-      queryParamName: authParam(jwt, 'queryParamName') || 'token'
+      addTokenTo: postmanOauth2AddAuthDataTo(authParam(jwt, 'addTokenTo') || 'header')
     };
   }
   if (type === 'asap') {
@@ -827,7 +872,8 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       subject: authParam(asap, 'subject') || authParam(asap, 'sub'),
       audience: authParam(asap, 'audience') || authParam(asap, 'aud'),
       keyId: authParam(asap, 'keyId') || authParam(asap, 'kid'),
-      expiresIn: authParam(asap, 'expiresIn') || '300'
+      expiresIn: authParam(asap, 'expiresIn') || authParam(asap, 'expiry') || '3600',
+      additionalClaims: authParam(asap, 'additionalClaims') || authParam(asap, 'claims') || authParam(asap, 'payload') || '{}'
     };
   }
   return inheritedAuth || { type: 'none' };
@@ -848,15 +894,114 @@ function authParam(values, key) {
   return '';
 }
 
+function authRawParam(values, key) {
+  if (!values) {
+    return undefined;
+  }
+  if (Array.isArray(values)) {
+    return values.find((candidate) => candidate?.key === key)?.value;
+  }
+  if (typeof values === 'object') {
+    return values[key];
+  }
+  return undefined;
+}
+
+function normalizeHawkAlgorithm(value) {
+  const label = String(value || 'sha256').trim();
+  const normalized = label.toLowerCase().replace(/[\s_-]+/g, '');
+  if (normalized === 'sha1') {
+    return 'sha1';
+  }
+  return normalized === 'sha256' ? 'sha256' : label;
+}
+
+function authBooleanParam(values, key) {
+  const value = authParam(values, key);
+  return value === true || String(value).trim().toLowerCase() === 'true';
+}
+
+function postmanOauth2AddAuthDataTo(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+  return normalized === 'requesturl' || normalized === 'url' || normalized === 'query' || normalized === 'queryparam' ? 'query' : 'header';
+}
+
+function postmanAwsAddAuthDataToQuery(values) {
+  const placement = authParam(values, 'addAuthDataTo') || authParam(values, 'addAuthorizationDataTo') || authParam(values, 'addTokenTo');
+  if (placement) {
+    return postmanOauth2AddAuthDataTo(placement) === 'query';
+  }
+  return String(authParam(values, 'addAuthDataToQuery')).trim().toLowerCase() === 'true';
+}
+
+function postmanOauth2ClientAuthentication(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_/-]+/g, '');
+  return normalized === 'body' || normalized === 'requestbody' || normalized === 'sendclientcredentialsinbody' ? 'body' : 'basic';
+}
+
+function postmanOauth2ParamList(values, key, includeSendIn = false) {
+  const raw = authRawParam(values, key);
+  const parsed = typeof raw === 'string' && looksLikeJson(raw) ? JSON.parse(raw) : raw;
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const param = {
+        enabled: item.enabled !== false,
+        key: item.key ?? '',
+        value: item.value ?? ''
+      };
+      if (includeSendIn) {
+        param.sendIn = String(item.sendIn || '').toLowerCase() === 'header' ? 'header' : 'body';
+      }
+      return param;
+    });
+}
+
 function postmanOauthGrantType(value) {
-  const grantType = String(value || '').toLowerCase();
-  if (grantType === 'client_credentials') {
+  const grantType = String(value || '').toLowerCase().replace(/[\s_/-]+/g, '');
+  if (grantType === 'clientcredentials') {
     return 'clientCredentials';
   }
-  if (grantType === 'device_code') {
+  if (grantType === 'passwordcredentials' || grantType === 'password') {
+    return 'passwordCredentials';
+  }
+  if (grantType === 'authorizationcodewithpkce' || grantType === 'authorizationcodepkce') {
+    return 'authorizationCodePkce';
+  }
+  if (grantType === 'implicit') {
+    return 'implicit';
+  }
+  if (grantType === 'devicecode') {
     return 'deviceCode';
   }
   return 'authorizationCode';
+}
+
+function postmanOauth2CodeChallengeMethod(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'plain' ? 'plain' : 'S256';
+}
+
+function postmanOauthGrantTypeValue(value) {
+  if (value === 'clientCredentials') {
+    return 'client_credentials';
+  }
+  if (value === 'passwordCredentials') {
+    return 'password_credentials';
+  }
+  if (value === 'authorizationCodePkce') {
+    return 'authorization_code_with_pkce';
+  }
+  if (value === 'implicit') {
+    return 'implicit';
+  }
+  if (value === 'deviceCode') {
+    return 'device_code';
+  }
+  return 'authorization_code';
 }
 
 function looksLikeJson(value) {
@@ -1330,9 +1475,38 @@ function postmanRawLanguageForBodyType(bodyType) {
 
 function exportPostmanRequestAuth(request, rawAuth) {
   if (rawAuth && typeof rawAuth === 'object' && Object.keys(rawAuth).length) {
-    return clonePostmanObject(rawAuth);
+    const rawModel = normalizeAuth(importAuth(rawAuth, { type: 'none' }));
+    const requestModelAuth = normalizeAuth(request?.auth);
+    if (JSON.stringify(rawModel) === JSON.stringify(requestModelAuth)) {
+      return sanitizePostmanAuthForCurrentParity(rawAuth);
+    }
   }
   return exportPostmanAuthModel(request?.auth);
+}
+
+function sanitizePostmanAuthForCurrentParity(rawAuth) {
+  const auth = clonePostmanObject(rawAuth);
+  const type = String(auth.type || '').toLowerCase();
+  if (type === 'jwt' || type === 'jwtbearer' || type === 'jwt-bearer') {
+    stripAuthParams(auth, ['jwt', 'jwtBearer', 'jwt-bearer', 'jwtbearer'], ['queryParamName']);
+  }
+  if (type === 'asap') {
+    stripAuthParams(auth, ['asap'], ['headerPrefix']);
+  }
+  return auth;
+}
+
+function stripAuthParams(auth, candidateKeys, paramKeys) {
+  const remove = new Set(paramKeys);
+  for (const key of candidateKeys) {
+    if (Array.isArray(auth[key])) {
+      auth[key] = auth[key].filter((item) => !remove.has(item?.key));
+    } else if (auth[key] && typeof auth[key] === 'object') {
+      for (const paramKey of remove) {
+        delete auth[key][paramKey];
+      }
+    }
+  }
 }
 
 function exportPostmanAuthModel(auth) {
@@ -1366,14 +1540,31 @@ function exportPostmanAuthModel(auth) {
       type: 'oauth2',
       oauth2: [
         { key: 'tokenType', value: auth.tokenType || 'Bearer', type: 'string' },
+        { key: 'headerPrefix', value: auth.headerPrefix || auth.tokenType || 'Bearer', type: 'string' },
+        { key: 'tokenName', value: auth.tokenName || '', type: 'string' },
+        { key: 'addTokenTo', value: auth.addAuthDataTo === 'query' ? 'Request URL' : 'Request Headers', type: 'string' },
         { key: 'accessToken', value: auth.accessToken || '', type: 'string' },
         { key: 'refreshToken', value: auth.refreshToken || '', type: 'string' },
+        { key: 'autoRefreshToken', value: auth.autoRefreshToken !== false, type: 'boolean' },
+        { key: 'shareToken', value: auth.shareToken === true, type: 'boolean' },
         { key: 'authUrl', value: auth.authorizationUrl || '', type: 'string' },
         { key: 'accessTokenUrl', value: auth.tokenUrl || '', type: 'string' },
+        { key: 'refreshTokenUrl', value: auth.refreshTokenUrl || '', type: 'string' },
+        { key: 'callbackUrl', value: auth.redirectUri || '', type: 'string' },
         { key: 'clientId', value: auth.clientId || '', type: 'string' },
         { key: 'clientSecret', value: auth.clientSecret || '', type: 'string' },
+        { key: 'username', value: auth.username || '', type: 'string' },
+        { key: 'password', value: auth.password || '', type: 'string' },
         { key: 'scope', value: auth.scopes || '', type: 'string' },
-        { key: 'grant_type', value: auth.grantType === 'clientCredentials' ? 'client_credentials' : auth.grantType === 'deviceCode' ? 'device_code' : 'authorization_code', type: 'string' }
+        { key: 'state', value: auth.state || '', type: 'string' },
+        { key: 'codeChallengeMethod', value: auth.codeChallengeMethod || 'S256', type: 'string' },
+        { key: 'codeVerifier', value: auth.codeVerifier || '', type: 'string' },
+        { key: 'authorizeUsingBrowser', value: auth.authorizeUsingBrowser === true, type: 'boolean' },
+        { key: 'clientAuthentication', value: auth.clientAuthentication === 'body' ? 'Send client credentials in body' : 'Send as Basic Auth header', type: 'string' },
+        { key: 'authRequestParams', value: auth.authRequestParams || [], type: 'any' },
+        { key: 'tokenRequestParams', value: auth.tokenRequestParams || [], type: 'any' },
+        { key: 'refreshRequestParams', value: auth.refreshRequestParams || [], type: 'any' },
+        { key: 'grant_type', value: postmanOauthGrantTypeValue(auth.grantType), type: 'string' }
       ]
     };
   }
@@ -1383,10 +1574,13 @@ function exportPostmanAuthModel(auth) {
       digest: [
         { key: 'username', value: auth.username || '', type: 'string' },
         { key: 'password', value: auth.password || '', type: 'string' },
+        { key: 'disableRetryingRequest', value: auth.disableRetryingRequest === true, type: 'boolean' },
         { key: 'realm', value: auth.realm || '', type: 'string' },
         { key: 'nonce', value: auth.nonce || '', type: 'string' },
         { key: 'algorithm', value: auth.algorithm || 'MD5', type: 'string' },
         { key: 'qop', value: auth.qop || 'auth', type: 'string' },
+        { key: 'nonceCount', value: auth.nonceCount || '', type: 'string' },
+        { key: 'clientNonce', value: auth.clientNonce || '', type: 'string' },
         { key: 'opaque', value: auth.opaque || '', type: 'string' }
       ]
     };
@@ -1397,12 +1591,14 @@ function exportPostmanAuthModel(auth) {
       hawk: [
         { key: 'authId', value: auth.authId || '', type: 'string' },
         { key: 'authKey', value: auth.authKey || '', type: 'string' },
-        { key: 'algorithm', value: auth.algorithm || 'sha256', type: 'string' },
+        { key: 'algorithm', value: normalizeHawkAlgorithm(auth.algorithm), type: 'string' },
         { key: 'user', value: auth.user || '', type: 'string' },
         { key: 'nonce', value: auth.nonce || '', type: 'string' },
         { key: 'extraData', value: auth.extraData || '', type: 'string' },
         { key: 'app', value: auth.app || '', type: 'string' },
-        { key: 'delegation', value: auth.delegation || '', type: 'string' }
+        { key: 'delegation', value: auth.delegation || '', type: 'string' },
+        { key: 'timestamp', value: auth.timestamp || '', type: 'string' },
+        { key: 'includePayloadHash', value: auth.includePayloadHash === true ? 'true' : 'false', type: 'boolean' }
       ]
     };
   }
@@ -1415,7 +1611,7 @@ function exportPostmanAuthModel(auth) {
         { key: 'region', value: auth.region || '', type: 'string' },
         { key: 'service', value: auth.service || '', type: 'string' },
         { key: 'sessionToken', value: auth.sessionToken || '', type: 'string' },
-        { key: 'addAuthDataToQuery', value: auth.addAuthDataToQuery === true ? 'true' : 'false', type: 'boolean' }
+        { key: 'addAuthDataTo', value: auth.addAuthDataToQuery === true ? 'Request URL' : 'Request Headers', type: 'string' }
       ]
     };
   }
@@ -1428,10 +1624,16 @@ function exportPostmanAuthModel(auth) {
         { key: 'token', value: auth.token || '', type: 'string' },
         { key: 'tokenSecret', value: auth.tokenSecret || '', type: 'string' },
         { key: 'signatureMethod', value: auth.signatureMethod || 'HMAC-SHA1', type: 'string' },
+        { key: 'privateKey', value: auth.privateKey || '', type: 'string' },
+        { key: 'addParamsToHeader', value: auth.addAuthDataTo === 'queryOrBody' ? 'false' : 'true', type: 'boolean' },
+        { key: 'callback', value: auth.callback || '', type: 'string' },
+        { key: 'verifier', value: auth.verifier || '', type: 'string' },
         { key: 'timestamp', value: auth.timestamp || '', type: 'string' },
         { key: 'nonce', value: auth.nonce || '', type: 'string' },
         { key: 'version', value: auth.version || '1.0', type: 'string' },
-        { key: 'realm', value: auth.realm || '', type: 'string' }
+        { key: 'realm', value: auth.realm || '', type: 'string' },
+        { key: 'includeBodyHash', value: auth.includeBodyHash === true ? 'true' : 'false', type: 'boolean' },
+        { key: 'addEmptyParamsToSign', value: auth.addEmptyParamsToSign === true ? 'true' : 'false', type: 'boolean' }
       ]
     };
   }
@@ -1441,6 +1643,7 @@ function exportPostmanAuthModel(auth) {
       ntlm: [
         { key: 'username', value: auth.username || '', type: 'string' },
         { key: 'password', value: auth.password || '', type: 'string' },
+        { key: 'disableRetryingRequest', value: auth.disableRetryingRequest === true ? 'true' : 'false', type: 'boolean' },
         { key: 'domain', value: auth.domain || '', type: 'string' },
         { key: 'workstation', value: auth.workstation || '', type: 'string' }
       ]
@@ -1453,7 +1656,11 @@ function exportPostmanAuthModel(auth) {
         { key: 'accessToken', value: auth.accessToken || '', type: 'string' },
         { key: 'clientToken', value: auth.clientToken || '', type: 'string' },
         { key: 'clientSecret', value: auth.clientSecret || '', type: 'string' },
-        { key: 'headersToSign', value: auth.headersToSign || '', type: 'string' }
+        { key: 'nonce', value: auth.nonce || '', type: 'string' },
+        { key: 'timestamp', value: auth.timestamp || '', type: 'string' },
+        { key: 'baseUrl', value: auth.baseUrl || '', type: 'string' },
+        { key: 'headersToSign', value: auth.headersToSign || '', type: 'string' },
+        { key: 'maxBodySize', value: auth.maxBodySize || '', type: 'string' }
       ]
     };
   }
@@ -1463,6 +1670,7 @@ function exportPostmanAuthModel(auth) {
       'jwt-bearer': [
         { key: 'algorithm', value: auth.algorithm || 'HS256', type: 'string' },
         { key: 'secret', value: auth.secret || '', type: 'string' },
+        { key: 'secretBase64Encoded', value: auth.secretBase64Encoded === true ? 'true' : 'false', type: 'boolean' },
         { key: 'privateKey', value: auth.privateKey || '', type: 'string' },
         { key: 'keyId', value: auth.keyId || '', type: 'string' },
         { key: 'issuer', value: auth.issuer || '', type: 'string' },
@@ -1470,9 +1678,9 @@ function exportPostmanAuthModel(auth) {
         { key: 'audience', value: auth.audience || '', type: 'string' },
         { key: 'expiresIn', value: auth.expiresIn || '300', type: 'string' },
         { key: 'claims', value: auth.claims || '', type: 'string' },
+        { key: 'jwtHeaders', value: auth.jwtHeaders || '', type: 'string' },
         { key: 'headerPrefix', value: auth.headerPrefix || 'Bearer', type: 'string' },
-        { key: 'addTokenTo', value: auth.addTokenTo || 'header', type: 'string' },
-        { key: 'queryParamName', value: auth.queryParamName || 'token', type: 'string' }
+        { key: 'addTokenTo', value: auth.addTokenTo === 'query' ? 'Query Param' : 'Request Header', type: 'string' }
       ]
     };
   }
@@ -1487,7 +1695,8 @@ function exportPostmanAuthModel(auth) {
         { key: 'subject', value: auth.subject || '', type: 'string' },
         { key: 'audience', value: auth.audience || '', type: 'string' },
         { key: 'keyId', value: auth.keyId || '', type: 'string' },
-        { key: 'expiresIn', value: auth.expiresIn || '300', type: 'string' }
+        { key: 'expiry', value: auth.expiresIn || '3600', type: 'string' },
+        { key: 'additionalClaims', value: auth.additionalClaims || '{}', type: 'string' }
       ]
     };
   }

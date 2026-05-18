@@ -10,17 +10,109 @@
     'authCookieValueInput',
     'authOauthGrantTypeSelect',
     'authOauthTokenTypeSelect',
+    'authOauthHeaderPrefixInput',
+    'authOauthTokenNameInput',
+    'authOauthAddAuthDataToSelect',
     'authOauthAccessTokenInput',
     'authOauthRefreshTokenInput',
+    'authOauthAutoRefreshTokenInput',
+    'authOauthShareTokenInput',
     'authOauthAuthorizationUrlInput',
+    'authOauthCallbackUrlInput',
+    'authOauthAuthorizeUsingBrowserInput',
     'authOauthRedirectStrategySelect',
     'authOauthDeviceAuthorizationUrlInput',
     'authOauthTokenUrlInput',
+    'authOauthRefreshTokenUrlInput',
     'authOauthClientIdInput',
     'authOauthClientSecretInput',
+    'authOauthUsernameInput',
+    'authOauthPasswordInput',
     'authOauthScopesInput',
+    'authOauthStateInput',
+    'authOauthCodeChallengeMethodSelect',
+    'authOauthCodeVerifierInput',
+    'authOauthClientAuthenticationSelect',
+    'authOauthAuthRequestParamKeyInput',
+    'authOauthAuthRequestParamValueInput',
+    'authOauthTokenRequestParamKeyInput',
+    'authOauthTokenRequestParamValueInput',
+    'authOauthTokenRequestParamSendInSelect',
+    'authOauthRefreshRequestParamKeyInput',
+    'authOauthRefreshRequestParamValueInput',
+    'authOauthRefreshRequestParamSendInSelect',
     'authOauthUserCodeInput',
     'authOauthVerificationUriInput',
+    'authOauth1SignatureMethodSelect',
+    'authOauth1ConsumerKeyInput',
+    'authOauth1ConsumerSecretInput',
+    'authOauth1TokenInput',
+    'authOauth1TokenSecretInput',
+    'authOauth1PrivateKeyInput',
+    'authOauth1AddAuthDataToSelect',
+    'authOauth1CallbackInput',
+    'authOauth1VerifierInput',
+    'authOauth1TimestampInput',
+    'authOauth1NonceInput',
+    'authOauth1VersionInput',
+    'authOauth1RealmInput',
+    'authOauth1IncludeBodyHashInput',
+    'authOauth1AddEmptyParamsToSignInput',
+    'authDigestUsernameInput',
+    'authDigestPasswordInput',
+    'authDigestDisableRetryingRequestInput',
+    'authDigestRealmInput',
+    'authDigestNonceInput',
+    'authDigestAlgorithmSelect',
+    'authDigestQopInput',
+    'authDigestNonceCountInput',
+    'authDigestClientNonceInput',
+    'authDigestOpaqueInput',
+    'authHawkAuthIdInput',
+    'authHawkAuthKeyInput',
+    'authHawkAlgorithmSelect',
+    'authHawkUserInput',
+    'authHawkNonceInput',
+    'authHawkExtraDataInput',
+    'authHawkAppInput',
+    'authHawkDelegationInput',
+    'authHawkTimestampInput',
+    'authHawkIncludePayloadHashInput',
+    'authAwsAccessKeyInput',
+    'authAwsSecretKeyInput',
+    'authAwsAddAuthDataToSelect',
+    'authAwsRegionInput',
+    'authAwsServiceInput',
+    'authAwsSessionTokenInput',
+    'authNtlmUsernameInput',
+    'authNtlmPasswordInput',
+    'authNtlmDisableRetryingRequestInput',
+    'authNtlmDomainInput',
+    'authNtlmWorkstationInput',
+    'authAkamaiAccessTokenInput',
+    'authAkamaiClientTokenInput',
+    'authAkamaiClientSecretInput',
+    'authAkamaiNonceInput',
+    'authAkamaiTimestampInput',
+    'authAkamaiBaseUrlInput',
+    'authAkamaiHeadersToSignInput',
+    'authAkamaiMaxBodySizeInput',
+    'authJwtAlgorithmSelect',
+    'authJwtSecretInput',
+    'authJwtSecretBase64EncodedInput',
+    'authJwtPrivateKeyInput',
+    'authJwtAddTokenToSelect',
+    'authJwtPayloadInput',
+    'authJwtHeaderPrefixInput',
+    'authJwtHeadersInput',
+    'authAsapAlgorithmSelect',
+    'authAsapIssuerInput',
+    'authAsapAudienceInput',
+    'authAsapKeyIdInput',
+    'authAsapPrivateKeyInput',
+    'authAsapSubjectInput',
+    'authAsapAdditionalClaimsInput',
+    'authAsapExpiresInInput',
     'authClientPfxPathInput',
     'authClientCertPathInput',
     'authClientKeyPathInput',
@@ -81,7 +173,9 @@
       ['uiRegressionSmoke', 'PostMeter UI Regression'],
       ['uiSnapshotSmoke', 'PostMeter UI Snapshot'],
       ['uiTypographySmoke', 'PostMeter UI Typography'],
-      ['uiOauthSmoke', 'PostMeter UI OAuth']
+      ['uiOauthSmoke', 'PostMeter UI OAuth'],
+      ['uiHawkSmoke', 'PostMeter UI Hawk'],
+      ['uiAwsSmoke', 'PostMeter UI AWS']
     ]) {
       if (params.get(flag) === '1') {
         doc.title = `${prefix}:FAIL:${message}`;
@@ -172,8 +266,13 @@
     bindClick(doc, 'refreshVaultMetadataButton', options.onRefreshVaultMetadata);
     bindClick(doc, 'resetVaultButton', options.onResetVault);
     bindClick(doc, 'addRequestVariableButton', options.onAddRequestVariable);
-    bindClick(doc, 'addCookieButton', options.onAddCookie);
-    bindClick(doc, 'clearExpiredCookiesButton', options.onClearExpiredCookies);
+    bindClick(doc, 'openCookiesButton', options.onOpenCookies);
+    bindClick(doc, 'openRequestCookiesButton', options.onOpenCookies);
+    bindClick(doc, 'openPerformanceCookiesButton', options.onOpenCookies);
+    bindClick(doc, 'cookiesAddDomainButton', options.onAddCookieDomain);
+    bindKey(doc, 'cookiesDomainInput', options.onAddCookieDomain, ['Enter']);
+    bindClick(doc, 'clearExpiredWorkspaceCookiesButton', options.onClearExpiredWorkspaceCookies);
+    bindClick(doc, 'clearAllWorkspaceCookiesButton', options.onClearAllWorkspaceCookies);
     bindClick(doc, 'runCollectionButton', options.onRunCollection);
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
     bindClick(doc, 'exportRunnerHtmlButton', options.onExportRunnerHtml);
@@ -230,8 +329,6 @@
     bindChange(doc, 'performanceSendPostMeterTokenInput', options.onPerformancePostMeterTokenHeaderChange);
     bindChange(doc, 'performanceShowGeneratedHeadersInput', options.onPerformanceShowGeneratedHeadersChange);
     bindClick(doc, 'addPerformanceRequestVariableButton', options.onAddPerformanceRequestVariable);
-    bindClick(doc, 'addPerformanceCookieButton', options.onAddPerformanceCookie);
-    bindClick(doc, 'clearExpiredPerformanceCookiesButton', options.onClearExpiredPerformanceCookies);
     bindClick(doc, 'calibratePerformanceButton', options.onCalibratePerformance);
     bindClick(doc, 'startPkceFlowButton', options.onStartPkceFlow);
     bindClick(doc, 'startDeviceFlowButton', options.onStartDeviceFlow);
@@ -477,6 +574,7 @@
     bindClick(doc, 'cancelAuthRefreshAutoDetectButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'confirmAuthRefreshAutoDetectButton', options.onConfirmAuthRefreshAutoDetectModal);
     bindClick(doc, 'closeNotificationModalButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closeCookiesModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalFooterButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeTutorialsModalButton', () => options.onResolveActiveModal?.(null));
@@ -542,12 +640,24 @@
     if (id === 'authTypeSelect') {
       options.onAuthTypeChange?.(input.value);
     }
+    if (id === 'authOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
+    }
+    if (id === 'authJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
+    }
     options.onAuthInput?.();
   }
 
   function handlePerformanceAuthEditorInput(id, input, options) {
     if (id === 'performanceAuthTypeSelect') {
       options.onPerformanceAuthTypeChange?.(input.value);
+    }
+    if (id === 'performanceAuthOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
+    }
+    if (id === 'performanceAuthJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
     }
     options.onPerformanceAuthInput?.();
   }
@@ -556,6 +666,12 @@
     if (id === 'collectionAuthTypeSelect') {
       options.onCollectionAuthTypeChange?.(input.value);
     }
+    if (id === 'collectionAuthOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
+    }
+    if (id === 'collectionAuthJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
+    }
     options.onCollectionAuthInput?.();
   }
 
@@ -563,7 +679,27 @@
     if (id === 'folderAuthTypeSelect') {
       options.onFolderAuthTypeChange?.(input.value);
     }
+    if (id === 'folderAuthOauthGrantTypeSelect') {
+      syncOauth2GrantDataset(input);
+    }
+    if (id === 'folderAuthJwtAlgorithmSelect') {
+      syncJwtAlgorithmDataset(input);
+    }
     options.onFolderAuthInput?.();
+  }
+
+  function syncOauth2GrantDataset(input) {
+    const section = input?.closest?.('[data-auth-section="oauth2"]');
+    if (section) {
+      section.dataset.oauth2GrantType = input.value || 'authorizationCode';
+    }
+  }
+
+  function syncJwtAlgorithmDataset(input) {
+    const section = input?.closest?.('[data-auth-section="jwtBearer"]');
+    if (section) {
+      section.dataset.jwtAlgorithmKind = String(input.value || 'HS256').toUpperCase().startsWith('HS') ? 'secret' : 'private';
+    }
   }
 
   function bindToolbarMenus(doc = document, options = {}) {
@@ -581,7 +717,8 @@
       ['performanceAuthRefreshManageRequestButton', 'performanceAuthRefreshManageRequestMenu'],
       ['performanceAuthRefreshTokenManageRequestButton', 'performanceAuthRefreshTokenManageRequestMenu'],
       ['exportRunnerResultsButton', 'exportRunnerResultsMenu'],
-      ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu']
+      ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu'],
+      ['cookiesClearMenuButton', 'cookiesClearMenu']
     ]) {
       const button = getElement(doc, buttonId);
       const menu = getElement(doc, menuId);
@@ -754,7 +891,8 @@
   }
 
   function openToolbarMenu(doc, button, menu, options = {}) {
-    if (isModalBackdropOpen(doc)) {
+    const openModal = menu.closest?.('.modal');
+    if (isModalBackdropOpen(doc) && !(openModal && openModal.hidden === false)) {
       closeToolbarMenus(doc);
       return;
     }

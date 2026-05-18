@@ -1433,7 +1433,7 @@
         return setStatus('Select a request before starting authorization.');
       }
       collectRequestFromEditor();
-      if (request.auth?.type !== 'oauth2' || request.auth?.grantType !== 'authorizationCode') {
+      if (request.auth?.type !== 'oauth2' || !isOAuthAuthorizationCodeGrant(request.auth?.grantType)) {
         return setStatus('Select OAuth 2.0 Authorization Code before starting authorization.');
       }
       const flowId = runtimeId();
@@ -1454,7 +1454,7 @@
           flowId,
           request.auth,
           environment,
-          element('authOauthRedirectStrategySelect').value
+          inferOauthRedirectStrategy(request.auth?.redirectUri)
         );
         if (state.activeOauthFlowId !== flowId) {
           return;
@@ -1512,15 +1512,37 @@
     }
 
     function setOauthButtonsBusy(isBusy) {
-      element('startPkceFlowButton').disabled = isBusy;
-      element('startDeviceFlowButton').disabled = isBusy;
-      element('cancelOauthFlowButton').disabled = !isBusy;
+      const startPkceButton = element('startPkceFlowButton');
+      const startDeviceButton = element('startDeviceFlowButton');
+      const cancelButton = element('cancelOauthFlowButton');
+      if (startPkceButton) {
+        startPkceButton.disabled = isBusy;
+      }
+      if (startDeviceButton) {
+        startDeviceButton.disabled = isBusy;
+      }
+      if (cancelButton) {
+        cancelButton.disabled = !isBusy;
+      }
     }
 
     function renderOauthProgress(progress) {
       element('oauthProgressPanel').hidden = false;
       element('oauthProgressStatus').textContent = runFormatting.oauthStatusText(progress);
       element('oauthProgressDetail').textContent = runFormatting.oauthProgressDetail(progress);
+    }
+
+    function isOAuthAuthorizationCodeGrant(grantType) {
+      return grantType === 'authorizationCode' || grantType === 'authorizationCodePkce';
+    }
+
+    function inferOauthRedirectStrategy(callbackUrl) {
+      try {
+        const parsed = new URL(String(callbackUrl || ''));
+        return parsed.protocol === 'postmeter:' ? 'customScheme' : 'loopback';
+      } catch {
+        return 'loopback';
+      }
     }
 
     async function saveWorkspace(showStatus = true, config = {}) {

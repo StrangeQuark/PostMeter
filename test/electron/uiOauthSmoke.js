@@ -40,6 +40,17 @@ async function createMockOAuthServer() {
     const url = new URL(request.url, baseUrl || 'http://127.0.0.1');
     if (url.pathname === '/authorize') {
       const mode = url.searchParams.get('mode');
+      if (mode === 'auth-code') {
+        const redirect = new URL(url.searchParams.get('redirect_uri'));
+        redirect.searchParams.set('code', url.searchParams.has('code_challenge') || url.searchParams.has('code_challenge_method')
+          ? 'unexpected-pkce-code'
+          : 'auth-code-e2e-code');
+        redirect.searchParams.set('state', url.searchParams.get('state'));
+        response.statusCode = 302;
+        response.setHeader('Location', redirect.toString());
+        response.end();
+        return;
+      }
       const redirect = new URL(url.searchParams.get('redirect_uri'));
       redirect.searchParams.set('code', mode === 'token-error' ? 'token-error-code' : 'pkce-e2e-code');
       redirect.searchParams.set('state', mode === 'bad-state' ? 'wrong-state' : url.searchParams.get('state'));
@@ -73,9 +84,65 @@ async function createMockOAuthServer() {
           }));
           return;
         }
+        if (body.get('code') === 'auth-code-e2e-code') {
+          if (body.has('code_verifier')) {
+            response.statusCode = 400;
+            response.end(JSON.stringify({
+              error: 'invalid_request',
+              error_description: 'authorization-code smoke must not include PKCE verifier'
+            }));
+            return;
+          }
+          response.end(JSON.stringify({
+            access_token: 'auth-code-e2e-token',
+            refresh_token: 'auth-code-refresh-token',
+            token_type: 'Bearer',
+            expires_in: 3600
+          }));
+          return;
+        }
+        if (body.get('code') !== 'pkce-e2e-code' || body.get('code_verifier') !== 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ') {
+          response.statusCode = 400;
+          response.end(JSON.stringify({
+            error: 'invalid_request',
+            error_description: 'PKCE smoke did not send the expected authorization code and verifier'
+          }));
+          return;
+        }
         response.end(JSON.stringify({
           access_token: 'pkce-e2e-token',
           refresh_token: 'pkce-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600
+        }));
+        return;
+      }
+      if (body.get('grant_type') === 'client_credentials') {
+        if (body.get('client_id') !== 'postmeter-client' || body.get('client_secret') !== 'client-secret' || body.get('scope') !== 'read write') {
+          response.statusCode = 400;
+          response.end(JSON.stringify({ error: 'invalid_client_credentials_request' }));
+          return;
+        }
+        response.end(JSON.stringify({
+          access_token: 'client-credentials-e2e-token',
+          token_type: 'Bearer',
+          expires_in: 3600
+        }));
+        return;
+      }
+      if (body.get('grant_type') === 'password') {
+        const expectedAuthorization = `Basic ${Buffer.from('postmeter-client:client-secret').toString('base64')}`;
+        if (request.headers.authorization !== expectedAuthorization
+          || body.get('username') !== 'resource-owner'
+          || body.get('password') !== 'owner-password'
+          || body.get('scope') !== 'read write') {
+          response.statusCode = 400;
+          response.end(JSON.stringify({ error: 'invalid_password_credentials_request' }));
+          return;
+        }
+        response.end(JSON.stringify({
+          access_token: 'password-e2e-token',
+          refresh_token: 'password-e2e-refresh-token',
           token_type: 'Bearer',
           expires_in: 3600
         }));
@@ -101,6 +168,14 @@ async function createMockOAuthServer() {
       }
       response.statusCode = 400;
       response.end(JSON.stringify({ error: 'unsupported_grant_type' }));
+      return;
+    }
+    if (url.pathname === '/resource') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        authorization: request.headers.authorization || '',
+        accessToken: url.searchParams.get('access_token') || ''
+      }));
       return;
     }
     response.statusCode = 404;

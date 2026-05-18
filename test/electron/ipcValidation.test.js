@@ -62,6 +62,40 @@ test('accepts structurally valid IPC payloads', () => {
     settings: { sslCertificateVerification: false },
     auth: { type: 'bearer', token: 'secret' }
   }));
+  assert.doesNotThrow(() => assertRequestPayload({
+    method: 'GET',
+    url: 'https://example.test/oauth2',
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    auth: {
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      addAuthDataTo: 'query',
+      clientAuthentication: 'body',
+      headerPrefix: 'Token',
+      tokenName: 'Production token',
+      refreshTokenUrl: 'https://auth.example.test/refresh',
+      authorizeUsingBrowser: true,
+      state: 'configured-state',
+      codeChallengeMethod: 'plain',
+      codeVerifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ'
+    }
+  }));
+  assert.doesNotThrow(() => assertRequestPayload({
+    method: 'GET',
+    url: 'https://example.test/oauth2-password',
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    auth: {
+      type: 'oauth2',
+      grantType: 'passwordCredentials',
+      tokenUrl: 'https://auth.example.test/token',
+      username: 'resource-owner',
+      password: 'owner-password'
+    }
+  }));
   assert.doesNotThrow(() => assertCollectionPayload({
     id: 'c1',
     name: 'Collection',
@@ -719,6 +753,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', grantType: 'password' } }), /request.auth.grantType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'apiKey', location: 'body' } }), /request.auth.location must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', redirectStrategy: 'embeddedWebView' } }), /request.auth.redirectStrategy must be one of/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', addAuthDataTo: 'cookies' } }), /request.auth.addAuthDataTo must be one of/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', clientAuthentication: 'privateKeyJwt' } }), /request.auth.clientAuthentication must be one of/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', codeChallengeMethod: 'S512' } }), /request.auth.codeChallengeMethod must be one of/);
   assert.throws(() => assertCollectionPayload({ certificates: [{ matches: [42] }], requests: [], folders: [] }), /collection.certificates\[0\].matches\[0\] must be a string/);
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
   assert.throws(() => assertWorkspacePayload({ collections: [], runners: {}, environments: [], history: [] }), /workspace.runners must be an array/);

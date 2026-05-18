@@ -11,8 +11,12 @@ const APP_RENDERER_QUERY_KEYS = new Set([
   'uiSnapshotSmoke',
   'uiTypographySmoke',
   'uiOauthSmoke',
+  'uiHawkSmoke',
+  'uiAwsSmoke',
   'uiWorkflowBaseUrl',
-  'uiOauthBaseUrl'
+  'uiOauthBaseUrl',
+  'uiHawkBaseUrl',
+  'uiAwsBaseUrl'
 ]);
 const ALLOWED_CORE_ASSETS = new Set([
   '/src/core/authModel.js',

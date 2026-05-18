@@ -287,6 +287,10 @@ let collectionDirtySnapshots = RENDERER_STATE_DEFAULTS.collectionDirtySnapshots;
 let collectionDirtyOwners = RENDERER_STATE_DEFAULTS.collectionDirtyOwners;
 let cookieJarDirtySnapshot = RENDERER_STATE_DEFAULTS.cookieJarDirtySnapshot;
 let cookieJarDirtyOwner = RENDERER_STATE_DEFAULTS.cookieJarDirtyOwner;
+let cookieManagerExtraDomains = new Set();
+let cookieManagerSelectedCookieIndex = -1;
+let cookieManagerDraftText = '';
+let cookieManagerErrorMessage = '';
 let activeOauthFlowId = RENDERER_STATE_DEFAULTS.activeOauthFlowId;
 let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
 let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
@@ -737,6 +741,8 @@ initializeRenderer({
     queueUiSnapshotSmoke();
     queueUiTypographySmoke();
     queueUiOauthSmoke();
+    queueUiHawkSmoke();
+    queueUiAwsSmoke();
     markUiWorkflowStartupStep('after-smoke-queue');
   }
 });
@@ -860,8 +866,10 @@ function bindUi() {
     onAddCollectionVariable: addCollectionVariable,
     onAddFolderVariable: addFolderVariable,
     onAddRequestVariable: addRequestVariable,
-    onAddCookie: addCookie,
-    onClearExpiredCookies: clearExpiredCookies,
+    onOpenCookies: () => { void openCookiesModal(); },
+    onAddCookieDomain: addCookieDomainFromInput,
+    onClearExpiredWorkspaceCookies: clearExpiredWorkspaceCookies,
+    onClearAllWorkspaceCookies: () => { void clearAllWorkspaceCookies(); },
     onRunCollection: runActiveCollection,
     onCancelCollectionRun: cancelCollectionRun,
     onExportRunnerHtml: () => openHtmlReportOptionsModal('runner'),
@@ -912,8 +920,6 @@ function bindUi() {
     onPerformancePostMeterTokenHeaderChange: () => setActivePerformanceRequestAutoHeaderOption('sendPostMeterToken', $('performanceSendPostMeterTokenInput')?.checked === true),
     onPerformanceShowGeneratedHeadersChange: () => setActivePerformanceRequestAutoHeaderOption('showGeneratedHeaders', $('performanceShowGeneratedHeadersInput')?.checked === true),
     onAddPerformanceRequestVariable: addPerformanceRequestVariable,
-    onAddPerformanceCookie: addPerformanceCookie,
-    onClearExpiredPerformanceCookies: clearExpiredPerformanceCookies,
     onCalibratePerformance: () => { void startPerformanceCalibration(); },
     onClosePerformanceCalibration: closePerformanceCalibrationModal,
     onStartPkceFlow: startPkceFlow,
@@ -3121,7 +3127,7 @@ function showModal(modalId, cancelValue) {
   closeToolbarMenus();
   closeFileSourceMenu();
   lastModalFocusTarget = modalRestoreFocusTarget(previousFocus);
-  showOnlyModal(modalId);
+  showModalStack(modalId);
   return new Promise((resolve) => {
     openModalState(state, modalId, resolve, cancelValue);
     focusInitialModalElement(modalId);
@@ -3136,7 +3142,7 @@ function resolveActiveModal(value, options = {}) {
   const parentModal = modalStack.pop();
   if (parentModal) {
     const childFocusTarget = lastModalFocusTarget;
-    showOnlyModal(parentModal.modalId);
+    showModalStack(parentModal.modalId);
     openModalState(state, parentModal.modalId, parentModal.resolver, parentModal.cancelValue);
     lastModalFocusTarget = parentModal.focusTarget;
     restoreFocusTarget(childFocusTarget);
@@ -3151,15 +3157,36 @@ function resolveActiveModal(value, options = {}) {
 
 function showOnlyModal(modalId) {
   $('modalBackdrop').hidden = false;
+  $('modalBackdrop').classList.remove('is-stacked');
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+    modal.classList.remove('is-stack-parent', 'is-stack-top');
     modal.hidden = modal.id !== modalId;
+    if (modal.id === modalId) {
+      modal.classList.add('is-stack-top');
+    }
+  }
+}
+
+function showModalStack(modalId) {
+  const backdrop = $('modalBackdrop');
+  const visibleModalIds = new Set(modalStack.map((modal) => modal.modalId));
+  visibleModalIds.add(modalId);
+  backdrop.hidden = false;
+  backdrop.classList.toggle('is-stacked', visibleModalIds.size > 1);
+  for (const modal of backdrop.querySelectorAll('.modal')) {
+    const isVisible = visibleModalIds.has(modal.id);
+    modal.hidden = !isVisible;
+    modal.classList.toggle('is-stack-parent', isVisible && modal.id !== modalId);
+    modal.classList.toggle('is-stack-top', isVisible && modal.id === modalId);
   }
 }
 
 function hideAllModals() {
   $('modalBackdrop').hidden = true;
+  $('modalBackdrop').classList.remove('is-stacked');
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
     modal.hidden = true;
+    modal.classList.remove('is-stack-parent', 'is-stack-top');
   }
 }
 
@@ -3171,7 +3198,8 @@ function restoreFocusTarget(target) {
 
 function shouldStackModal(parentModalId, childModalId) {
   return (parentModalId === 'settingsModal' && childModalId !== parentModalId)
-    || (parentModalId === 'clientCertificateModal' && childModalId === 'filePickerModal');
+    || (parentModalId === 'clientCertificateModal' && childModalId === 'filePickerModal')
+    || (parentModalId === 'cookiesModal' && childModalId === 'confirmActionModal');
 }
 
 function cancelActiveModal() {
@@ -3195,6 +3223,13 @@ async function openTutorialsModal() {
   }
   renderTutorialsModal();
   return showModal('tutorialsModal', null);
+}
+
+async function openCookiesModal() {
+  renderWorkspaceCookieManager();
+  await showModal('cookiesModal', true);
+  renderCookieJarEditor();
+  renderPerformanceCookieJarEditor();
 }
 
 function renderTutorialsModal() {
@@ -4136,6 +4171,7 @@ function focusInitialModalElement(modalId) {
     confirmActionModal: 'cancelConfirmActionButton',
     authRefreshAutoDetectModal: 'cancelAuthRefreshAutoDetectButton',
     notificationModal: 'closeNotificationModalButton',
+    cookiesModal: 'cookiesDomainInput',
     performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
     filePickerModal: 'filePickerBrowseButton',
     vaultPromptModal: 'denyVaultPromptButton'
@@ -7894,8 +7930,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     for (const id of [
       'performanceParamsTable',
       'performanceHeadersTable',
-      'performanceRequestVariablesTable',
-      'performanceCookiesTable'
+      'performanceRequestVariablesTable'
     ]) {
       const container = $(id);
       if (container) {
@@ -8592,7 +8627,6 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   setValue(`${prefix}AuthRefreshRefreshTokenPathInput`, refreshTokenOutput.path);
   setValue(`${prefix}AuthRefreshApiKeyLocationSelect`, normalized.apiKeyLocation || 'header');
   setValue(`${prefix}AuthRefreshApiKeyNameInput`, normalized.apiKeyName || 'X-API-Key');
-  setValue(`${prefix}AuthRefreshApiKeyVariableInput`, apiKeyOutput.variable);
   setValue(`${prefix}AuthRefreshApiKeyPathInput`, apiKeyOutput.path);
   setValue(`${prefix}AuthRefreshCookieNameInput`, cookieOutput.path);
   setValue(`${prefix}AuthRefreshCookieVariableInput`, cookieOutput.variable);
@@ -8762,12 +8796,12 @@ function collectAuthRefreshFromControls(prefix, fallback = {}) {
     apiKeyLocation: $(`${prefix}AuthRefreshApiKeyLocationSelect`)?.value || existing.apiKeyLocation || 'header',
     apiKeyName: $(`${prefix}AuthRefreshApiKeyNameInput`)?.value || existing.apiKeyName || 'X-API-Key',
     accessTokenVariable: primaryOutput?.variable || '',
-    refreshTokenVariable: authType === 'bearer' || authType === 'oauth2' || authType === 'cookie'
+    refreshTokenVariable: authType === 'bearer' || authType === 'cookie'
       ? ($(`${prefix}AuthRefreshRefreshTokenVariableInput`)?.value || '')
       : '',
     expiresAtVariable: '',
     accessTokenPath: primaryOutput?.path || '',
-    refreshTokenPath: authType === 'bearer' || authType === 'oauth2' || authType === 'cookie'
+    refreshTokenPath: authType === 'bearer' || authType === 'cookie'
       ? ($(`${prefix}AuthRefreshRefreshTokenPathInput`)?.value || '')
       : '',
     expiresInPath: '',
@@ -8792,14 +8826,14 @@ function collectAuthRefreshFromControls(prefix, fallback = {}) {
 
 function normalizeAuthRefreshUiType(value) {
   const text = String(value || '').trim();
-  return ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'].includes(text) ? text : 'bearer';
+  return ['bearer', 'apiKey', 'cookie', 'aws', 'custom'].includes(text) ? text : 'bearer';
 }
 
 function authRefreshDefaultOutput(slot) {
   const defaults = {
     accessToken: { slot: 'accessToken', source: 'body', path: 'access_token', variable: 'ACCESS_TOKEN' },
     refreshToken: { slot: 'refreshToken', source: 'body', path: 'refresh_token', variable: 'REFRESH_TOKEN' },
-    apiKey: { slot: 'apiKey', source: 'body', path: 'api_key', variable: 'API_KEY' },
+    apiKey: { slot: 'apiKey', source: 'body', path: 'api_key', variable: '' },
     cookie: { slot: 'cookie', source: 'cookie', path: '', variable: '' },
     awsAccessKey: { slot: 'awsAccessKey', source: 'body', path: 'credentials.accessKeyId', variable: 'AWS_ACCESS_KEY_ID' },
     awsSecretKey: { slot: 'awsSecretKey', source: 'body', path: 'credentials.secretAccessKey', variable: 'AWS_SECRET_ACCESS_KEY' },
@@ -8864,15 +8898,6 @@ function syncAuthRefreshOutputSourceField(prefix, controlName, sourceOverride = 
 }
 
 function authRefreshOutputPathLabel(controlName, source, authType = '') {
-  if (controlName === 'AccessToken' && authType === 'oauth2') {
-    if (source === 'header') {
-      return 'OAuth Access Token Header Name';
-    }
-    if (source === 'cookie') {
-      return 'OAuth Access Token Cookie Name';
-    }
-    return 'OAuth Access Token Response Path';
-  }
   const labels = AUTH_REFRESH_OUTPUT_PATH_LABELS[controlName] || {};
   return labels[source] || labels.body || 'Response Path';
 }
@@ -8936,7 +8961,6 @@ function authRefreshOutputControlSource(prefix, controlName) {
 function authRefreshPrimaryOutput(authType, outputs = []) {
   const primarySlots = {
     bearer: 'accessToken',
-    oauth2: 'accessToken',
     apiKey: 'apiKey',
     cookie: 'cookie',
     aws: 'awsAccessKey',
@@ -8963,16 +8987,9 @@ function applyAuthRefreshTypeVisibility(prefix, authType) {
 }
 
 function authRefreshTypeLabels(authType) {
-  if (authType === 'oauth2') {
-    return {
-      variableLabel: 'Save OAuth Access Token To',
-      pathLabel: 'OAuth Access Token Response Path',
-      help: 'The auth request uses this run environment, saves the OAuth access token to a variable, and repeats on the interval below.'
-    };
-  }
   if (authType === 'apiKey') {
     return {
-      variableLabel: 'Save API Key To',
+      variableLabel: '',
       pathLabel: 'API Key Response Path',
       help: 'The auth request uses this run environment, reads the API key, and applies it to matching API key requests.'
     };
@@ -10315,7 +10332,6 @@ function authRefreshAutoDetectTarget(ownerType, requestKind = 'access', authRefr
   }
   const targets = {
     bearer: { label: 'access token', controlName: 'AccessToken' },
-    oauth2: { label: 'OAuth access token', controlName: 'AccessToken' },
     apiKey: { label: 'API key', controlName: 'ApiKey' },
     aws: { label: 'AWS access key ID', controlName: 'AwsAccessKey' },
     custom: { label: 'custom header value', controlName: 'Custom' }
@@ -15897,7 +15913,10 @@ function renderRequestEditor() {
     $('paramsTable').textContent = '';
     $('headersTable').textContent = '';
     $('requestVariablesTable').textContent = '';
-    $('cookiesTable').textContent = '';
+    const cookiesTable = $('cookiesTable');
+    if (cookiesTable) {
+      cookiesTable.textContent = '';
+    }
     renderRequestHeaderControls(null);
     $('requestCookieJarEnabledInput').checked = false;
     $('requestCookieJarStoreInput').checked = true;
@@ -16825,6 +16844,542 @@ function renderCookieJarEditor() {
     rerender: renderCookieJarEditor,
     setStatus
   });
+}
+
+function renderWorkspaceCookieManager() {
+  const list = $('cookiesDomainList');
+  if (!list || !workspace) {
+    return;
+  }
+  workspace.cookies ||= [];
+  const activeHost = domainFromRequestUrl(activeCookieManagerRequestUrl());
+  const managedCookieNames = cookieManagerManagedCookieNameSet();
+  ensureCookieManagerManagedCookies(activeHost, managedCookieNames);
+  renderCookieManagerError();
+  list.textContent = '';
+
+  if (cookieManagerSelectedCookieIndex >= workspace.cookies.length) {
+    resetCookieManagerEditor();
+  }
+
+  const domains = cookieManagerDomains();
+  if (!domains.length) {
+    const empty = document.createElement('div');
+    empty.className = 'cookie-manager-empty';
+    empty.textContent = 'No cookie domains.';
+    list.append(empty);
+    return;
+  }
+
+  for (const domain of domains) {
+    renderCookieDomainSection(list, domain, managedCookieNames, activeHost);
+  }
+}
+
+function activeCookieManagerRequestUrl() {
+  if (activeMainPanel === 'performance') {
+    return activePerformanceTest()?.request?.url || '';
+  }
+  return activeRequest()?.url || '';
+}
+
+function activeCookieManagerManagedCookieNames() {
+  if (activeMainPanel === 'performance') {
+    return performanceManagedRefreshingCookieNames();
+  }
+  return activeRequestManagedRefreshingCookieNames();
+}
+
+function cookieManagerManagedCookieNameSet() {
+  return new Set(activeCookieManagerManagedCookieNames()
+    .map((name) => String(name || '').trim())
+    .filter(Boolean));
+}
+
+function ensureCookieManagerManagedCookies(activeHost, managedCookieNames) {
+  if (!activeHost || !managedCookieNames?.size) {
+    return;
+  }
+  workspace.cookies ||= [];
+  for (const name of managedCookieNames) {
+    const exists = workspace.cookies.some((cookie) => String(cookie?.name || '').trim() === name
+      && rendererCookieMatchesHost(cookie, activeHost));
+    if (exists) {
+      continue;
+    }
+    workspace.cookies.push(newWorkspaceCookie({
+      name,
+      value: '',
+      domain: activeHost,
+      path: '/',
+      hostOnly: true,
+      httpOnly: true,
+      sameSite: 'Lax',
+      source: 'auth-refresh'
+    }));
+  }
+}
+
+function cookieManagerDomains() {
+  const domains = new Set();
+  for (const cookie of workspace.cookies || []) {
+    const domain = normalizeCookieManagerDomain(cookie?.domain);
+    if (domain) {
+      domains.add(domain);
+    }
+  }
+  for (const domain of cookieManagerExtraDomains) {
+    const normalized = normalizeCookieManagerDomain(domain);
+    if (normalized) {
+      domains.add(normalized);
+    }
+  }
+  return Array.from(domains).sort((left, right) => left.localeCompare(right));
+}
+
+function renderCookieDomainSection(container, domain, managedCookieNames, activeHost) {
+  const cookies = (workspace.cookies || [])
+    .map((cookie, index) => ({ cookie, index }))
+    .filter(({ cookie }) => normalizeCookieManagerDomain(cookie?.domain) === domain);
+  const details = document.createElement('details');
+  details.className = 'cookie-domain-section';
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className = 'cookie-domain-summary';
+  const name = document.createElement('span');
+  name.className = 'cookie-domain-name';
+  name.textContent = domain;
+  const count = document.createElement('span');
+  count.className = 'cookie-domain-count';
+  count.textContent = `${cookies.length} ${cookies.length === 1 ? 'cookie' : 'cookies'}`;
+  const removeDomain = document.createElement('button');
+  removeDomain.type = 'button';
+  removeDomain.className = 'cookie-domain-remove-button';
+  removeDomain.textContent = 'x';
+  removeDomain.setAttribute('aria-label', `Remove domain ${domain}`);
+  removeDomain.title = `Remove ${domain} and all of its cookies`;
+  removeDomain.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    removeCookieManagerDomain(domain);
+  });
+  summary.append(name, count, removeDomain);
+
+  const body = document.createElement('div');
+  body.className = 'cookie-domain-body';
+  const cookieList = document.createElement('div');
+  cookieList.className = 'cookie-name-list';
+
+  cookies.forEach(({ cookie, index }, ordinal) => {
+    const managed = cookieManagerCookieIsManaged(cookie, managedCookieNames, activeHost);
+    const item = document.createElement('span');
+    item.className = 'cookie-name-item';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cookie-name-button';
+    button.classList.toggle('is-active', cookieManagerSelectedCookieIndex === index);
+    button.classList.toggle('is-managed', managed);
+    button.textContent = cookie.name || `Cookie ${ordinal + 1}`;
+    button.disabled = managed;
+    button.title = managed ? 'Managed by Refreshing Auth for this request.' : '';
+    button.addEventListener('click', () => openCookieManagerEditor(index));
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'cookie-remove-button';
+    remove.textContent = 'x';
+    remove.disabled = managed;
+    remove.setAttribute('aria-label', `Remove cookie ${cookie.name || ordinal + 1}`);
+    remove.title = managed ? 'Managed by Refreshing Auth for this request.' : 'Remove cookie';
+    remove.addEventListener('click', () => removeCookieManagerCookie(index));
+    item.append(button, remove);
+    cookieList.append(item);
+  });
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'cookie-add-inline-button';
+  add.textContent = '+ Add Cookie';
+  add.addEventListener('click', () => addCookieToDomain(domain));
+  cookieList.append(add);
+  body.append(cookieList);
+
+  if (cookieManagerSelectedCookieIndex >= 0) {
+    const selected = workspace.cookies[cookieManagerSelectedCookieIndex];
+    if (selected && normalizeCookieManagerDomain(selected.domain) === domain) {
+      body.append(renderCookieTextEditor(cookieManagerSelectedCookieIndex, domain));
+    }
+  }
+
+  details.append(summary, body);
+  container.append(details);
+}
+
+function renderCookieTextEditor(index, fallbackDomain) {
+  const cookie = workspace.cookies[index];
+  const editor = document.createElement('div');
+  editor.className = 'cookie-text-editor';
+  const textarea = document.createElement('textarea');
+  textarea.value = cookieManagerDraftText || cookieToSetCookieText(cookie, fallbackDomain);
+  textarea.spellcheck = false;
+  textarea.setAttribute('aria-label', `Cookie ${cookie?.name || index + 1} text`);
+  textarea.addEventListener('input', () => {
+    cookieManagerDraftText = textarea.value;
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'cookie-text-actions';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    resetCookieManagerEditor();
+    renderWorkspaceCookieManager();
+  });
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'primary';
+  save.textContent = 'Save';
+  save.addEventListener('click', () => saveCookieManagerDraft(index, fallbackDomain));
+  actions.append(cancel, save);
+  editor.append(textarea, actions);
+  return editor;
+}
+
+function cookieManagerCookieIsManaged(cookie, managedCookieNames, activeHost) {
+  return managedCookieNames.has(String(cookie?.name || '').trim())
+    && (!activeHost || rendererCookieMatchesHost(cookie, activeHost));
+}
+
+function openCookieManagerEditor(index) {
+  const cookie = workspace.cookies?.[index];
+  if (!cookie) {
+    return;
+  }
+  cookieManagerSelectedCookieIndex = index;
+  cookieManagerDraftText = cookieToSetCookieText(cookie, cookie.domain);
+  cookieManagerErrorMessage = '';
+  renderWorkspaceCookieManager();
+}
+
+function resetCookieManagerEditor() {
+  cookieManagerSelectedCookieIndex = -1;
+  cookieManagerDraftText = '';
+  cookieManagerErrorMessage = '';
+}
+
+function renderCookieManagerError() {
+  const error = $('cookiesModalError');
+  if (!error) {
+    return;
+  }
+  error.textContent = cookieManagerErrorMessage;
+  error.hidden = !cookieManagerErrorMessage;
+}
+
+function setCookieManagerError(message) {
+  cookieManagerErrorMessage = String(message || '');
+  renderCookieManagerError();
+}
+
+function cookieToSetCookieText(cookie, fallbackDomain = '') {
+  if (!cookie) {
+    return '';
+  }
+  const name = String(cookie.name || '');
+  const value = String(cookie.value || '');
+  const parts = [`${name}=${value}`];
+  const path = String(cookie.path || '/').trim() || '/';
+  parts.push(`Path=${path.startsWith('/') ? path : `/${path}`}`);
+  if (cookie.expiresAt) {
+    const expires = new Date(cookie.expiresAt);
+    parts.push(`Expires=${Number.isNaN(expires.getTime()) ? cookie.expiresAt : expires.toUTCString()}`);
+  }
+  const domain = normalizeCookieManagerDomain(cookie.domain || fallbackDomain);
+  if (cookie.hostOnly === false && domain) {
+    parts.push(`Domain=${domain}`);
+  }
+  if (cookie.secure === true) {
+    parts.push('Secure');
+  }
+  if (cookie.httpOnly === true) {
+    parts.push('HttpOnly');
+  }
+  if (cookie.sameSite) {
+    parts.push(`SameSite=${cookie.sameSite}`);
+  }
+  if (cookie.priority) {
+    parts.push(`Priority=${cookie.priority}`);
+  }
+  if (cookie.partitioned === true) {
+    parts.push('Partitioned');
+  }
+  if (cookie.enabled === false) {
+    parts.push('Enabled=false');
+  }
+  for (const extension of cookie.extensions || []) {
+    if (extension) {
+      parts.push(String(extension));
+    }
+  }
+  return `${parts.join('; ')};`;
+}
+
+function parseSetCookieTextForManager(text, fallbackDomain) {
+  const parts = String(text || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) {
+    throw new Error('Cookie text is required.');
+  }
+  const firstSeparator = parts[0].indexOf('=');
+  if (firstSeparator <= 0) {
+    throw new Error('Cookie text must start with name=value.');
+  }
+  const cookie = {
+    enabled: true,
+    name: parts[0].slice(0, firstSeparator).trim(),
+    value: parts[0].slice(firstSeparator + 1).trim(),
+    domain: normalizeCookieManagerDomain(fallbackDomain),
+    path: '/',
+    expiresAt: '',
+    secure: false,
+    httpOnly: false,
+    sameSite: '',
+    hostOnly: true,
+    priority: '',
+    partitioned: false,
+    extensions: []
+  };
+  if (!cookie.name) {
+    throw new Error('Cookie name is required.');
+  }
+
+  for (const rawAttribute of parts.slice(1)) {
+    const separator = rawAttribute.indexOf('=');
+    const key = (separator >= 0 ? rawAttribute.slice(0, separator) : rawAttribute).trim().toLowerCase();
+    const value = separator >= 0 ? rawAttribute.slice(separator + 1).trim() : '';
+    if (key === 'path') {
+      cookie.path = value.startsWith('/') ? value : `/${value || ''}`;
+    } else if (key === 'expires') {
+      const expires = new Date(value);
+      if (Number.isNaN(expires.getTime())) {
+        throw new Error('Cookie Expires must be a valid date.');
+      }
+      cookie.expiresAt = expires.toISOString();
+    } else if (key === 'max-age') {
+      const seconds = Number(value);
+      if (!Number.isFinite(seconds)) {
+        throw new Error('Cookie Max-Age must be a number.');
+      }
+      cookie.expiresAt = new Date(Date.now() + (seconds * 1000)).toISOString();
+    } else if (key === 'domain') {
+      const domain = normalizeCookieManagerDomain(value);
+      if (!domain) {
+        throw new Error('Cookie Domain must be a hostname.');
+      }
+      cookie.domain = domain;
+      cookie.hostOnly = false;
+    } else if (key === 'secure') {
+      cookie.secure = true;
+    } else if (key === 'httponly') {
+      cookie.httpOnly = true;
+    } else if (key === 'samesite') {
+      cookie.sameSite = normalizeCookieManagerSameSite(value);
+      if (!cookie.sameSite) {
+        throw new Error('Cookie SameSite must be Lax, Strict, or None.');
+      }
+    } else if (key === 'priority') {
+      cookie.priority = normalizeCookieManagerPriority(value);
+    } else if (key === 'partitioned') {
+      cookie.partitioned = true;
+    } else if (key === 'enabled') {
+      cookie.enabled = value.toLowerCase() !== 'false';
+    } else {
+      cookie.extensions.push(rawAttribute);
+    }
+  }
+  if (!cookie.domain) {
+    throw new Error('Cookie domain is required.');
+  }
+  if (cookie.sameSite === 'None' && cookie.secure !== true) {
+    throw new Error('SameSite=None requires Secure.');
+  }
+  return cookie;
+}
+
+function normalizeCookieManagerDomain(value) {
+  let text = String(value || '').trim();
+  if (!text) {
+    return '';
+  }
+  text = text.replace(/[\u3002\uFF0E\uFF61]/g, '.');
+  try {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) {
+      text = new URL(text).hostname;
+    }
+  } catch {
+    return '';
+  }
+  if (text.includes('/') || text.includes('?') || text.includes('#')) {
+    text = text.split(/[/?#]/)[0];
+  }
+  if (text.startsWith('[')) {
+    const closing = text.indexOf(']');
+    if (closing >= 0) {
+      text = text.slice(1, closing);
+    }
+  } else if (text.includes(':')) {
+    text = text.split(':')[0];
+  }
+  text = text
+    .replace(/^\.+/, '')
+    .replace(/\.+$/, '')
+    .toLowerCase();
+  if (!text || /[\s/:]/.test(text)) {
+    return '';
+  }
+  try {
+    return new URL(`http://${text}`).hostname.replace(/\.$/, '').toLowerCase();
+  } catch {
+    return text;
+  }
+}
+
+function normalizeCookieManagerSameSite(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'lax') {
+    return 'Lax';
+  }
+  if (normalized === 'strict') {
+    return 'Strict';
+  }
+  if (normalized === 'none') {
+    return 'None';
+  }
+  return '';
+}
+
+function normalizeCookieManagerPriority(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'low') {
+    return 'Low';
+  }
+  if (normalized === 'medium') {
+    return 'Medium';
+  }
+  if (normalized === 'high') {
+    return 'High';
+  }
+  return '';
+}
+
+function saveCookieManagerDraft(index, fallbackDomain) {
+  const existing = workspace.cookies?.[index];
+  if (!existing) {
+    resetCookieManagerEditor();
+    renderWorkspaceCookieManager();
+    return;
+  }
+  if (cookieManagerCookieIsManaged(existing, cookieManagerManagedCookieNameSet(), domainFromRequestUrl(activeCookieManagerRequestUrl()))) {
+    setCookieManagerError('This cookie is managed by Refreshing Auth for this request.');
+    return;
+  }
+  try {
+    const parsed = parseSetCookieTextForManager(cookieManagerDraftText, fallbackDomain);
+    const next = newWorkspaceCookie({
+      ...parsed,
+      id: existing.id,
+      source: existing.source || ''
+    });
+    workspace.cookies[index] = next;
+    cookieManagerExtraDomains.add(next.domain);
+    markCookieJarDirty();
+    const savedName = next.name || 'cookie';
+    resetCookieManagerEditor();
+    renderWorkspaceCookieManager();
+    renderCookieJarEditor();
+    renderPerformanceCookieJarEditor();
+    setStatus(`Saved cookie ${savedName}.`);
+  } catch (error) {
+    setCookieManagerError(error?.message || String(error));
+  }
+}
+
+function removeCookieManagerCookie(index) {
+  const existing = workspace.cookies?.[index];
+  if (!existing) {
+    return;
+  }
+  if (cookieManagerCookieIsManaged(existing, cookieManagerManagedCookieNameSet(), domainFromRequestUrl(activeCookieManagerRequestUrl()))) {
+    setCookieManagerError('This cookie is managed by Refreshing Auth for this request.');
+    return;
+  }
+  workspace.cookies.splice(index, 1);
+  resetCookieManagerEditor();
+  markCookieJarDirty();
+  renderWorkspaceCookieManager();
+  renderCookieJarEditor();
+  renderPerformanceCookieJarEditor();
+}
+
+function removeCookieManagerDomain(domain) {
+  const normalizedDomain = normalizeCookieManagerDomain(domain);
+  if (!normalizedDomain) {
+    return;
+  }
+  workspace.cookies ||= [];
+  const before = workspace.cookies.length;
+  workspace.cookies = workspace.cookies.filter((cookie) => normalizeCookieManagerDomain(cookie?.domain) !== normalizedDomain);
+  cookieManagerExtraDomains.delete(normalizedDomain);
+  resetCookieManagerEditor();
+  if (workspace.cookies.length !== before) {
+    markCookieJarDirty();
+  }
+  renderWorkspaceCookieManager();
+  renderCookieJarEditor();
+  renderPerformanceCookieJarEditor();
+  const removed = before - workspace.cookies.length;
+  setStatus(removed ? `Removed ${removed} cookies from ${normalizedDomain}.` : `Removed domain ${normalizedDomain}.`);
+}
+
+function addCookieToDomain(domain) {
+  const normalizedDomain = normalizeCookieManagerDomain(domain);
+  if (!normalizedDomain) {
+    setCookieManagerError('Domain name is required.');
+    return;
+  }
+  workspace.cookies ||= [];
+  const cookie = newWorkspaceCookie({
+    name: nextCookieNameForDomain(normalizedDomain),
+    value: '',
+    domain: normalizedDomain,
+    path: '/',
+    hostOnly: true,
+    sameSite: 'Lax'
+  });
+  workspace.cookies.push(cookie);
+  cookieManagerExtraDomains.add(normalizedDomain);
+  cookieManagerSelectedCookieIndex = workspace.cookies.length - 1;
+  cookieManagerDraftText = cookieToSetCookieText(cookie, normalizedDomain);
+  cookieManagerErrorMessage = '';
+  markCookieJarDirty();
+  renderWorkspaceCookieManager();
+  renderCookieJarEditor();
+  renderPerformanceCookieJarEditor();
+}
+
+function nextCookieNameForDomain(domain) {
+  const names = new Set((workspace.cookies || [])
+    .filter((cookie) => normalizeCookieManagerDomain(cookie?.domain) === domain)
+    .map((cookie) => String(cookie?.name || '')));
+  let index = 1;
+  while (names.has(`Cookie_${index}`)) {
+    index += 1;
+  }
+  return `Cookie_${index}`;
 }
 
 function activeRequestManagedRefreshingCookieNames() {
@@ -19752,40 +20307,77 @@ function addPerformanceRequestVariable() {
   }
 }
 
-function addCookie() {
-  workspace.cookies ||= [];
-  const request = activeRequest();
-  const domain = domainFromRequestUrl(request?.url) || 'example.com';
-  markCookieJarDirty();
-  workspace.cookies.push(newWorkspaceCookie({ domain }));
-  renderCookieJarEditor();
+function addCookieDomainFromInput() {
+  const input = $('cookiesDomainInput');
+  const domain = normalizeCookieManagerDomain(input?.value || '');
+  if (!domain) {
+    setCookieManagerError('Enter a domain name first.');
+    return;
+  }
+  cookieManagerExtraDomains.add(domain);
+  cookieManagerErrorMessage = '';
+  if (input) {
+    clearCookieDomainInputValue(input);
+  }
+  renderWorkspaceCookieManager();
+  clearCookieDomainInputValue($('cookiesDomainInput'));
 }
 
-function clearExpiredCookies() {
+function clearCookieDomainInputValue(input) {
+  if (!input) {
+    return;
+  }
+  input.value = '';
+  input.defaultValue = '';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function clearExpiredWorkspaceCookies() {
+  closeRendererToolbarMenus(document);
   workspace.cookies ||= [];
   const before = workspace.cookies.length;
-  markCookieJarDirty();
   workspace.cookies = workspace.cookies.filter((cookie) => !isExpiredCookie(cookie));
+  if (workspace.cookies.length !== before) {
+    markCookieJarDirty();
+  }
+  resetCookieManagerEditor();
+  renderWorkspaceCookieManager();
   renderCookieJarEditor();
+  renderPerformanceCookieJarEditor();
   setStatus(`Removed ${before - workspace.cookies.length} expired cookies.`);
 }
 
-function addPerformanceCookie() {
+async function clearAllWorkspaceCookies() {
+  closeRendererToolbarMenus(document);
   workspace.cookies ||= [];
-  const request = activePerformanceTest()?.request;
-  const domain = domainFromRequestUrl(request?.url) || 'example.com';
-  markCookieJarDirty();
-  workspace.cookies.push(newWorkspaceCookie({ domain }));
+  if (!workspace.cookies.length && !cookieManagerExtraDomains.size) {
+    setStatus('No cookies or domains to clear.');
+    return;
+  }
+  const confirmed = await confirmActionModal({
+    title: 'Clear all cookies?',
+    message: 'This removes every cookie and cookie domain from the workspace cookie jar. This cannot be undone.',
+    confirmLabel: 'Clear all',
+    danger: true
+  });
+  if (!confirmed) {
+    return;
+  }
+  const count = workspace.cookies.length;
+  const domainCount = cookieManagerExtraDomains.size;
+  workspace.cookies = [];
+  cookieManagerExtraDomains.clear();
+  resetCookieManagerEditor();
+  if (count) {
+    markCookieJarDirty();
+  }
+  renderWorkspaceCookieManager();
+  renderCookieJarEditor();
   renderPerformanceCookieJarEditor();
-}
-
-function clearExpiredPerformanceCookies() {
-  workspace.cookies ||= [];
-  const before = workspace.cookies.length;
-  markCookieJarDirty();
-  workspace.cookies = workspace.cookies.filter((cookie) => !isExpiredCookie(cookie));
-  renderPerformanceCookieJarEditor();
-  setStatus(`Removed ${before - workspace.cookies.length} expired cookies.`);
+  const cookieSummary = `${count} ${count === 1 ? 'cookie' : 'cookies'}`;
+  const domainSummary = `${domainCount} ${domainCount === 1 ? 'domain' : 'domains'}`;
+  setStatus(`Removed ${cookieSummary} and ${domainSummary}.`);
 }
 
 function addPair(fieldName) {
@@ -21144,5 +21736,7 @@ function isAutomatedUiSmoke() {
     || params.get('uiRegressionSmoke') === '1'
     || params.get('uiSnapshotSmoke') === '1'
     || params.get('uiTypographySmoke') === '1'
-    || params.get('uiOauthSmoke') === '1';
+    || params.get('uiOauthSmoke') === '1'
+    || params.get('uiHawkSmoke') === '1'
+    || params.get('uiAwsSmoke') === '1';
 }
