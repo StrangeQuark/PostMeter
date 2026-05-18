@@ -2256,6 +2256,7 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
     ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv'],
     ['runnerCaptureSettingsButton', 'runner-capture-settings', 'onToggleRunnerCaptureSettings'],
+    ['runnerAdvancedSettingsButton', 'runner-advanced-settings', 'onToggleRunnerAdvancedSettings'],
     ['runnerToggleAuthRefreshButton', 'runner-auth-refresh-toggle', 'onToggleRunnerAuthRefresh'],
     ['runnerEditAuthRefreshButton', 'runner-auth-refresh-edit', 'onEditRunnerAuthRefresh'],
     ['runnerAuthRefreshOpenRequestButton', 'runner-auth-open-request', 'onOpenRunnerAuthRefreshRequest'],

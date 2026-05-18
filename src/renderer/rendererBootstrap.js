@@ -282,6 +282,7 @@
     bindClick(doc, 'runnerToggleCsvVariablesButton', options.onToggleRunnerCsvVariables);
     bindClick(doc, 'runnerEditCsvVariablesButton', options.onEditRunnerCsvVariables);
     bindClick(doc, 'runnerCaptureSettingsButton', options.onToggleRunnerCaptureSettings);
+    bindClick(doc, 'runnerAdvancedSettingsButton', options.onToggleRunnerAdvancedSettings);
     bindClick(doc, 'runnerToggleAuthRefreshButton', options.onToggleRunnerAuthRefresh);
     bindClick(doc, 'runnerEditAuthRefreshButton', options.onEditRunnerAuthRefresh);
     bindClick(doc, 'runnerAuthRefreshOpenRequestButton', options.onOpenRunnerAuthRefreshRequest);

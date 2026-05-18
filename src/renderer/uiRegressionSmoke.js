@@ -512,6 +512,7 @@
     selectSidebarPanel('runners');
     const regressionRunner = newRunner();
     assertUiSmoke(regressionRunner, 'Regression runner was not created.');
+    assertUiSmoke($('exportRunnerResultsButton').closest('#runnerResultsShell'), 'Runner result export trigger should live in the Results panel.');
     assertUiSmoke($('exportRunnerResultsButton').textContent.trim() === 'Export Results', 'Runner result export trigger should be labeled Export Results.');
     assertUiSmoke($('exportRunnerResultsButton').disabled, 'Runner result export should be disabled before a run.');
     assertUiSmoke($('exportRunnerHtmlButton').disabled, 'Runner HTML report export menu item should be disabled before a run.');
@@ -4705,8 +4706,25 @@
       assertUiSmoke($('requestTabBar').textContent.includes(runner.name), 'Creating a runner should open a runner tab.');
       assertUiSmoke(!$('runnerMainPanel').hidden, 'Creating a runner should show the runner editor.');
       assertUiSmoke($('runnerEnvironmentSelect'), 'Runner environment selector is missing.');
+      assertUiSmoke($('runnerEnvironmentSelect').getAttribute('aria-label') === 'Runner environment', 'Runner environment selector should keep an accessible label without visible label text.');
+      assertUiSmoke(!$('runnerEnvironmentSelect').closest('label'), 'Runner environment selector should not render a visible Environment label.');
+      assertUiSmoke(Math.round($('runnerEnvironmentSelect').getBoundingClientRect().height) >= Math.round($('runnerCsvVariablesButton').getBoundingClientRect().height), 'Runner environment selector should match settings-row button height.');
       assertUiSmoke($('runnerAllowEnvironmentMutation'), 'Runner environment mutation checkbox is missing.');
       assertUiSmoke($('deleteRunnerButton').classList.contains('danger-button'), 'Runner delete button should use danger styling.');
+      const runnerHeaderActionLabels = Array.from($('runnerMainPanel').querySelectorAll('.runner-main-header .runner-actions button')).map((button) => button.textContent.trim());
+      assertUiSmoke(runnerHeaderActionLabels.join('|') === 'Save Runner|Delete Runner', `Runner header actions should only show save and delete. labels=${runnerHeaderActionLabels.join('|')}`);
+      assertUiSmoke($('runCollectionButton').closest('.runner-run-actions'), 'Runner Run button should live on the right side of the settings row.');
+      assertUiSmoke($('cancelRunnerButton').closest('.runner-run-actions'), 'Runner Cancel button should live on the right side of the settings row.');
+      assertUiSmoke(Math.round($('runCollectionButton').getBoundingClientRect().height) >= 36, 'Runner Run button should match request and performance action height.');
+      assertUiSmoke(Math.round($('cancelRunnerButton').getBoundingClientRect().height) >= 36, 'Runner Cancel button should match request and performance action height.');
+      assertUiSmoke($('runnerCsvVariablesButton').closest('.runner-settings'), 'Runner CSV controls should live in the settings row.');
+      assertUiSmoke($('runnerCaptureSettingsButton').closest('.runner-settings'), 'Runner Capture Settings should live in the settings row.');
+      assertUiSmoke($('runnerAuthRefreshButton').closest('.runner-settings'), 'Runner Refreshing Auth should live in the settings row.');
+      assertUiSmoke($('runnerAdvancedSettingsButton').closest('.runner-settings'), 'Runner Advanced control should live in the settings row.');
+      assertUiSmoke($('runnerStopOnFailure').closest('#runnerAdvancedSettingsPanel'), 'Runner stop-on-failure should live in the Advanced dropdown.');
+      assertUiSmoke($('runnerAllowEnvironmentMutation').closest('#runnerAdvancedSettingsPanel'), 'Runner environment mutation should live in the Advanced dropdown.');
+      $('runnerAdvancedSettingsButton').click();
+      assertUiSmoke(!$('runnerAdvancedSettingsPanel').hidden, 'Runner Advanced button should open the advanced settings dropdown.');
       assertUiSmoke(!document.getElementById('runnerUseCsvVariablesInput'), 'Runner editor should not render a separate Use CSV variables checkbox.');
       assertUiSmoke($('runnerCsvVariablesButton').textContent.trim() === 'CSV Variables: Off', 'Runner CSV button should default to the disabled state.');
       assertUiSmoke(!$('runnerCsvVariablesButton').classList.contains('csv-variables-active'), 'Runner CSV button should not use the active color by default.');
@@ -4748,6 +4766,9 @@
       selectSidebarPanel('runners');
       assertUiSmoke(activeRunnerConfigId === runner.id, 'Selecting Runner with an open runner tab should restore the runner tab.');
       assertUiSmoke(openRunnerTabs.length === runnerTabCount, 'Selecting Runner should not open a duplicate runner tab.');
+      assertUiSmoke($('runnerMainPanel').querySelector('.runner-requests-header h3')?.textContent === 'Requests', 'Runner request list should have a Requests header.');
+      assertUiSmoke(Number.parseFloat(getComputedStyle($('runnerMainPanel').querySelector('.runner-requests-header')).paddingTop) >= 10, 'Runner Requests header should have breathing room above it.');
+      assertUiSmoke($('addRunnerRequestButton').closest('.runner-requests-header'), 'Runner Add Request button should live in the Requests header.');
       $('addRunnerRequestButton').click();
       let runnerAddLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
       assertUiSmoke(runnerAddLabels.join('|') === 'New Request|Import', `Runner Add Request menu should only show New Request and Import. labels=${runnerAddLabels.join('|')}`);
@@ -5764,10 +5785,11 @@
       const runnerPanelStyle = getComputedStyle(runnerMainPanel);
       const runnerEditorStyle = getComputedStyle(runnerEditorSection);
       const runnerRequestListStyle = getComputedStyle(runnerRequestList);
-      const runnerResultsStyle = getComputedStyle($('runnerResults'));
+      const runnerResultsShell = $('runnerResultsShell');
+      const runnerResultsStyle = getComputedStyle(runnerResultsShell);
       const runnerResize = $('runnerResultsResize');
       const runnerEditorRect = runnerEditorSection.getBoundingClientRect();
-      const runnerResultsRect = $('runnerResults').getBoundingClientRect();
+      const runnerResultsRect = runnerResultsShell.getBoundingClientRect();
       const runnerResizeRect = runnerResize.getBoundingClientRect();
       assertUiSmoke(runnerPanelStyle.overflowY === 'hidden', 'Runner editor panel should not become the scroll container for many requests.');
       assertUiSmoke(runnerEditorStyle.borderTopStyle !== 'none' && runnerResultsStyle.borderTopStyle !== 'none', 'Runner config/request list and results should render as separate boxed sections.');
@@ -5776,7 +5798,7 @@
       if (runnerMainPanel.clientHeight > 0) {
         assertUiSmoke(runnerRequestList.scrollHeight > runnerRequestList.clientHeight, 'Runner request list should scroll when many requests are present.');
         assertUiSmoke(
-          $('runnerResults').getBoundingClientRect().bottom <= runnerMainPanel.getBoundingClientRect().bottom + 1,
+          runnerResultsShell.getBoundingClientRect().bottom <= runnerMainPanel.getBoundingClientRect().bottom + 1,
           'Runner results pane should stay inside the visible runner editor when the request list overflows.'
         );
         assertUiSmoke(

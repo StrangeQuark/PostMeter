@@ -881,6 +881,7 @@ function bindUi() {
     onExportRunnerCsv: () => exportRunnerResult('csv'),
     onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
     onToggleRunnerCaptureSettings: (event) => toggleCaptureSettingsPanel('runner', event),
+    onToggleRunnerAdvancedSettings: (event) => toggleRunnerAdvancedSettingsPanel(event),
     onToggleRunnerAuthRefresh: toggleActiveRunnerAuthRefresh,
     onEditRunnerAuthRefresh: (event) => toggleAuthRefreshPanel('runner', event),
     onOpenRunnerAuthRefreshRequest: () => openExistingAuthRefreshRequest('runner'),
@@ -7918,6 +7919,10 @@ function renderRunnerEditor() {
   $('runnerStopOnFailure').disabled = !runner;
   $('runnerAllowEnvironmentMutation').checked = runner?.allowEnvironmentMutation === true;
   $('runnerAllowEnvironmentMutation').disabled = !runner;
+  $('runnerAdvancedSettingsButton').disabled = !runner;
+  if (!runner) {
+    closeRunnerAdvancedSettingsPanel();
+  }
   renderCapturePolicyControls('runner', runner?.capturePolicy, Boolean(runner));
   renderAuthRefreshControls('runner', runner?.authRefresh, Boolean(runner));
   $('addRunnerRequestButton').disabled = !runner;
@@ -8586,6 +8591,60 @@ function closeCaptureSettingsPanel(prefix) {
   panel.style.left = '';
   panel.style.top = '';
   button.setAttribute('aria-expanded', 'false');
+}
+
+function closeRunnerAdvancedSettingsPanel() {
+  const panel = $('runnerAdvancedSettingsPanel');
+  const button = $('runnerAdvancedSettingsButton');
+  if (!panel || !button) {
+    return;
+  }
+  panel.hidden = true;
+  panel.style.left = '';
+  panel.style.top = '';
+  button.setAttribute('aria-expanded', 'false');
+}
+
+function positionRunnerAdvancedSettingsPanel() {
+  const panel = $('runnerAdvancedSettingsPanel');
+  const button = $('runnerAdvancedSettingsButton');
+  if (!panel || !button || panel.hidden) {
+    return;
+  }
+  const margin = 12;
+  const gap = 6;
+  const buttonRect = button.getBoundingClientRect();
+  const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
+  const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  const panelWidth = Math.min(panel.offsetWidth || 320, Math.max(0, viewportWidth - margin * 2));
+  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  const left = Math.min(Math.max(margin, buttonRect.left), maxLeft);
+  const preferredTop = buttonRect.bottom + gap;
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+  const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function toggleRunnerAdvancedSettingsPanel(event) {
+  event?.stopPropagation?.();
+  const panel = $('runnerAdvancedSettingsPanel');
+  const button = $('runnerAdvancedSettingsButton');
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  const shouldOpen = panel.hidden !== false;
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: shouldOpen ? panel : null });
+  panel.hidden = !shouldOpen;
+  button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    positionRunnerAdvancedSettingsPanel();
+    panel.querySelector('input, select, button, textarea')?.focus?.();
+  }
 }
 
 function positionCaptureSettingsPanel(prefix) {
@@ -18028,10 +18087,14 @@ function ensureRunnerResultsStructure() {
   }
   root.textContent = '';
 
-  const summary = document.createElement('div');
-  summary.id = 'runnerResultsSummary';
-  summary.className = 'test-results-summary';
-  summary.textContent = 'No runner run yet.';
+  let summary = $('runnerResultsSummary');
+  if (!summary) {
+    summary = document.createElement('div');
+    summary.id = 'runnerResultsSummary';
+    summary.className = 'test-results-summary';
+    summary.textContent = 'No runner run yet.';
+    root.append(summary);
+  }
 
   const grid = document.createElement('div');
   grid.className = 'runner-execution-grid';
@@ -18039,7 +18102,7 @@ function ensureRunnerResultsStructure() {
     runnerExecutionSection('runnerExecutionTitle', 'Execution', 'runnerExecutionSummary', 'No requests', 'runnerExecutionList', 'runner-execution-list'),
     runnerExecutionSection('runnerExecutionDetailsTitle', 'Request details', 'runnerExecutionDetailsStatus', 'No selection', 'runnerExecutionDetails', 'runner-execution-details')
   );
-  root.append(summary, grid);
+  root.append(grid);
   return root;
 }
 
