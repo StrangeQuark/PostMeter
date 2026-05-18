@@ -1065,11 +1065,18 @@ h2 {
 }
 
 .runner-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   justify-content: space-between;
   gap: 10px 18px;
 }
 
 .runner-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -1083,7 +1090,8 @@ h2 {
   flex: 0 0 auto;
   gap: 8px;
   align-items: center;
-  margin-left: auto;
+  justify-self: end;
+  margin-left: 0;
 }
 
 .capture-settings-menu-group {
@@ -1308,6 +1316,7 @@ h2 {
 }
 
 .runner-editor-section {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1358,6 +1367,25 @@ h2 {
 
 .runner-results-resize {
   margin: 0;
+}
+
+@container (max-width: 620px) {
+  .runner-control-row {
+    gap: 8px 12px;
+  }
+
+  .runner-settings {
+    gap: 8px;
+  }
+
+  .runner-run-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .runner-run-actions button {
+    width: 78px;
+  }
 }
 
 .performance-main-panel {
@@ -1781,6 +1809,7 @@ h2 {
   gap: 6px;
   margin-top: 0;
   min-height: 96px;
+  overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1790,7 +1819,9 @@ h2 {
   grid-template-columns: 34px 62px minmax(130px, 1fr) minmax(180px, 1.4fr) 92px auto auto auto auto;
   gap: 8px;
   align-items: center;
-  min-width: 0;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: max-content;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;

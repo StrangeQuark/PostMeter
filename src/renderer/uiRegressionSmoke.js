@@ -4713,6 +4713,7 @@
       assertUiSmoke($('deleteRunnerButton').classList.contains('danger-button'), 'Runner delete button should use danger styling.');
       const runnerHeaderActionLabels = Array.from($('runnerMainPanel').querySelectorAll('.runner-main-header .runner-actions button')).map((button) => button.textContent.trim());
       assertUiSmoke(runnerHeaderActionLabels.join('|') === 'Save Runner|Delete Runner', `Runner header actions should only show save and delete. labels=${runnerHeaderActionLabels.join('|')}`);
+      assertUiSmoke(getComputedStyle($('runnerMainPanel').querySelector('.runner-control-row')).display === 'grid', 'Runner settings row should anchor run actions in a separate grid column.');
       assertUiSmoke($('runCollectionButton').closest('.runner-run-actions'), 'Runner Run button should live on the right side of the settings row.');
       assertUiSmoke($('cancelRunnerButton').closest('.runner-run-actions'), 'Runner Cancel button should live on the right side of the settings row.');
       assertUiSmoke(Math.round($('runCollectionButton').getBoundingClientRect().height) >= 36, 'Runner Run button should match request and performance action height.');
@@ -4805,6 +4806,17 @@
         Array.from(runnerLocalRow?.querySelectorAll('button') || []).some((button) => button.textContent.trim() === 'Delete' && button.classList.contains('danger-button')),
         'Runner request row delete button should use danger styling.'
       );
+      const runnerRequestListOriginalWidth = $('runnerRequestList').style.width;
+      $('runnerRequestList').style.width = '520px';
+      await nextPaint();
+      const runnerRowDeleteButton = Array.from(runnerLocalRow?.querySelectorAll('button') || [])
+        .find((button) => button.textContent.trim() === 'Delete');
+      assertUiSmoke(
+        runnerLocalRow.getBoundingClientRect().right + 1 >= runnerRowDeleteButton.getBoundingClientRect().right,
+        'Runner request row background should cover trailing action buttons when the request list scrolls horizontally.'
+      );
+      $('runnerRequestList').style.width = runnerRequestListOriginalWidth;
+      await nextPaint();
       const runnerLocalEditButton = Array.from(runnerLocalRow?.querySelectorAll('button') || [])
         .find((button) => button.textContent.trim() === 'Edit');
       assertUiSmoke(runnerLocalEditButton, 'Runner request rows should expose an Edit button.');
