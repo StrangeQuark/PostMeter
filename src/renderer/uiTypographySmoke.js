@@ -78,7 +78,8 @@
     '.tab-panel.active',
     '.settings-modal',
     '.settings-layout',
-    '.settings-content'
+    '.settings-content',
+    '.capture-settings-panel'
   ];
   const OVERLAP_PARENT_SELECTORS = [
     '.topbar',
@@ -386,8 +387,10 @@
       { name: 'environment', setup: () => showEnvironment(fixture) },
       { name: 'workspace', setup: () => showWorkspace() },
       { name: 'runner', setup: () => showRunner(fixture) },
+      { name: 'runner-capture-settings', setup: () => showRunnerCaptureSettings(fixture) },
       ...PERFORMANCE_TYPE_TABS.map((tab) => ({ name: `performance-${tab}`, setup: () => showPerformance(fixture, tab, 'performanceParams') })),
       ...PERFORMANCE_REQUEST_TABS.map((tab) => ({ name: `performance-request-${tab}`, setup: () => showPerformance(fixture, 'latency', tab) })),
+      { name: 'performance-capture-settings', setup: () => showPerformanceCaptureSettings(fixture) },
       { name: 'history', setup: () => showHistory(fixture) },
       ...SETTINGS_SECTIONS.map((section) => ({ name: `settings-${section}`, setup: () => showSettingsSection(section) }))
     ];
@@ -506,11 +509,21 @@
     selectRunnerItem(fixture.runnerId);
   }
 
+  function showRunnerCaptureSettings(fixture) {
+    showRunner(fixture);
+    $('runnerCaptureSettingsButton')?.click();
+  }
+
   function showPerformance(fixture, performanceType, requestTab) {
     hideTransientUi();
     selectPerformanceTestItem(fixture.performanceId);
     activateTab('performance', performanceType);
     activateTab('performanceRequest', requestTab);
+  }
+
+  function showPerformanceCaptureSettings(fixture) {
+    showPerformance(fixture, 'latency', 'performanceParams');
+    $('performanceCaptureSettingsButton')?.click();
   }
 
   function showHistory(fixture) {
@@ -551,6 +564,9 @@
     if (typeof closeContextMenu === 'function') {
       closeContextMenu();
     }
+    if (typeof closeCaptureSettingsPanels === 'function') {
+      closeCaptureSettingsPanels();
+    }
   }
 
   function assertTypographyLayout(context) {
@@ -565,6 +581,7 @@
     assertLineNumberEditorsAligned(context);
     assertVisibleVariableHighlightMetricsSynced(context);
     assertSingleLineVariableOverlaysAligned(context);
+    assertVisibleCapturePreviewInputsFit(context);
     assertVisibleModalFitsViewport(context);
   }
 
@@ -737,6 +754,21 @@
         delta <= Math.max(2.5, inputRect.height * 0.08),
         `${context}: highlighted text should be vertically centered in ${input.id || input.name || 'single-line input'}. delta=${delta.toFixed(2)} input=${inputRect.top}/${inputRect.bottom} token=${tokenRect.top}/${tokenRect.bottom}`
       );
+    }
+  }
+
+  function assertVisibleCapturePreviewInputsFit(context) {
+    for (const input of document.querySelectorAll('#runnerCaptureBodyPreviewBytesInput, #performanceCaptureBodyPreviewBytesInput')) {
+      if (!isVisible(input)) {
+        continue;
+      }
+      const previousValue = input.value;
+      input.value = '32768';
+      assertUiSmoke(
+        input.scrollWidth <= input.clientWidth + 2,
+        `${context}: ${input.id} should fit the largest preview byte value. scrollWidth=${input.scrollWidth} clientWidth=${input.clientWidth}`
+      );
+      input.value = previousValue;
     }
   }
 

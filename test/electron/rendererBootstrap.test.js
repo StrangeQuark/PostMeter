@@ -284,6 +284,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.auth-refresh-menu-group > \.auth-refresh-trigger\.auth-refresh-active[\s\S]*border-color:\s*var\(--green\)/);
   assert.match(overlaysSource, /\.auth-refresh-auto-detect-modal\s*\{[\s\S]*width:\s*min\(720px/);
   assert.match(chromeSource, /\.auth-refresh-manage-menu-group \.toolbar-menu[\s\S]*right:\s*0/);
+  assert.match(chromeSource, /\.capture-settings-panel\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(160px,\s*100%\),\s*1fr\)\)/);
+  assert.match(chromeSource, /\.capture-settings-panel\s*\{[\s\S]*width:\s*min\(420px,\s*calc\(100vw - 32px\)\)/);
+  assert.match(chromeSource, /\.capture-settings-panel \.compact-number-field input\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*min\(9ch,\s*100%\)/);
   assert.match(chromeSource, /\.capture-settings-panel\.auth-refresh-panel[\s\S]*max-height:\s*calc\(100vh - 24px\)/);
   assert.doesNotMatch(chromeSource, /\.capture-settings-panel\.auth-refresh-panel[\s\S]{0,180}max-height:\s*min\(560px/);
   assert.match(rendererSource, /classList\.toggle\('auth-refresh-active', active\)/);
@@ -802,7 +805,11 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /if \(normalized === 'html' \|\| normalized === 'xml'\) \{\s*return normalized;\s*\}/);
   assert.match(rendererSource, /function beautifyBodyEditor\(prefix\)/);
   assert.match(editorPanelsSource, /\.body-editor-controls \.graphql-operation-field/);
-  assert.match(editorPanelsSource, /\.body-beautify-button/);
+  assert.match(editorPanelsSource, /\.body-beautify-button\s*\{[\s\S]*min-height:\s*max\(34px,\s*calc\(var\(--ui-font-size\) \* 1\.2 \+ 18\.2px\)\)[\s\S]*padding:\s*8px 10px[\s\S]*line-height:\s*1\.2/);
+  assert.match(editorPanelsSource, /#bodyTab\.active,\s*#performanceBodyTab\.active\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;/);
+  assert.match(editorPanelsSource, /#bodyRawPanel\.active,\s*#performanceBodyRawPanel\.active\s*\{[\s\S]*display:\s*flex;[\s\S]*flex:\s*1 1 auto;[\s\S]*min-height:\s*180px;/);
+  assert.match(editorPanelsSource, /#bodyRawPanel > \.code-editor,\s*#performanceBodyRawPanel > \.code-editor\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*min-height:\s*180px;[\s\S]*height:\s*100%;/);
+  assert.match(editorPanelsSource, /#bodyRawPanel textarea\.code-editor-input,\s*#performanceBodyRawPanel textarea\.code-editor-input\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*180px;/);
   assert.doesNotMatch(bootstrapSource, /'fileMenuButton', 'fileMenu'/);
   assert.doesNotMatch(bootstrapSource, /bindClick\(doc, 'openSettingsButton', options\.onOpenSettings\)/);
   assert.match(bootstrapSource, /data-settings-section/);

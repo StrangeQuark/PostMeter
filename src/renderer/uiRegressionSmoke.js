@@ -47,6 +47,7 @@
     assertContextMenuKeyboardActivationSmoke();
     await assertTreeContextMenuModalFocusSmoke();
     newRequest();
+    await assertRequestBodyEditorLayoutSmoke();
     assertMethodColorSmoke();
     await assertRequestSettingsTabSmoke();
     const variableLinkCollection = activeCollection();
@@ -533,6 +534,15 @@
     assertUiSmoke(runnerResultExportRect.bottom <= window.innerHeight + 1, 'Runner result export menu should stay inside the viewport vertically.');
     $('exportRunnerResultsButton').click();
     $('exportRunnerResultsButton').disabled = true;
+    $('runnerCaptureSettingsButton').click();
+    await nextPaint();
+    assertUiSmoke(!$('runnerCaptureSettingsPanel').hidden, 'Runner Capture Settings menu should open.');
+    $('runnerCaptureBodyPreviewBytesInput').value = '32768';
+    assertUiSmoke(
+      $('runnerCaptureBodyPreviewBytesInput').scrollWidth <= $('runnerCaptureBodyPreviewBytesInput').clientWidth + 2,
+      'Runner Capture Settings Preview Bytes input should fit the maximum value.'
+    );
+    $('runnerCaptureSettingsButton').click();
     assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
     assertDestructiveButtonsUseDangerStyle();
   }
@@ -1514,12 +1524,16 @@
   }
 
   function assertCodeEditorSmoke() {
+    activateTab('request', 'body');
+    $('bodyTypeSelect').value = 'RAW';
+    dispatchChange($('bodyTypeSelect'));
     const bodyInput = $('bodyInput');
     bodyInput.value = '';
     bodyInput.setSelectionRange(0, 0);
     bodyInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     assertUiSmoke(bodyInput.value === '\t', 'Request body editor should insert a tab character instead of moving focus.');
-    assertUiSmoke(bodyInput.closest('.code-editor'), 'Request body editor should be wrapped by the syntax highlight editor.');
+    const bodyEditor = bodyInput.closest('.code-editor');
+    assertUiSmoke(bodyEditor, 'Request body editor should be wrapped by the syntax highlight editor.');
 
     const scriptInput = $('preRequestScriptInput');
     scriptInput.value = '';
@@ -1590,6 +1604,47 @@
     assertUiSmoke(Math.abs(cookiesEditor.getBoundingClientRect().height - cookiesPanelRect.height) <= 2, 'Response cookies editor should fill its result tab height.');
     assertUiSmoke(Math.abs(cookiesRect.height - cookiesEditor.getBoundingClientRect().height) <= 2, 'Response cookies textarea should match the visible editor height.');
     activateTab('results', 'response');
+  }
+
+  async function assertRequestBodyEditorLayoutSmoke() {
+    activateTab('request', 'body');
+    $('bodyTypeSelect').value = 'RAW';
+    dispatchChange($('bodyTypeSelect'));
+    await nextPaint();
+    const bodyInput = $('bodyInput');
+    const bodyEditor = bodyInput.closest('.code-editor');
+    const bodyTabRect = $('bodyTab').getBoundingClientRect();
+    const bodyEditorRect = bodyEditor?.getBoundingClientRect();
+    assertUiSmoke(bodyEditor, 'Request body editor should be wrapped by the syntax highlight editor when visible.');
+    const originalRequestBodyUiFontSize = document.documentElement.style.getPropertyValue('--ui-font-size');
+    document.documentElement.style.setProperty('--ui-font-size', '19px');
+    await nextPaint();
+    const requestBeautifyRect = $('beautifyBodyButton').getBoundingClientRect();
+    const requestRawFormatRect = $('bodyRawFormatSelect').getBoundingClientRect();
+    assertUiSmoke(
+      requestBeautifyRect.height >= requestRawFormatRect.height - 0.01,
+      `Request Body Beautify button should not be shorter than the Raw Format selector at the largest interface font size. button=${requestBeautifyRect.height} select=${requestRawFormatRect.height}.`
+    );
+    const requestBeautifyStyle = getComputedStyle($('beautifyBodyButton'));
+    const requestRawFormatStyle = getComputedStyle($('bodyRawFormatSelect'));
+    assertUiSmoke(
+      requestBeautifyStyle.paddingTop === requestRawFormatStyle.paddingTop
+        && requestBeautifyStyle.paddingBottom === requestRawFormatStyle.paddingBottom,
+      'Request Body Beautify button should use the same vertical padding as the Raw Format selector.'
+    );
+    if (originalRequestBodyUiFontSize) {
+      document.documentElement.style.setProperty('--ui-font-size', originalRequestBodyUiFontSize);
+    } else {
+      document.documentElement.style.removeProperty('--ui-font-size');
+    }
+    await nextPaint();
+    assertUiSmoke(
+      bodyEditorRect
+        && bodyEditorRect.height >= 180
+        && bodyEditorRect.bottom >= bodyTabRect.bottom - 14,
+      `Request body editor should expand to fill the request body pane. editor=${bodyEditorRect?.height}/${bodyEditorRect?.bottom} tabBottom=${bodyTabRect.bottom}.`
+    );
+    activateTab('request', 'params');
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '') {
@@ -3858,6 +3913,15 @@
       assertUiSmoke(performanceResultExportRect.bottom <= window.innerHeight + 1, 'Performance result export menu should stay inside the viewport vertically.');
       $('exportPerformanceResultsButton').click();
       $('exportPerformanceResultsButton').disabled = true;
+      $('performanceCaptureSettingsButton').click();
+      await nextPaint();
+      assertUiSmoke(!$('performanceCaptureSettingsPanel').hidden, 'Performance Capture Settings menu should open.');
+      $('performanceCaptureBodyPreviewBytesInput').value = '32768';
+      assertUiSmoke(
+        $('performanceCaptureBodyPreviewBytesInput').scrollWidth <= $('performanceCaptureBodyPreviewBytesInput').clientWidth + 2,
+        'Performance Capture Settings Preview Bytes input should fit the maximum value.'
+      );
+      $('performanceCaptureSettingsButton').click();
       $('performanceCsvVariablesButton').click();
       assertUiSmoke(!$('performanceCsvVariablesMenu').hidden, 'Performance CSV button should open a dropdown menu.');
       let performanceCsvMenuLabels = Array.from($('performanceCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
@@ -4049,6 +4113,39 @@
       dispatchChange($('performanceBodyRawFormatSelect'));
       $('performanceBodyInput').value = '{"hello":"performance"}';
       dispatchInput($('performanceBodyInput'));
+      await nextPaint();
+      const performanceBodyEditor = $('performanceBodyInput').closest('.code-editor');
+      const performanceBodyTabRect = $('performanceBodyTab').getBoundingClientRect();
+      const performanceBodyEditorRect = performanceBodyEditor?.getBoundingClientRect();
+      assertUiSmoke(performanceBodyEditor, 'Performance request body editor should be wrapped by the shared syntax highlight editor.');
+      const originalPerformanceBodyUiFontSize = document.documentElement.style.getPropertyValue('--ui-font-size');
+      document.documentElement.style.setProperty('--ui-font-size', '19px');
+      await nextPaint();
+      const performanceBeautifyRect = $('performanceBeautifyBodyButton').getBoundingClientRect();
+      const performanceRawFormatRect = $('performanceBodyRawFormatSelect').getBoundingClientRect();
+      assertUiSmoke(
+        performanceBeautifyRect.height >= performanceRawFormatRect.height - 0.01,
+        `Performance request Body Beautify button should not be shorter than the Raw Format selector at the largest interface font size. button=${performanceBeautifyRect.height} select=${performanceRawFormatRect.height}.`
+      );
+      const performanceBeautifyStyle = getComputedStyle($('performanceBeautifyBodyButton'));
+      const performanceRawFormatStyle = getComputedStyle($('performanceBodyRawFormatSelect'));
+      assertUiSmoke(
+        performanceBeautifyStyle.paddingTop === performanceRawFormatStyle.paddingTop
+          && performanceBeautifyStyle.paddingBottom === performanceRawFormatStyle.paddingBottom,
+        'Performance request Body Beautify button should use the same vertical padding as the Raw Format selector.'
+      );
+      if (originalPerformanceBodyUiFontSize) {
+        document.documentElement.style.setProperty('--ui-font-size', originalPerformanceBodyUiFontSize);
+      } else {
+        document.documentElement.style.removeProperty('--ui-font-size');
+      }
+      await nextPaint();
+      assertUiSmoke(
+        performanceBodyEditorRect
+          && performanceBodyEditorRect.height >= 180
+          && performanceBodyEditorRect.bottom >= performanceBodyTabRect.bottom - 14,
+        `Performance request body editor should expand to fill the performance body pane. editor=${performanceBodyEditorRect?.height}/${performanceBodyEditorRect?.bottom} tabBottom=${performanceBodyTabRect.bottom}.`
+      );
       $('performanceRequestScriptsTabButton').click();
       await nextPaint();
       const performanceRequestSectionRectForScripts = $('performanceRequestSection').getBoundingClientRect();

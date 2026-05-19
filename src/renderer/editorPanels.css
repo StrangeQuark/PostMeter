@@ -183,6 +183,9 @@
 
 #bodyRawPanel > .code-editor,
 #performanceBodyRawPanel > .code-editor {
+  flex: 1 1 auto;
+  min-height: 180px;
+  height: 100%;
   margin-top: 8px;
 }
 
@@ -206,7 +209,9 @@
 
 .body-beautify-button {
   align-self: end;
-  min-height: 32px;
+  min-height: max(34px, calc(var(--ui-font-size) * 1.2 + 18.2px));
+  padding: 8px 10px;
+  line-height: 1.2;
 }
 
 .body-mode-panel {
@@ -215,6 +220,27 @@
 
 .body-mode-panel.active {
   display: block;
+}
+
+#bodyTab.active,
+#performanceBodyTab.active {
+  display: flex;
+  flex-direction: column;
+}
+
+#bodyRawPanel.active,
+#performanceBodyRawPanel.active {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 180px;
+  overflow: hidden;
+}
+
+#bodyRawPanel textarea.code-editor-input,
+#performanceBodyRawPanel textarea.code-editor-input {
+  height: 100%;
+  min-height: 180px;
 }
 
 .body-pairs-table {
