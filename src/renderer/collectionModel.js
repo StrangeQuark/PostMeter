@@ -273,6 +273,29 @@ function toggleCollectionTreeItemCollapsed(state, kind, id) {
   return setCollectionTreeItemCollapsed(state, kind, id, nextCollapsed) ? nextCollapsed : false;
 }
 
+function collapseAllCollectionTreeItems(state, collections = []) {
+  const normalizedState = ensureCollectionTreeCollapseState(state);
+  for (const collection of collections || []) {
+    if (collection?.id && collectionTreeItemHasChildren(collection)) {
+      normalizedState.collapsedCollectionIds.add(String(collection.id));
+    }
+    for (const folder of collection?.folders || []) {
+      collapseFolderTreeItems(normalizedState, folder);
+    }
+  }
+  pruneCollectionTreeCollapseState(normalizedState, collections);
+  return normalizedState;
+}
+
+function collapseFolderTreeItems(state, folder) {
+  if (folder?.id && collectionTreeItemHasChildren(folder)) {
+    state.collapsedFolderIds.add(String(folder.id));
+  }
+  for (const child of folder?.folders || []) {
+    collapseFolderTreeItems(state, child);
+  }
+}
+
 function pruneCollectionTreeCollapseState(state, collections = []) {
   const normalizedState = ensureCollectionTreeCollapseState(state);
   const collectionIds = new Set();
@@ -311,6 +334,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     allFolderNames,
     allRequestNames,
+    collapseAllCollectionTreeItems,
     collectionTreeItemHasChildren,
     collectionTreeCollapseSetForKind,
     ensureCollectionTreeCollapseState,

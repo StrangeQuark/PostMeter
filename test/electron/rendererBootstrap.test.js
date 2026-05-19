@@ -1931,6 +1931,31 @@ test('renderer bootstrap binds generated header visibility and token controls', 
   ]);
 });
 
+test('renderer bootstrap binds collection collapse button', () => {
+  const calls = [];
+  const elements = new Map([
+    ['collapseCollectionsButton', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onCollapseCollections: () => calls.push('collapse')
+  });
+
+  elements.get('collapseCollectionsButton').dispatch('click');
+
+  assert.deepEqual(calls, ['collapse']);
+});
+
 test('renderer bootstrap binds performance creation import export run and config controls', () => {
   const calls = [];
   const controlIds = [

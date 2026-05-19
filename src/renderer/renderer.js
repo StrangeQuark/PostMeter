@@ -797,6 +797,7 @@ function bindUi() {
     doc: document,
     windowObject: window,
     onNewCollection: newCollection,
+    onCollapseCollections: collapseAllCollections,
     onNewFolder: () => { void newFolderFromToolbar(); },
     onNewRequest: newRequest,
     onNewRunner: () => newRunner(),
@@ -14597,6 +14598,12 @@ function toggleCollectionTreeNode(kind, id) {
   toggleCollectionTreeItemCollapsed(state, kind, id);
   renderCollections();
   restoreTreeFocus(target, activeCollectionTreeFocusTargets());
+  scheduleSessionSave();
+}
+
+function collapseAllCollections() {
+  collapseAllCollectionTreeItems(state, workspace.collections || []);
+  renderCollections();
   scheduleSessionSave();
 }
 

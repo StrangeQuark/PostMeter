@@ -199,6 +199,7 @@
 
     bindToolbarMenus(doc, options);
     bindClick(doc, 'newCollectionButton', options.onNewCollection);
+    bindClick(doc, 'collapseCollectionsButton', options.onCollapseCollections);
     bindClick(doc, 'newFolderButton', options.onNewFolder);
     bindClick(doc, 'newRequestButton', options.onNewRequest);
     bindClick(doc, 'newWorkspaceMenuButton', options.onNewWorkspace);
