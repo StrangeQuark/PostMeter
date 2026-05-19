@@ -194,7 +194,7 @@ const TUTORIALS = Object.freeze([
       {
         selector: '#environmentTable',
         title: 'Edit variables',
-        body: 'Each enabled row defines one variable key and value. New environments start with a baseUrl example.',
+        body: 'Each enabled row defines one variable key and value. New environments start empty so you can add only the values you need.',
         beforeStep: tutorialEnsureEnvironmentContext
       },
       {
@@ -222,7 +222,7 @@ const TUTORIALS = Object.freeze([
     title: 'Run a Request Series',
     level: 'Beginner',
     duration: '3 minutes',
-    summary: 'Create a runner, add request copies, choose an environment, and review the controls before running.',
+    summary: 'Create a runner, add request copies, use the global environment, and review the controls before running.',
     steps: Object.freeze([
       {
         selector: '#runnersPanelTab',
@@ -236,9 +236,9 @@ const TUTORIALS = Object.freeze([
         beforeStep: tutorialEnsureRunnerContext
       },
       {
-        selector: '#runnerEnvironmentSelect',
-        title: 'Choose the run environment',
-        body: 'Runner requests use the selected environment when resolving variables during the run.',
+        selector: '#environmentSelect',
+        title: 'Use the active environment',
+        body: 'Runner requests use the top-bar Environment selector when resolving variables during the run.',
         beforeStep: tutorialEnsureRunnerContext
       },
       {
@@ -270,6 +270,7 @@ let activeRunnerRequestRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerRequestRun
 let activeRunnerConfigId = RENDERER_STATE_DEFAULTS.activeRunnerConfigId;
 let activePerformanceTestId = RENDERER_STATE_DEFAULTS.activePerformanceTestId;
 let activeEnvironmentId = RENDERER_STATE_DEFAULTS.activeEnvironmentId;
+let activeEnvironmentEditorId = RENDERER_STATE_DEFAULTS.activeEnvironmentEditorId;
 let activeWorkspaceId = RENDERER_STATE_DEFAULTS.activeWorkspaceId;
 let activeSidebarPanel = RENDERER_STATE_DEFAULTS.activeSidebarPanel;
 let activeMainPanel = RENDERER_STATE_DEFAULTS.activeMainPanel;
@@ -410,7 +411,8 @@ const {
 const {
   bindUi: bindRendererUi,
   closeToolbarMenus: closeRendererToolbarMenus,
-  initializeRenderer
+  initializeRenderer,
+  positionToolbarMenu: positionRendererToolbarMenu
 } = PostMeterRendererBootstrap;
 const { createVaultPromptQueue } = PostMeterVaultPromptQueue;
 const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
@@ -514,6 +516,8 @@ const state = {
   set activePerformanceTestId(value) { activePerformanceTestId = value; },
   get activeEnvironmentId() { return activeEnvironmentId; },
   set activeEnvironmentId(value) { activeEnvironmentId = value; },
+  get activeEnvironmentEditorId() { return activeEnvironmentEditorId; },
+  set activeEnvironmentEditorId(value) { activeEnvironmentEditorId = value; },
   get activeWorkspaceId() { return activeWorkspaceId; },
   set activeWorkspaceId(value) { activeWorkspaceId = value; },
   get activeSidebarPanel() { return activeSidebarPanel; },
@@ -578,7 +582,7 @@ const state = {
 const requestTabState = createRequestTabState({
   state,
   activeCollection,
-  activeEnvironment,
+  activeEnvironment: activeEditorEnvironment,
   activeFolder,
   activeRequest,
   activeRunner,
@@ -802,6 +806,7 @@ function bindUi() {
     onSaveCollection: () => { void saveCollectionFromPane(); },
     onSaveFolder: () => { void saveFolderFromPane(); },
     onSaveEnvironment: () => { void saveEnvironmentFromPane(); },
+    onSetEnvironment: () => setActiveEnvironmentFromPane(),
     onImportWorkspace: importWorkspace,
     onExportWorkspace: () => { void exportWorkspaceFromPicker(); },
     onImportRequest: () => { void importRequest(); },
@@ -849,7 +854,7 @@ function bindUi() {
     onAddHeader: () => addPair('headers'),
     onPostMeterTokenHeaderChange: () => setActiveRequestAutoHeaderOption('sendPostMeterToken', $('sendPostMeterTokenInput')?.checked === true),
     onShowGeneratedHeadersChange: () => setActiveRequestAutoHeaderOption('showGeneratedHeaders', $('showGeneratedHeadersInput')?.checked === true),
-    onRequestTlsSettingsChange: () => setActiveRequestTlsSettingsFromInputs(),
+    onRequestTlsSettingsChange: (event) => setActiveRequestTlsSettingsFromInputs(event),
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
@@ -877,6 +882,7 @@ function bindUi() {
     onExportRunnerCsv: () => exportRunnerResult('csv'),
     onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
     onToggleRunnerCaptureSettings: (event) => toggleCaptureSettingsPanel('runner', event),
+    onToggleRunnerAdvancedSettings: (event) => toggleRunnerAdvancedSettingsPanel(event),
     onToggleRunnerAuthRefresh: toggleActiveRunnerAuthRefresh,
     onEditRunnerAuthRefresh: (event) => toggleAuthRefreshPanel('runner', event),
     onOpenRunnerAuthRefreshRequest: () => openExistingAuthRefreshRequest('runner'),
@@ -894,6 +900,7 @@ function bindUi() {
     onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
     onTogglePerformanceCsvVariables: toggleActivePerformanceCsvVariables,
     onTogglePerformanceCaptureSettings: (event) => toggleCaptureSettingsPanel('performance', event),
+    onTogglePerformanceAdvancedSettings: (event) => togglePerformanceAdvancedSettingsPanel(event),
     onTogglePerformanceAuthRefresh: toggleActivePerformanceAuthRefresh,
     onEditPerformanceAuthRefresh: (event) => toggleAuthRefreshPanel('performance', event),
     onOpenPerformanceAuthRefreshRequest: () => openExistingAuthRefreshRequest('performance'),
@@ -931,24 +938,16 @@ function bindUi() {
     onConfirmHtmlReportOptions: confirmHtmlReportOptionsModal,
     onEnvironmentSelectChange: (environmentId) => {
       activeEnvironmentId = environmentId;
-      renderEnvironments();
-      renderEnvironmentEditor();
-      refreshVariableHighlights();
-      scheduleSessionSave();
-    },
-    onRunnerEnvironmentSelectChange: (environmentId) => {
-      const runner = activeRunner();
-      if (!runner) {
-        return;
-      }
-      runner.environmentId = environmentId;
-      markActiveRunnerDirty();
-      renderRunnerEditor();
+      renderVariablePreview();
+      renderPerformanceVariablePreview();
+      renderAuthRefreshVariableSuggestions('runner');
+      renderAuthRefreshVariableSuggestions('performance');
       refreshVariableHighlights();
       scheduleSessionSave();
     },
     onRunnerConfigChange: collectRunnerAndMarkDirty,
     onEditRunnerCsvVariables: () => { void editActiveRunnerCsvVariables(); },
+    onPerformanceTypeChange: setActivePerformanceTypeFromControl,
     onPerformanceConfigChange: collectPerformanceTestAndMarkDirty,
     onPerformanceRequestChange: collectPerformanceTestAndMarkDirty,
     onEditPerformanceCsvVariables: () => { void editActivePerformanceCsvVariables(); },
@@ -970,7 +969,7 @@ function bindUi() {
     onAddPerformanceUrlencodedBodyRow: () => addBodyUrlencodedRow('performance'),
     onPerformanceAuthTypeChange: showPerformanceAuthSection,
     onPerformanceAuthInput: collectPerformanceTestAndMarkDirty,
-    onPerformanceRequestTlsSettingsChange: () => setActivePerformanceRequestTlsSettingsFromInputs(),
+    onPerformanceRequestTlsSettingsChange: (event) => setActivePerformanceRequestTlsSettingsFromInputs(event),
     onCollectionAuthTypeChange: showCollectionAuthSection,
     onCollectionInput: collectCollectionAndMarkDirty,
     onCollectionAuthInput: collectCollectionAndMarkDirty,
@@ -987,6 +986,12 @@ function bindUi() {
     onMethodChange: () => {
       updateMethodSelectClass();
       collectRequestAndMarkDirty();
+      if (activeRunnerRequestRunnerId) {
+        renderRunnerEditor();
+      } else if (activeCollectionId) {
+        renderCollections();
+      }
+      renderRequestTabs();
     },
     onUrlInput: () => {
       syncRequestParamsFromUrlInput();
@@ -1053,6 +1058,7 @@ function bindUi() {
   bindEnvironmentTitleEditor();
   bindRunnerTitleEditor();
   bindPerformanceTitleEditor();
+  bindAuthRefreshDisclosurePlacement();
   if (typeof setContextMenuPeerCloser === 'function') {
     setContextMenuPeerCloser(() => {
       closeToolbarMenus();
@@ -1255,7 +1261,7 @@ function bindEnvironmentTitleEditor() {
 }
 
 function beginEnvironmentTitleEdit() {
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   const title = $('environmentMainTitle');
   if (!environment || !title || title.dataset.editing === 'true') {
     return;
@@ -1303,7 +1309,7 @@ function finishEnvironmentTitleEdit(options = {}) {
   if (!title || title.dataset.editing !== 'true') {
     return;
   }
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   if (environment && options.revert === true) {
     environment.name = environmentTitleEditOriginal || 'Untitled Environment';
     title.textContent = environment.name;
@@ -2095,7 +2101,7 @@ function renderRequestTabs() {
 }
 
 function requestTabMethodText(request, tab = {}) {
-  const method = requestMethodText(request);
+  const method = requestMethodBadgeText(request);
   if (isAuthRefreshRequestTab(tab)) {
     return `AUTH - ${method}`;
   }
@@ -2113,6 +2119,19 @@ function requestTabMethodClassName(request, tab = {}) {
 
 function requestMethodText(request) {
   return String(request?.method || 'GET').trim().toUpperCase() || 'GET';
+}
+
+function requestMethodBadgeText(request) {
+  return methodBadgeText(requestMethodText(request));
+}
+
+function methodBadgeText(method) {
+  const normalizedMethod = String(method || '').trim().toUpperCase();
+  const compactMethodLabels = {
+    DELETE: 'DEL',
+    OPTIONS: 'OPT'
+  };
+  return compactMethodLabels[normalizedMethod] || normalizedMethod || 'GET';
 }
 
 function isRunnerRequestTab(tab = {}) {
@@ -2335,6 +2354,7 @@ function collectPerformanceTestAndMarkDirty(event) {
   collectPerformanceTestFromEditor(event?.target || null);
   markActivePerformanceDirty();
   refreshActivePerformanceGeneratedHeaderPreview();
+  renderPerformanceVariablePreview();
   refreshVariableHighlights();
 }
 
@@ -3500,10 +3520,10 @@ function tutorialEnsureRequestContext(tabName = 'params') {
 
 function tutorialEnsureEnvironmentContext() {
   workspace.environments ||= [];
-  if (!activeEnvironment() && workspace.environments.length) {
-    activeEnvironmentId = workspace.environments[0].id;
+  if (!activeEditorEnvironment() && workspace.environments.length) {
+    activeEnvironmentEditorId = workspace.environments[0].id;
   }
-  if (!activeEnvironment()) {
+  if (!activeEditorEnvironment()) {
     newEnvironment();
     return;
   }
@@ -4815,25 +4835,13 @@ function mergeVariableHighlightSources(...sources) {
 
 function variableHighlightEnvironmentForTarget(target) {
   if (activeRunnerRequestRunnerId) {
-    const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
-    const runnerEnvironment = environmentById(runner?.environmentId);
-    if (runnerEnvironment) {
-      return runnerEnvironment;
-    }
+    return activeEnvironment();
   }
   if (target?.closest?.('#runnerMainPanel')) {
-    const runnerEnvironment = environmentById(activeRunner()?.environmentId);
-    if (runnerEnvironment) {
-      return runnerEnvironment;
-    }
+    return activeEnvironment();
   }
   if (target?.closest?.('#performanceMainPanel')) {
-    const test = activePerformanceTest();
-    const type = activePerformanceType() || test?.type || 'diagnosis';
-    const performanceEnvironment = environmentById(performanceTypeSettings(test, type).environmentId);
-    if (performanceEnvironment) {
-      return performanceEnvironment;
-    }
+    return activeEnvironment();
   }
   return activeEnvironment();
 }
@@ -4897,7 +4905,7 @@ function openEnvironmentFromVariableReference(target) {
     return true;
   }
   collectActiveEditorState();
-  activeEnvironmentId = environment.id;
+  activeEnvironmentEditorId = environment.id;
   activeRunnerRequestRunnerId = null;
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
@@ -5048,7 +5056,7 @@ function selectSidebarPanel(panel) {
     activeRunnerRequestRunnerId = null;
     activeAuthRefreshRequestOwnerType = '';
     activeAuthRefreshRequestOwnerId = null;
-    activeEnvironmentId = 'none';
+    activeEnvironmentEditorId = 'none';
     activeMainPanel = 'environment';
   } else if (panel === 'workspaces') {
     const activeTab = openWorkspaceTabs.find((tab) => tab.key === activeWorkspaceTabKey());
@@ -5120,7 +5128,7 @@ function renderMainPanels() {
   const showFolder = activeMainPanel === 'request' && Boolean(activeFolder()) && !activeRequest();
   const showCollection = activeMainPanel === 'request' && Boolean(activeCollection()) && !activeFolder() && !activeRequest();
   const showRequestEmpty = activeMainPanel === 'request' && !activeRequest() && !showCollection && !showFolder;
-  const showEnvironmentEmpty = showEnvironment && !activeEnvironment();
+  const showEnvironmentEmpty = showEnvironment && !activeEditorEnvironment();
   const showWorkspaceEmpty = showWorkspace && !activeWorkspaceItem();
   const showRunnerEmpty = showRunner && !activeRunner();
   const showPerformanceEmpty = showPerformance && !activePerformanceTest();
@@ -5339,16 +5347,68 @@ function normalizeRendererClientCertificates(values) {
     }));
 }
 
+const RENDERER_DEFAULT_REQUEST_SETTINGS = Object.freeze({
+  sslCertificateVerification: 'inherit',
+  httpVersion: 'auto',
+  followRedirects: true,
+  followOriginalHttpMethod: false,
+  followAuthorizationHeader: false,
+  removeRefererHeaderOnRedirect: false,
+  strictHttpParser: false,
+  encodeUrlAutomatically: true,
+  maxRedirects: 10,
+  useServerCipherSuiteDuringHandshake: false,
+  disabledTlsProtocols: '',
+  cipherSuiteSelection: ''
+});
+
 function normalizeRendererRequestTlsSettings(value = {}) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   return {
-    sslCertificateVerification: normalizeRendererRequestSslVerification(source.sslCertificateVerification)
+    sslCertificateVerification: normalizeRendererRequestSslVerification(source.sslCertificateVerification),
+    httpVersion: normalizeRendererHttpVersion(source.httpVersion),
+    followRedirects: source.followRedirects !== false,
+    followOriginalHttpMethod: source.followOriginalHttpMethod === true,
+    followAuthorizationHeader: source.followAuthorizationHeader === true,
+    removeRefererHeaderOnRedirect: source.removeRefererHeaderOnRedirect === true,
+    strictHttpParser: source.strictHttpParser === true,
+    encodeUrlAutomatically: source.encodeUrlAutomatically !== false,
+    maxRedirects: normalizeRendererMaxRedirects(source.maxRedirects),
+    useServerCipherSuiteDuringHandshake: source.useServerCipherSuiteDuringHandshake === true,
+    disabledTlsProtocols: normalizeRendererSettingsText(source.disabledTlsProtocols),
+    cipherSuiteSelection: normalizeRendererSettingsText(source.cipherSuiteSelection)
   };
 }
 
 function normalizeRendererRequestSslVerification(value) {
   const normalized = String(value || '').trim().toLowerCase();
   return ['inherit', 'enabled', 'disabled'].includes(normalized) ? normalized : 'inherit';
+}
+
+function normalizeRendererHttpVersion(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'http2') {
+    return 'http2';
+  }
+  if (normalized === 'http1') {
+    return 'http1';
+  }
+  return 'auto';
+}
+
+function normalizeRendererMaxRedirects(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return RENDERER_DEFAULT_REQUEST_SETTINGS.maxRedirects;
+  }
+  return Math.max(0, Math.min(100, Math.floor(number)));
+}
+
+function normalizeRendererSettingsText(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean).join(', ');
+  }
+  return String(value || '').trim();
 }
 
 const RENDERER_DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
@@ -5753,6 +5813,7 @@ function applyTypographyPreferences() {
   document.documentElement.style.setProperty('--ui-font-size', `${appearance.interfaceFontSize}px`);
   document.documentElement.style.setProperty('--editor-font', typographyFontStack(appearance.editorFont, DEFAULT_EDITOR_FONT_STACK));
   document.documentElement.style.setProperty('--editor-font-size', `${appearance.editorFontSize}px`);
+  fitPerformanceTypeSelectToOptions();
   refreshVariableHighlights(document);
 }
 
@@ -6642,6 +6703,13 @@ function toggleActiveRunnerAuthRefresh() {
   }
   collectRunnerFromEditor();
   const existing = normalizeAuthRefreshConfig(runner.authRefresh || {});
+  if (existing.enabled !== true && !authRefreshRequestHasUrl(existing.request)) {
+    runner.authRefresh = existing;
+    renderAuthRefreshControls('runner', runner.authRefresh, true);
+    openAuthRefreshSettingsPanel('runner');
+    setStatus('Create or import an auth request with a URL before turning runner refreshing auth on.');
+    return runner.authRefresh;
+  }
   runner.authRefresh = normalizeAuthRefreshConfig({
     ...existing,
     enabled: existing.enabled !== true
@@ -6665,6 +6733,13 @@ function toggleActivePerformanceAuthRefresh() {
   }
   collectPerformanceTestFromEditor();
   const previousAuthRefresh = normalizeAuthRefreshConfig(test.authRefresh || {});
+  if (previousAuthRefresh.enabled !== true && !authRefreshRequestHasUrl(previousAuthRefresh.request)) {
+    test.authRefresh = previousAuthRefresh;
+    renderAuthRefreshControls('performance', test.authRefresh, true);
+    openAuthRefreshSettingsPanel('performance');
+    setStatus('Create or import an auth request with a URL before turning performance refreshing auth on.');
+    return test.authRefresh;
+  }
   test.authRefresh = normalizeAuthRefreshConfig({
     ...previousAuthRefresh,
     enabled: previousAuthRefresh.enabled !== true
@@ -7584,7 +7659,7 @@ function renderEnvironments() {
 function environmentNode(environment) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node environment-node';
-  const button = treeButton(environment.name || 'Untitled Environment', environment.id === activeEnvironmentId, 'ENV', {
+  const button = treeButton(environment.name || 'Untitled Environment', environment.id === activeEnvironmentEditorId, 'ENV', {
     treeKind: 'environment',
     treeId: environment.id
   });
@@ -7598,7 +7673,7 @@ function environmentNode(environment) {
     }
     collectActiveEditorState();
     activeRunnerRequestRunnerId = null;
-    activeEnvironmentId = environment.id;
+    activeEnvironmentEditorId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
     ensureOpenEnvironmentTabForActive();
@@ -7663,8 +7738,47 @@ function runnerNode(runner) {
 
 function ensureWorkspacePerformanceTests() {
   workspace ||= {};
-  workspace.performanceTests = normalizeWorkspacePerformanceTests(workspace.performanceTests, workspace);
+  if (!Array.isArray(workspace.performanceTests)) {
+    workspace.performanceTests = [];
+    return workspace.performanceTests;
+  }
+  const tests = workspace.performanceTests.filter((test) => test && typeof test === 'object');
+  workspace.performanceTests = tests.some(performanceTestNeedsNormalization)
+    ? normalizeWorkspacePerformanceTests(tests, workspace)
+    : tests;
   return workspace.performanceTests;
+}
+
+function performanceTestNeedsNormalization(test) {
+  if (!test || typeof test !== 'object') {
+    return true;
+  }
+  const request = test.request;
+  const method = String(request?.method || '').toUpperCase();
+  return !test.id
+    || !test.type
+    || !RENDERER_PERFORMANCE_TEST_TYPES.includes(String(test.type || ''))
+    || !test.typeSettings
+    || !test.config
+    || !test.safetyLimits
+    || !test.capturePolicy
+    || !test.authRefresh
+    || !test.csvVariables
+    || !request
+    || typeof request !== 'object'
+    || !request.id
+    || !METHODS.includes(method)
+    || !Array.isArray(request.headers)
+    || !Array.isArray(request.queryParams)
+    || !Array.isArray(request.variables)
+    || !BODY_TYPES.includes(request.bodyType || 'NONE')
+    || !request.scripts
+    || typeof request.scripts !== 'object'
+    || !request.cookieJar
+    || typeof request.cookieJar !== 'object'
+    || !request.settings
+    || typeof request.settings !== 'object'
+    || !request.autoHeaders;
 }
 
 function renderPerformanceTests() {
@@ -7840,11 +7954,14 @@ function renderRunnerEditor() {
   $('deleteRunnerButton').disabled = !runner;
   $('runCollectionButton').disabled = !runner || activeRunnerId != null;
   $('cancelRunnerButton').disabled = !activeRunnerId;
-  renderRunnerEnvironmentSelect(runner);
   $('runnerStopOnFailure').checked = runner?.stopOnFailure === true;
   $('runnerStopOnFailure').disabled = !runner;
   $('runnerAllowEnvironmentMutation').checked = runner?.allowEnvironmentMutation === true;
   $('runnerAllowEnvironmentMutation').disabled = !runner;
+  $('runnerAdvancedSettingsButton').disabled = !runner;
+  if (!runner) {
+    closeRunnerAdvancedSettingsPanel();
+  }
   renderCapturePolicyControls('runner', runner?.capturePolicy, Boolean(runner));
   renderAuthRefreshControls('runner', runner?.authRefresh, Boolean(runner));
   $('addRunnerRequestButton').disabled = !runner;
@@ -7879,7 +7996,7 @@ function renderPerformanceEditor() {
     title.setAttribute('aria-disabled', test ? 'false' : 'true');
     title.setAttribute('aria-label', 'Performance test name');
   }
-  for (const id of ['performanceCsvVariablesButton', 'performanceToggleCsvVariablesButton', 'performanceEditCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
+  for (const id of ['performanceCsvVariablesButton', 'performanceToggleCsvVariablesButton', 'performanceEditCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'importPerformanceRequestButton', 'performanceAdvancedSettingsButton']) {
     const button = $(id);
     if (button) {
       button.disabled = !test;
@@ -7894,13 +8011,15 @@ function renderPerformanceEditor() {
     cancelButton.disabled = !activePerformanceRunId;
   }
   renderPerformanceTypeTabs(test);
-  renderPerformanceEnvironmentControls(test);
   renderPerformanceConfigControls(test);
   renderPerformanceSafetyControls(test);
   renderPerformanceMutationControls(test);
   renderCapturePolicyControls('performance', test?.capturePolicy, Boolean(test));
   renderPerformanceRequestEditor(test);
   renderAuthRefreshControls('performance', test?.authRefresh, Boolean(test));
+  if (!test) {
+    closePerformanceAdvancedSettingsPanel();
+  }
   syncPerformanceResultExportButtons(test);
 }
 
@@ -7916,67 +8035,9 @@ function syncPerformanceResultExportButtons(test = activePerformanceTest()) {
 function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   const request = test?.request || null;
   setPerformanceRequestSectionDisabled(!test);
-  if (!request) {
-    setValue('performanceMethodSelect', 'GET');
-    updatePerformanceMethodSelectClass();
-    setValue('performanceUrlInput', '');
-    renderRequestBodyEditor('performance', null);
-    setValue('performancePreRequestScriptInput', '');
-    setValue('performanceTestScriptInput', '');
-    setValue('performanceDocsInput', '');
-    renderPerformanceRequestHeaderControls(null);
-    setChecked('performanceRequestCookieJarEnabledInput', false);
-    setChecked('performanceRequestCookieJarStoreInput', true);
-    setManagedCookieJarToggleState('performance', false);
-    renderPerformanceRequestTlsSettings(null);
-    for (const id of [
-      'performanceParamsTable',
-      'performanceHeadersTable',
-      'performanceRequestVariablesTable'
-    ]) {
-      const container = $(id);
-      if (container) {
-        container.textContent = '';
-      }
-    }
-    renderPerformanceAuthEditor({ type: 'none' });
-    renderPerformanceVariablePreview();
-    updatePerformanceRequestEditorLanguages();
-    refreshVariableHighlights($('performanceRequestSection'));
-    return;
-  }
-
-  ensureRequestQueryEditorMirror(request);
-  request.queryParams ||= [];
-  request.headers ||= [];
-  request.variables ||= [];
-  request.docs = request.docs == null ? '' : String(request.docs);
-  request.scripts ||= { preRequest: '', tests: '' };
-  request.cookieJar ||= { enabled: false, storeResponses: true };
-  request.auth ||= { type: 'none' };
-  ensureRequestAutoHeaders(request);
-  const managedCookieRequest = applyPerformanceRefreshingCookieState(test);
-
-  setValue('performanceMethodSelect', METHODS.includes(request.method) ? request.method : 'GET');
-  updatePerformanceMethodSelectClass();
-  setValue('performanceUrlInput', request.url || '');
-  renderRequestBodyEditor('performance', request);
-  setValue('performancePreRequestScriptInput', request.scripts.preRequest || '');
-  setValue('performanceTestScriptInput', request.scripts.tests || '');
-  setValue('performanceDocsInput', request.docs || '');
-  setChecked('performanceRequestCookieJarEnabledInput', request.cookieJar.enabled === true);
-  setChecked('performanceRequestCookieJarStoreInput', request.cookieJar.storeResponses !== false);
-  setManagedCookieJarToggleState('performance', managedCookieRequest);
-  renderPerformanceRequestTlsSettings(request);
-
-  renderPerformancePairs('performanceParamsTable', request.queryParams);
-  renderPerformanceHeaderPairs('performanceHeadersTable', request);
-  renderPerformanceRequestVariablePairs(request.variables);
-  renderPerformanceCookieJarEditor();
-  renderPerformanceAuthEditor(request.auth);
-  renderPerformanceVariablePreview();
-  updatePerformanceRequestEditorLanguages();
-  refreshVariableHighlights($('performanceRequestSection'));
+  renderRequestEditorForContext('performance', request, {
+    applyRefreshingCookieState: () => applyPerformanceRefreshingCookieState(test)
+  });
 }
 
 function setPerformanceRequestSectionDisabled(disabled) {
@@ -7997,57 +8058,15 @@ function setPerformanceRequestSectionDisabled(disabled) {
 }
 
 function renderPerformancePairs(containerId, pairs) {
-  renderEditorRequestPairs({
-    doc: document,
-    containerId,
-    pairs,
-    onDirty: () => {
-      if (containerId === 'performanceParamsTable') {
-        syncPerformanceUrlInputFromParams();
-      }
-      collectPerformanceTestFromEditor();
-      markActivePerformanceDirty();
-    },
-    onRemove: () => {
-      renderPerformanceRequestEditor();
-    }
-  });
+  renderRequestPairsForContext('performance', containerId, pairs, containerId === 'performanceParamsTable' ? 'queryParams' : '');
 }
 
 function renderPerformanceHeaderPairs(containerId, request) {
-  renderEditorRequestPairs({
-    doc: document,
-    containerId,
-    pairs: request?.headers || [],
-    onDirty: () => {
-      collectPerformanceTestFromEditor();
-      markActivePerformanceDirty();
-      renderGeneratedHeaderRows(containerId, request);
-      renderPerformanceRequestHeaderControls(request);
-    },
-    onRemove: () => {
-      renderPerformanceRequestEditor();
-    }
-  });
-  renderGeneratedHeaderRows(containerId, request);
-  renderPerformanceRequestHeaderControls(request);
+  renderRequestHeaderPairsForContext('performance', containerId, request);
 }
 
 function renderPerformanceRequestVariablePairs(pairs) {
-  renderEditorVariablePairs({
-    doc: document,
-    containerId: 'performanceRequestVariablesTable',
-    pairs,
-    onChange: () => {
-      markActivePerformanceDirty();
-      renderPerformanceVariablePreview();
-      refreshVariableHighlights();
-    },
-    onRemove: () => {
-      renderPerformanceRequestEditor();
-      refreshVariableHighlights();
-    }
-  });
+  renderRequestVariablePairsForContext('performance', pairs);
 }
 
 function renderPerformanceVariablePreview() {
@@ -8105,19 +8124,25 @@ function setManagedCookieJarToggleState(prefix, managed) {
     input.disabled = managed === true;
     input.title = managed === true
       ? 'Refreshing Auth manages the cookie jar for this request.'
-      : '';
+      : (input.closest('label')?.getAttribute('title') || '');
   }
 }
 
 function performanceSelectedEnvironment(test = activePerformanceTest()) {
-  const environmentId = test?.environmentId || performanceTypeSettings(test, test?.type || 'diagnosis')?.environmentId || 'none';
-  return environmentId && environmentId !== 'none'
-    ? (workspace.environments || []).find((environment) => environment.id === environmentId) || null
-    : null;
+  return activeEnvironment();
 }
 
 function renderPerformanceTypeTabs(test) {
   const type = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
+  const select = $('performanceTypeSelect');
+  if (select) {
+    select.value = type;
+    if (select.value !== type) {
+      select.value = 'diagnosis';
+    }
+    select.disabled = !test;
+    fitPerformanceTypeSelectToOptions(select);
+  }
   for (const button of document.querySelectorAll('.tab[data-tab-group="performance"]')) {
     const isActive = button.dataset.tab === type;
     button.classList.toggle('active', isActive);
@@ -8136,28 +8161,34 @@ function renderPerformanceTypeTabs(test) {
   }
 }
 
-function renderPerformanceEnvironmentControls(test) {
-  for (const select of document.querySelectorAll('[data-performance-environment]')) {
-    const type = performanceTypeForElement(select);
-    const settings = performanceTypeSettings(test, type);
-    const selectedEnvironmentId = settings.environmentId || 'none';
-    select.textContent = '';
-    const none = document.createElement('option');
-    none.value = 'none';
-    none.textContent = 'No Environment';
-    select.append(none);
-    for (const environment of workspace.environments || []) {
-      const option = document.createElement('option');
-      option.value = environment.id;
-      option.textContent = environment.name || 'Untitled Environment';
-      select.append(option);
-    }
-    select.value = selectedEnvironmentId;
-    if (select.value !== selectedEnvironmentId) {
-      select.value = 'none';
-    }
-    select.disabled = !test;
+function fitPerformanceTypeSelectToOptions(select = $('performanceTypeSelect')) {
+  if (!select || !select.options?.length || typeof document === 'undefined' || typeof getComputedStyle !== 'function') {
+    return;
   }
+  const style = getComputedStyle(select);
+  const canvas = fitPerformanceTypeSelectToOptions.canvas ||= document.createElement('canvas');
+  let context = null;
+  try {
+    context = canvas.getContext('2d');
+  } catch {
+    context = null;
+  }
+  if (!context) {
+    return;
+  }
+  context.font = style.font || `${style.fontSize} ${style.fontFamily}`;
+  const longestOptionWidth = Array.from(select.options)
+    .reduce((max, option) => Math.max(max, context.measureText(option.textContent.trim()).width), 0);
+  const horizontalPadding = cssPixelValue(style.paddingLeft) + cssPixelValue(style.paddingRight);
+  const horizontalBorder = cssPixelValue(style.borderLeftWidth) + cssPixelValue(style.borderRightWidth);
+  const arrowAllowance = Math.max(28, cssPixelValue(style.fontSize) * 1.35);
+  const width = Math.ceil(longestOptionWidth + horizontalPadding + horizontalBorder + arrowAllowance);
+  select.closest('.performance-type-select-field')?.style.setProperty('--performance-type-select-width', `${width}px`);
+}
+
+function cssPixelValue(value) {
+  const number = Number.parseFloat(value);
+  return Number.isFinite(number) ? number : 0;
 }
 
 function renderPerformanceConfigControls(test) {
@@ -8187,11 +8218,37 @@ function renderPerformanceSafetyControls(test) {
 }
 
 function renderPerformanceMutationControls(test) {
+  const activeType = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
   for (const input of document.querySelectorAll('[data-performance-mutation]')) {
-    const type = performanceTypeForElement(input);
+    const type = performanceTypeForElement(input) || activeType;
     input.checked = performanceTypeSettings(test, type).allowEnvironmentMutation === true;
     input.disabled = !test;
   }
+}
+
+function setActivePerformanceTypeFromControl() {
+  const test = activePerformanceTest();
+  if (!test) {
+    return;
+  }
+  const previousType = RENDERER_PERFORMANCE_TEST_TYPES.includes(test.type) ? test.type : 'diagnosis';
+  collectPerformanceTypeSettingsFromPanel(test, previousType, $(`${previousType}Tab`) || activePerformanceTypePanel());
+  const nextType = RENDERER_PERFORMANCE_TEST_TYPES.includes($('performanceTypeSelect')?.value)
+    ? $('performanceTypeSelect').value
+    : 'diagnosis';
+  const changed = test.type !== nextType;
+  test.type = nextType;
+  syncPerformanceActiveTypeSettings(test);
+  renderPerformanceTypeTabs(test);
+  renderPerformanceConfigControls(test);
+  renderPerformanceSafetyControls(test);
+  renderPerformanceMutationControls(test);
+  renderCapturePolicyControls('performance', test.capturePolicy, true);
+  if (changed) {
+    markActivePerformanceDirty();
+  }
+  refreshVariableHighlights();
+  scheduleSessionSave();
 }
 
 function capturePolicyKind(prefix) {
@@ -8333,6 +8390,8 @@ function closeCaptureSettingsPanels(options = {}) {
     panel.hidden = true;
     panel.style.left = '';
     panel.style.top = '';
+    panel.style.maxHeight = '';
+    panel.style.overflowY = '';
     const button = panel.id ? document.querySelector(`[aria-controls="${cssEscapeAttributeValue(panel.id)}"]`) : null;
     button?.setAttribute('aria-expanded', 'false');
   }
@@ -8512,7 +8571,117 @@ function closeCaptureSettingsPanel(prefix) {
   panel.hidden = true;
   panel.style.left = '';
   panel.style.top = '';
+  panel.style.maxHeight = '';
+  panel.style.overflowY = '';
   button.setAttribute('aria-expanded', 'false');
+}
+
+function closeRunnerAdvancedSettingsPanel() {
+  const panel = $('runnerAdvancedSettingsPanel');
+  const button = $('runnerAdvancedSettingsButton');
+  if (!panel || !button) {
+    return;
+  }
+  panel.hidden = true;
+  panel.style.left = '';
+  panel.style.top = '';
+  button.setAttribute('aria-expanded', 'false');
+}
+
+function positionRunnerAdvancedSettingsPanel() {
+  const panel = $('runnerAdvancedSettingsPanel');
+  const button = $('runnerAdvancedSettingsButton');
+  if (!panel || !button || panel.hidden) {
+    return;
+  }
+  const margin = 12;
+  const gap = 6;
+  const buttonRect = button.getBoundingClientRect();
+  const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
+  const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  const panelWidth = Math.min(panel.offsetWidth || 320, Math.max(0, viewportWidth - margin * 2));
+  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  const left = Math.min(Math.max(margin, buttonRect.left), maxLeft);
+  const preferredTop = buttonRect.bottom + gap;
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+  const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function toggleRunnerAdvancedSettingsPanel(event) {
+  event?.stopPropagation?.();
+  const panel = $('runnerAdvancedSettingsPanel');
+  const button = $('runnerAdvancedSettingsButton');
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  const shouldOpen = panel.hidden !== false;
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: shouldOpen ? panel : null });
+  panel.hidden = !shouldOpen;
+  button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    positionRunnerAdvancedSettingsPanel();
+    panel.querySelector('input, select, button, textarea')?.focus?.();
+  }
+}
+
+function closePerformanceAdvancedSettingsPanel() {
+  const panel = $('performanceAdvancedSettingsPanel');
+  const button = $('performanceAdvancedSettingsButton');
+  if (!panel || !button) {
+    return;
+  }
+  panel.hidden = true;
+  panel.style.left = '';
+  panel.style.top = '';
+  button.setAttribute('aria-expanded', 'false');
+}
+
+function positionPerformanceAdvancedSettingsPanel() {
+  const panel = $('performanceAdvancedSettingsPanel');
+  const button = $('performanceAdvancedSettingsButton');
+  if (!panel || !button || panel.hidden) {
+    return;
+  }
+  const margin = 12;
+  const gap = 6;
+  const buttonRect = button.getBoundingClientRect();
+  const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
+  const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  const panelWidth = Math.min(panel.offsetWidth || 320, Math.max(0, viewportWidth - margin * 2));
+  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  const left = Math.min(Math.max(margin, buttonRect.left), maxLeft);
+  const preferredTop = buttonRect.bottom + gap;
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+  const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function togglePerformanceAdvancedSettingsPanel(event) {
+  event?.stopPropagation?.();
+  const panel = $('performanceAdvancedSettingsPanel');
+  const button = $('performanceAdvancedSettingsButton');
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  const shouldOpen = panel.hidden !== false;
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: shouldOpen ? panel : null });
+  panel.hidden = !shouldOpen;
+  button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    positionPerformanceAdvancedSettingsPanel();
+    panel.querySelector('input, select, button, textarea')?.focus?.();
+  }
 }
 
 function positionCaptureSettingsPanel(prefix) {
@@ -8569,15 +8738,19 @@ function positionAuthRefreshPanel(prefix) {
   const buttonRect = button.getBoundingClientRect();
   const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
   const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  panel.style.maxHeight = `${Math.max(160, viewportHeight - margin * 2)}px`;
+  panel.style.overflowY = 'auto';
   const panelWidth = Math.min(panel.offsetWidth || 640, Math.max(0, viewportWidth - margin * 2));
-  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const panelHeight = Math.min(panel.scrollHeight || panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
   const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
   const left = Math.min(Math.max(margin, buttonRect.right - panelWidth), maxLeft);
   const preferredTop = buttonRect.bottom + gap;
   const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
   const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  const availableHeight = Math.max(160, viewportHeight - top - margin);
   panel.style.left = `${left}px`;
   panel.style.top = `${top}px`;
+  panel.style.maxHeight = `${availableHeight}px`;
 }
 
 function toggleAuthRefreshPanel(prefix, event) {
@@ -8598,6 +8771,22 @@ function toggleAuthRefreshPanel(prefix, event) {
     positionAuthRefreshPanel(prefix);
     panel.querySelector('select, input, button, textarea')?.focus?.();
   }
+}
+
+function openAuthRefreshSettingsPanel(prefix) {
+  const panel = $(`${prefix}AuthRefreshPanel`);
+  const button = $(`${prefix}AuthRefreshButton`);
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: panel });
+  panel.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  positionAuthRefreshPanel(prefix);
+  panel.querySelector('select, input, button, textarea')?.focus?.();
 }
 
 function renderAuthRefreshControls(prefix, authRefresh, enabled) {
@@ -8746,6 +8935,10 @@ function authRefreshRequestConfigured(request = {}) {
   return Boolean(String(request?.url || '').trim() || (id && !authRefreshDefaultRequestIds().has(id)));
 }
 
+function authRefreshRequestHasUrl(request = {}) {
+  return Boolean(String(request?.url || '').trim());
+}
+
 function authRefreshDefaultRequestIds() {
   return new Set(['auth-refresh-request', 'auth-refresh-token-request']);
 }
@@ -8760,6 +8953,22 @@ function positionVisibleAuthRefreshPanel(prefix) {
       requestAnimationFrame(() => positionAuthRefreshPanel(prefix));
     } else {
       positionAuthRefreshPanel(prefix);
+    }
+  }
+}
+
+function bindAuthRefreshDisclosurePlacement() {
+  for (const prefix of ['runner', 'performance']) {
+    const panel = $(`${prefix}AuthRefreshPanel`);
+    if (!panel) {
+      continue;
+    }
+    for (const details of panel.querySelectorAll('.auth-refresh-refresh-token, .auth-refresh-advanced')) {
+      if (details.dataset.authRefreshPlacementBound === 'true') {
+        continue;
+      }
+      details.dataset.authRefreshPlacementBound = 'true';
+      details.addEventListener('toggle', () => positionVisibleAuthRefreshPanel(prefix));
     }
   }
 }
@@ -9028,9 +9237,7 @@ function renderAuthRefreshVariableSuggestions(prefix) {
   if (!list) {
     return;
   }
-  const environment = prefix === 'runner'
-    ? environmentById($('runnerEnvironmentSelect')?.value || activeRunner()?.environmentId)
-    : performanceSelectedEnvironment(activePerformanceTest());
+  const environment = activeEnvironment();
   list.textContent = '';
   const seen = new Set();
   for (const variable of environment?.variables || []) {
@@ -9086,26 +9293,6 @@ function performanceTypeForElement(element) {
   return RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : '';
 }
 
-function renderRunnerEnvironmentSelect(runner) {
-  const select = $('runnerEnvironmentSelect');
-  select.textContent = '';
-  const none = document.createElement('option');
-  none.value = 'none';
-  none.textContent = 'No Environment';
-  select.append(none);
-  for (const environment of workspace.environments || []) {
-    const option = document.createElement('option');
-    option.value = environment.id;
-    option.textContent = environment.name || 'Untitled Environment';
-    select.append(option);
-  }
-  select.value = runner?.environmentId || 'none';
-  if (select.value !== (runner?.environmentId || 'none')) {
-    select.value = 'none';
-  }
-  select.disabled = !runner;
-}
-
 function renderRunnerRequestList(runner) {
   const root = $('runnerRequestList');
   root.textContent = '';
@@ -9158,7 +9345,7 @@ function runnerRequestRow(runner, request, index) {
   dirtyIndicator.hidden = !runnerRequestIsDirty(runner.id, request.id);
   const method = document.createElement('span');
   method.className = `runner-row-method ${methodClassName(request.method || 'GET')}`;
-  method.textContent = request.method || 'GET';
+  method.textContent = methodBadgeText(request.method || 'GET');
   methodCell.append(dirtyIndicator, method);
 
   const name = document.createElement('span');
@@ -10306,10 +10493,7 @@ function authRefreshOutputDescription(output = {}) {
 }
 
 function authRefreshAutoDetectEnvironment(ownerType, owner) {
-  if (ownerType === 'runner') {
-    return environmentById(owner?.environmentId) || null;
-  }
-  return performanceSelectedEnvironment(owner);
+  return activeEnvironment();
 }
 
 function authRefreshAutoDetectTarget(ownerType, requestKind = 'access', authRefresh = {}) {
@@ -10901,17 +11085,22 @@ async function runActivePerformanceTest() {
   if (!test.request?.url) {
     return setStatus('Enter a request URL before running a performance test.');
   }
+  const preflightError = performanceRunPreflightError(test);
+  if (preflightError) {
+    renderPerformanceMessage(preflightError);
+    setStatus('Performance test failed.');
+    notifyUser('Performance Test Failed', preflightError);
+    return null;
+  }
   const performanceApi = window.postmeter?.performance;
   if (!performanceApi?.start) {
     return setStatus('Performance execution is unavailable in this runtime.');
   }
   const runId = crypto.randomUUID();
-  const runEnvironment = test.environmentId && test.environmentId !== 'none'
-    ? (workspace.environments || []).find((environment) => environment.id === test.environmentId) || null
-    : null;
+  const runEnvironment = activeEnvironment();
   let normalizedForRun;
   try {
-    normalizedForRun = normalizePerformanceTest(cloneJson(test), workspace);
+    normalizedForRun = normalizePerformanceTest(performanceTestWithRunEnvironment(test, runEnvironment), workspace);
   } catch (error) {
     return setStatus(error.message || String(error));
   }
@@ -10960,6 +11149,26 @@ async function runActivePerformanceTest() {
       renderPerformanceEditor();
     }
   }
+}
+
+function performanceTestWithRunEnvironment(test, environment) {
+  const payload = cloneJson(test);
+  const environmentId = environment?.id || 'none';
+  payload.environmentId = environmentId;
+  if (payload.type && payload.typeSettings?.[payload.type]) {
+    payload.typeSettings[payload.type].environmentId = environmentId;
+  }
+  return payload;
+}
+
+function performanceRunPreflightError(test = {}) {
+  const authRefresh = normalizeAuthRefreshConfig(test.authRefresh || {});
+  if (authRefresh.enabled === true
+    && authRefresh.failurePolicy !== 'continue'
+    && !authRefreshRequestHasUrl(authRefresh.request)) {
+    return 'Refreshing Auth is enabled, but its auth request does not have a URL. Open Refreshing Auth and choose or import an auth request, or turn Refreshing Auth off.';
+  }
+  return '';
 }
 
 async function exportActivePerformanceTest(test = activePerformanceTest()) {
@@ -11401,6 +11610,68 @@ function ensurePerformanceResultsStructure() {
   }
   root.textContent = '';
 
+  const header = document.createElement('div');
+  header.className = 'runner-results-header performance-results-header';
+  const heading = document.createElement('div');
+  heading.className = 'runner-results-heading performance-results-heading';
+  const headerTitle = document.createElement('h3');
+  headerTitle.textContent = 'Results';
+  const summary = document.createElement('div');
+  summary.id = 'performanceResultsSummary';
+  summary.className = 'test-results-summary';
+  summary.textContent = 'No performance run yet.';
+  heading.append(headerTitle, summary);
+  const exportGroup = document.createElement('div');
+  exportGroup.className = 'toolbar-group menu-group result-export-menu-group';
+  exportGroup.setAttribute('aria-label', 'Performance result export');
+  const exportButton = document.createElement('button');
+  exportButton.id = 'exportPerformanceResultsButton';
+  exportButton.className = 'menu-trigger';
+  exportButton.type = 'button';
+  exportButton.disabled = true;
+  exportButton.setAttribute('aria-haspopup', 'menu');
+  exportButton.setAttribute('aria-expanded', 'false');
+  exportButton.textContent = 'Export Results';
+  exportButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shouldOpen = exportMenu.hidden !== false;
+    closeToolbarMenus();
+    closeCaptureSettingsPanels();
+    exportMenu.hidden = !shouldOpen;
+    if (shouldOpen) {
+      positionRendererToolbarMenu?.(exportButton, exportMenu, { windowObject: window });
+    }
+    exportButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  });
+  const exportMenu = document.createElement('div');
+  exportMenu.id = 'exportPerformanceResultsMenu';
+  exportMenu.className = 'toolbar-menu';
+  exportMenu.role = 'menu';
+  exportMenu.setAttribute('aria-labelledby', 'exportPerformanceResultsButton');
+  exportMenu.hidden = true;
+  for (const [id, label] of [
+    ['exportPerformanceResultHtmlButton', 'HTML Report'],
+    ['exportPerformanceResultJsonButton', 'JSON'],
+    ['exportPerformanceResultCsvButton', 'CSV']
+  ]) {
+    const button = document.createElement('button');
+    button.id = id;
+    button.type = 'button';
+    button.role = 'menuitem';
+    button.disabled = true;
+    button.textContent = label;
+    if (id === 'exportPerformanceResultHtmlButton') {
+      button.addEventListener('click', () => openHtmlReportOptionsModal('performance'));
+    } else if (id === 'exportPerformanceResultJsonButton') {
+      button.addEventListener('click', () => { void exportActivePerformanceResult('json'); });
+    } else if (id === 'exportPerformanceResultCsvButton') {
+      button.addEventListener('click', () => { void exportActivePerformanceResult('csv'); });
+    }
+    exportMenu.append(button);
+  }
+  exportGroup.append(exportButton, exportMenu);
+  header.append(heading, exportGroup);
+
   const tabs = document.createElement('div');
   tabs.className = 'tabs performance-output-tabs';
   tabs.setAttribute('role', 'tablist');
@@ -11450,17 +11721,12 @@ function ensurePerformanceResultsStructure() {
   resultsPanel.setAttribute('role', 'tabpanel');
   resultsPanel.setAttribute('aria-labelledby', 'performanceOutputResultsTabButton');
 
-  const summary = document.createElement('div');
-  summary.id = 'performanceResultsSummary';
-  summary.className = 'test-results-summary';
-  summary.textContent = 'No performance run yet.';
-
   const runDetails = document.createElement('div');
   runDetails.id = 'performanceRunDetails';
   runDetails.className = 'runner-execution-details performance-run-details';
   appendEmptyTestResult(runDetails, 'No performance run yet.');
 
-  resultsPanel.append(summary, runDetails);
+  resultsPanel.append(runDetails);
 
   const requestsPanel = document.createElement('div');
   requestsPanel.id = 'performanceOutputRequestsTab';
@@ -11483,7 +11749,7 @@ function ensurePerformanceResultsStructure() {
   graphsPanel.setAttribute('aria-labelledby', 'performanceOutputGraphsTabButton');
   appendEmptyTestResult(graphsPanel, 'No graphs yet.');
 
-  root.append(tabs, resultsPanel, requestsPanel, graphsPanel);
+  root.append(header, tabs, resultsPanel, requestsPanel, graphsPanel);
   return root;
 }
 
@@ -11535,8 +11801,7 @@ function performanceExecutionRow(sample, index) {
   row.setAttribute('aria-pressed', index === selectedPerformanceResultIndex ? 'true' : 'false');
   row.setAttribute('aria-label', `Show details for ${sample?.requestDisplayName || sample?.requestName || 'request'} iteration ${sample?.iteration || index + 1} with status ${runnerStatusLabel(sample)}`);
   row.addEventListener('click', () => {
-    selectedPerformanceResultIndex = index;
-    renderPerformanceResult(lastPerformanceResult);
+    selectPerformanceExecutionRow(index);
   });
 
   const badge = document.createElement('span');
@@ -14076,7 +14341,7 @@ function treeButton(text, active, kind, options = {}) {
   }
   const badge = document.createElement('span');
   badge.className = ['tree-badge', tagClassName(kind)].filter(Boolean).join(' ');
-  badge.textContent = kind;
+  badge.textContent = methodBadgeText(kind);
   const label = document.createElement('span');
   label.className = 'tree-label';
   label.textContent = text;
@@ -15145,8 +15410,8 @@ function activeCollectionTreeFocusTargets() {
 }
 
 function activeEnvironmentTreeFocusTargets() {
-  return activeEnvironmentId && activeEnvironmentId !== 'none'
-    ? [treeFocusTarget('environment', activeEnvironmentId)]
+  return activeEnvironmentEditorId && activeEnvironmentEditorId !== 'none'
+    ? [treeFocusTarget('environment', activeEnvironmentEditorId)]
     : [];
 }
 
@@ -15211,6 +15476,35 @@ function bodyControlId(prefix, id) {
 
 function bodyElement(prefix, id) {
   return $(bodyControlId(prefix, id));
+}
+
+function requestEditorContext(scope = 'request') {
+  const isPerformance = scope === 'performance';
+  return {
+    scope: isPerformance ? 'performance' : 'request',
+    bodyPrefix: isPerformance ? 'performance' : '',
+    rootId: isPerformance ? 'performanceRequestSection' : 'requestEditorPanel',
+    methodSelectId: isPerformance ? 'performanceMethodSelect' : 'methodSelect',
+    urlInputId: isPerformance ? 'performanceUrlInput' : 'urlInput',
+    paramsTableId: isPerformance ? 'performanceParamsTable' : 'paramsTable',
+    headersTableId: isPerformance ? 'performanceHeadersTable' : 'headersTable',
+    variablesTableId: isPerformance ? 'performanceRequestVariablesTable' : 'requestVariablesTable',
+    preRequestScriptInputId: isPerformance ? 'performancePreRequestScriptInput' : 'preRequestScriptInput',
+    testScriptInputId: isPerformance ? 'performanceTestScriptInput' : 'testScriptInput',
+    docsInputId: isPerformance ? 'performanceDocsInput' : 'docsInput',
+    docsPane: isPerformance ? '' : 'requestDocs',
+    cookieJarEnabledInputId: isPerformance ? 'performanceRequestCookieJarEnabledInput' : 'requestCookieJarEnabledInput',
+    cookieJarStoreInputId: isPerformance ? 'performanceRequestCookieJarStoreInput' : 'requestCookieJarStoreInput',
+    addVariableButtonId: isPerformance ? 'addPerformanceRequestVariableButton' : 'addRequestVariableButton',
+    autoHeaderTokenInputId: isPerformance ? 'performanceSendPostMeterTokenInput' : 'sendPostMeterTokenInput',
+    autoHeaderShowInputId: isPerformance ? 'performanceShowGeneratedHeadersInput' : 'showGeneratedHeadersInput',
+    autoHeaderLabelId: isPerformance ? 'performanceShowGeneratedHeadersLabel' : 'showGeneratedHeadersLabel'
+  };
+}
+
+function activeRequestForEditorContext(contextOrScope = 'request') {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  return context.scope === 'performance' ? activePerformanceTest()?.request || null : activeRequest();
 }
 
 function bodyModeForRequest(request) {
@@ -15845,118 +16139,171 @@ function ensureRequestQueryEditorMirror(request) {
 }
 
 function syncRequestParamsFromUrlInput() {
-  const request = activeRequest();
-  const input = $('urlInput');
-  if (!request || !input) {
-    return;
-  }
-  request.queryParams = queryParamsFromEditorUrl(input.value);
-  renderPairs('paramsTable', request.queryParams, 'queryParams');
+  syncRequestParamsFromUrlInputForContext('request');
 }
 
 function syncRequestUrlInputFromParams() {
-  const request = activeRequest();
-  const input = $('urlInput');
-  if (!request || !input) {
-    return;
-  }
-  request.queryParams = collectKeyValueRowsFromTable('paramsTable', request.queryParams || []);
-  const nextUrl = editorUrlWithQueryParams(input.value, request.queryParams);
-  if (input.value !== nextUrl) {
-    input.value = nextUrl;
-  }
-  request.url = nextUrl.trim();
-  refreshVariableHighlights(input);
+  syncRequestUrlInputFromParamsForContext('request');
 }
 
 function syncPerformanceParamsFromUrlInput() {
-  const request = activePerformanceTest()?.request;
-  const input = $('performanceUrlInput');
+  syncRequestParamsFromUrlInputForContext('performance');
+}
+
+function syncPerformanceUrlInputFromParams() {
+  syncRequestUrlInputFromParamsForContext('performance');
+}
+
+function syncRequestParamsFromUrlInputForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
+  const input = $(context.urlInputId);
   if (!request || !input) {
     return;
   }
   request.queryParams = queryParamsFromEditorUrl(input.value);
-  renderPerformancePairs('performanceParamsTable', request.queryParams);
+  renderRequestPairsForContext(context, context.paramsTableId, request.queryParams, 'queryParams');
 }
 
-function syncPerformanceUrlInputFromParams() {
-  const request = activePerformanceTest()?.request;
-  const input = $('performanceUrlInput');
+function syncRequestUrlInputFromParamsForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
+  const input = $(context.urlInputId);
   if (!request || !input) {
     return;
   }
-  request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', request.queryParams || []);
+  request.queryParams = collectKeyValueRowsFromTable(context.paramsTableId, request.queryParams || []);
   const nextUrl = editorUrlWithQueryParams(input.value, request.queryParams);
   if (input.value !== nextUrl) {
     input.value = nextUrl;
   }
   request.url = nextUrl.trim();
   refreshVariableHighlights(input);
+}
+
+function renderRequestEditorForContext(contextOrScope, request, options = {}) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  if (!request) {
+    setValue(context.methodSelectId, 'GET');
+    updateMethodSelectClassFor(context.methodSelectId);
+    setValue(context.urlInputId, '');
+    renderRequestBodyEditor(context.bodyPrefix, null);
+    setValue(context.preRequestScriptInputId, '');
+    setValue(context.testScriptInputId, '');
+    setValue(context.docsInputId, '');
+    if (context.docsPane) {
+      renderMarkdownPane(context.docsPane);
+    }
+    for (const id of [context.paramsTableId, context.headersTableId, context.variablesTableId]) {
+      const container = $(id);
+      if (container) {
+        container.textContent = '';
+      }
+    }
+    renderRequestHeaderControlsForContext(context, null);
+    setChecked(context.cookieJarEnabledInputId, false);
+    setChecked(context.cookieJarStoreInputId, true);
+    setManagedCookieJarToggleState(context.bodyPrefix, false);
+    renderRequestSettingsControls(null, context.scope);
+    const addVariableButton = $(context.addVariableButtonId);
+    if (addVariableButton) {
+      addVariableButton.disabled = true;
+    }
+    renderRequestAuthEditorForContext(context, { type: 'none' });
+    renderRequestVariablePreviewForContext(context);
+    updateRequestEditorLanguagesForContext(context);
+    refreshVariableHighlights($(context.rootId));
+    return;
+  }
+
+  ensureRequestQueryEditorMirror(request);
+  request.queryParams ||= [];
+  request.headers ||= [];
+  request.variables ||= [];
+  request.scripts ||= { preRequest: '', tests: '' };
+  request.docs = request.docs == null ? '' : String(request.docs);
+  request.cookieJar ||= { enabled: false, storeResponses: true };
+  request.auth ||= { type: 'none' };
+  ensureRequestAutoHeaders(request);
+  const managedCookieRequest = typeof options.applyRefreshingCookieState === 'function'
+    ? options.applyRefreshingCookieState(request) === true
+    : false;
+
+  const addVariableButton = $(context.addVariableButtonId);
+  if (addVariableButton) {
+    addVariableButton.disabled = false;
+  }
+  const method = METHODS.includes(String(request.method || '').toUpperCase())
+    ? String(request.method || '').toUpperCase()
+    : 'GET';
+  request.method = method;
+  setValue(context.methodSelectId, method);
+  updateMethodSelectClassFor(context.methodSelectId);
+  setValue(context.urlInputId, request.url || '');
+  renderRequestBodyEditor(context.bodyPrefix, request);
+  setValue(context.preRequestScriptInputId, request.scripts.preRequest || '');
+  setValue(context.testScriptInputId, request.scripts.tests || '');
+  setValue(context.docsInputId, request.docs || '');
+  if (context.docsPane) {
+    renderMarkdownPane(context.docsPane);
+  }
+  setChecked(context.cookieJarEnabledInputId, request.cookieJar.enabled === true);
+  setChecked(context.cookieJarStoreInputId, request.cookieJar.storeResponses !== false);
+  setManagedCookieJarToggleState(context.bodyPrefix, managedCookieRequest);
+  renderRequestSettingsControls(request, context.scope);
+  renderRequestPairsForContext(context, context.paramsTableId, request.queryParams, 'queryParams');
+  renderRequestHeaderPairsForContext(context, context.headersTableId, request);
+  renderRequestVariablePairsForContext(context, request.variables);
+  renderRequestCookieJarEditorForContext(context);
+  renderRequestAuthEditorForContext(context, request.auth || { type: 'none' });
+  renderRequestVariablePreviewForContext(context);
+  updateRequestEditorLanguagesForContext(context);
+  refreshVariableHighlights($(context.rootId));
+}
+
+function renderRequestAuthEditorForContext(context, auth) {
+  if (context.scope === 'performance') {
+    renderPerformanceAuthEditor(auth);
+    return;
+  }
+  renderAuthEditor(auth);
+}
+
+function renderRequestCookieJarEditorForContext(context) {
+  if (context.scope === 'performance') {
+    renderPerformanceCookieJarEditor();
+    return;
+  }
+  renderCookieJarEditor();
+}
+
+function renderRequestVariablePreviewForContext(context) {
+  if (context.scope === 'performance') {
+    renderPerformanceVariablePreview();
+    return;
+  }
+  renderVariablePreview();
+}
+
+function updateRequestEditorLanguagesForContext(context) {
+  if (context.scope === 'performance') {
+    updatePerformanceRequestEditorLanguages();
+    return;
+  }
+  updateRequestEditorLanguages();
 }
 
 function renderRequestEditor() {
   resetRequestEditorTransientStateOnContextChange();
   const request = activeRequest();
-  if (!request) {
-    renderRequestTitle(null);
-    $('saveRequestButton').disabled = true;
-    $('exportRequestPanelButton').disabled = true;
-    $('exportRequestPanelPostmeterButton').disabled = true;
-    $('exportRequestPanelCurlButton').disabled = true;
-    $('methodSelect').value = 'GET';
-    updateMethodSelectClass();
-    $('urlInput').value = '';
-    renderRequestBodyEditor('', null);
-    $('preRequestScriptInput').value = '';
-    $('testScriptInput').value = '';
-    setValue('docsInput', '');
-    renderMarkdownPane('requestDocs');
-    $('paramsTable').textContent = '';
-    $('headersTable').textContent = '';
-    $('requestVariablesTable').textContent = '';
-    renderRequestHeaderControls(null);
-    $('requestCookieJarEnabledInput').checked = false;
-    $('requestCookieJarStoreInput').checked = true;
-    setManagedCookieJarToggleState('', false);
-    renderRequestTlsSettings(null);
-    $('addRequestVariableButton').disabled = true;
-    renderAuthEditor({ type: 'none' });
-    updateRequestEditorLanguages();
-    refreshVariableHighlights($('requestEditorPanel'));
-    return;
-  }
-  ensureRequestQueryEditorMirror(request);
-  $('saveRequestButton').disabled = false;
-  $('exportRequestPanelButton').disabled = false;
-  $('exportRequestPanelPostmeterButton').disabled = false;
-  $('exportRequestPanelCurlButton').disabled = false;
-  $('addRequestVariableButton').disabled = false;
   renderRequestTitle(request);
-  $('methodSelect').value = request.method;
-  updateMethodSelectClass();
-  $('urlInput').value = request.url;
-  renderRequestBodyEditor('', request);
-  request.scripts ||= { preRequest: '', tests: '' };
-  $('preRequestScriptInput').value = request.scripts.preRequest || '';
-  $('testScriptInput').value = request.scripts.tests || '';
-  request.docs = request.docs == null ? '' : String(request.docs);
-  setValue('docsInput', request.docs);
-  renderMarkdownPane('requestDocs');
-  request.cookieJar ||= { enabled: false, storeResponses: true };
-  request.auth ||= { type: 'none' };
-  ensureRequestAutoHeaders(request);
-  const managedCookieRequest = applyActiveRequestRefreshingCookieState(request);
-  $('requestCookieJarEnabledInput').checked = request.cookieJar.enabled === true;
-  $('requestCookieJarStoreInput').checked = request.cookieJar.storeResponses !== false;
-  setManagedCookieJarToggleState('', managedCookieRequest);
-  renderPairs('paramsTable', request.queryParams || [], 'queryParams');
-  renderHeaderPairs('headersTable', request);
-  renderRequestVariablePairs(request.variables || []);
-  renderCookieJarEditor();
-  renderRequestTlsSettings(request);
-  renderAuthEditor(request.auth || { type: 'none' });
-  updateRequestEditorLanguages();
-  refreshVariableHighlights($('requestEditorPanel'));
+  $('saveRequestButton').disabled = !request;
+  $('exportRequestPanelButton').disabled = !request;
+  $('exportRequestPanelPostmeterButton').disabled = !request;
+  $('exportRequestPanelCurlButton').disabled = !request;
+  renderRequestEditorForContext('request', request, {
+    applyRefreshingCookieState: () => applyActiveRequestRefreshingCookieState(request)
+  });
 }
 
 function renderCollectionEditor() {
@@ -16393,63 +16740,152 @@ function activePerformanceUsesRefreshingAuthCookie(authRefresh = activePerforman
   return authRefresh?.enabled === true && String(authRefresh.authType || '').trim() === 'cookie';
 }
 
-function renderPairs(containerId, pairs, fieldName) {
+function renderRequestPairsForContext(contextOrScope, containerId, pairs, fieldName) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
   renderEditorRequestPairs({
     doc: document,
     containerId,
     pairs,
     onDirty: () => {
       if (fieldName === 'queryParams') {
-        syncRequestUrlInputFromParams();
+        syncRequestUrlInputFromParamsForContext(context);
       }
-      collectRequestFromEditor();
-      markActiveRequestDirty();
+      collectRequestEditorAndMarkDirtyForContext(context);
     },
     onRemove: () => {
-      renderRequestEditor();
+      renderRequestEditorForContextScope(context);
     }
   });
+  bindRequestPairTableSync(context, containerId, fieldName);
 }
 
-function renderHeaderPairs(containerId, request) {
+function renderPairs(containerId, pairs, fieldName) {
+  renderRequestPairsForContext('request', containerId, pairs, fieldName);
+}
+
+function renderRequestHeaderPairsForContext(contextOrScope, containerId, request) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
   renderEditorRequestPairs({
     doc: document,
     containerId,
     pairs: request?.headers || [],
     onDirty: () => {
-      collectRequestFromEditor();
-      markActiveRequestDirty();
+      collectRequestEditorAndMarkDirtyForContext(context);
       renderGeneratedHeaderRows(containerId, request);
-      renderRequestHeaderControls(request);
+      renderRequestHeaderControlsForContext(context, request);
     },
     onRemove: () => {
-      renderRequestEditor();
+      renderRequestEditorForContextScope(context);
     }
   });
   renderGeneratedHeaderRows(containerId, request);
-  renderRequestHeaderControls(request);
+  renderRequestHeaderControlsForContext(context, request);
+  bindRequestPairTableSync(context, containerId, 'headers');
 }
 
-function renderRequestHeaderControls(request) {
+function renderHeaderPairs(containerId, request) {
+  renderRequestHeaderPairsForContext('request', containerId, request);
+}
+
+function collectRequestEditorAndMarkDirtyForContext(context) {
+  if (context.scope === 'performance') {
+    collectPerformanceTestFromEditor();
+    markRequestEditorContextDirty(context);
+    return;
+  }
+  collectRequestFromEditor();
+  markRequestEditorContextDirty(context);
+}
+
+function renderRequestEditorForContextScope(context) {
+  if (context.scope === 'performance') {
+    renderPerformanceRequestEditor();
+    return;
+  }
+  renderRequestEditor();
+}
+
+function renderRequestHeaderControlsForContext(contextOrScope, request) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
   renderAutoHeaderControls({
     request,
-    tokenInputId: 'sendPostMeterTokenInput',
-    showInputId: 'showGeneratedHeadersInput',
-    labelId: 'showGeneratedHeadersLabel'
+    tokenInputId: context.autoHeaderTokenInputId,
+    showInputId: context.autoHeaderShowInputId,
+    labelId: context.autoHeaderLabelId
   });
 }
 
+function bindRequestPairTableSync(context, containerId, fieldName) {
+  const container = $(containerId);
+  if (!container) {
+    return;
+  }
+  const sync = (event) => {
+    if (!event?.target?.matches?.('input')) {
+      return;
+    }
+    syncRequestPairsFromTableForContext(context, containerId, fieldName);
+  };
+  container.oninput = sync;
+  container.onchange = sync;
+}
+
+function syncRequestPairsFromTableForContext(context, containerId, fieldName) {
+  const request = activeRequestForEditorContext(context);
+  if (!request) {
+    return;
+  }
+  if (fieldName === 'queryParams') {
+    syncRequestUrlInputFromParamsForContext(context);
+  } else if (fieldName) {
+    request[fieldName] = collectKeyValueRowsFromTable(containerId, request[fieldName]);
+  }
+  markRequestEditorContextDirty(context);
+  if (fieldName === 'headers') {
+    renderGeneratedHeaderRows(containerId, request);
+    renderRequestHeaderControlsForContext(context, request);
+  }
+  refreshVariableHighlights();
+}
+
+function renderRequestHeaderControls(request) {
+  renderRequestHeaderControlsForContext('request', request);
+}
+
 function renderRequestTlsSettings(request) {
-  renderRequestTlsSettingsControl(request, 'requestSslCertificateVerificationInput');
+  renderRequestSettingsControls(request, 'request');
 }
 
 function renderPerformanceRequestTlsSettings(request) {
-  renderRequestTlsSettingsControl(request, 'performanceRequestSslCertificateVerificationInput');
+  renderRequestSettingsControls(request, 'performance');
 }
 
-function renderRequestTlsSettingsControl(request, inputId) {
+function requestSettingsControlIds(scope = 'request') {
+  const prefix = scope === 'performance' ? 'performanceRequest' : 'request';
+  return {
+    sslCertificateVerification: `${prefix}SslCertificateVerificationInput`,
+    httpVersion: `${prefix}HttpVersionSelect`,
+    followRedirects: `${prefix}FollowRedirectsInput`,
+    maxRedirects: `${prefix}MaxRedirectsInput`,
+    followOriginalHttpMethod: `${prefix}FollowOriginalHttpMethodInput`,
+    followAuthorizationHeader: `${prefix}FollowAuthorizationHeaderInput`,
+    removeRefererHeaderOnRedirect: `${prefix}RemoveRefererHeaderOnRedirectInput`,
+    strictHttpParser: `${prefix}StrictHttpParserInput`,
+    encodeUrlAutomatically: `${prefix}EncodeUrlAutomaticallyInput`,
+    useServerCipherSuiteDuringHandshake: `${prefix}UseServerCipherSuiteInput`,
+    disabledTlsProtocols: `${prefix}DisabledTlsProtocolsInput`,
+    cipherSuiteSelection: `${prefix}CipherSuiteSelectionInput`
+  };
+}
+
+function requestSettingsScopeFromInputId(inputId = '') {
+  return String(inputId || '').startsWith('performance') ? 'performance' : 'request';
+}
+
+function renderRequestSettingsControls(request, scope = 'request') {
   const settings = request ? normalizeRendererRequestTlsSettings(request.settings) : normalizeRendererRequestTlsSettings();
-  const verification = $(inputId);
+  const ids = requestSettingsControlIds(scope);
+  const verification = $(ids.sslCertificateVerification);
   if (verification) {
     const workspaceVerification = workspace.settings?.request?.sslCertificateVerification !== false;
     verification.checked = settings.sslCertificateVerification === 'inherit'
@@ -16458,15 +16894,57 @@ function renderRequestTlsSettingsControl(request, inputId) {
     verification.dataset.verificationValue = settings.sslCertificateVerification;
     verification.disabled = !request;
   }
+  setSelectValue(ids.httpVersion, settings.httpVersion, !request);
+  setCheckboxValue(ids.followRedirects, settings.followRedirects, !request);
+  setNumberInputValue(ids.maxRedirects, settings.maxRedirects, !request);
+  setCheckboxValue(ids.followOriginalHttpMethod, settings.followOriginalHttpMethod, !request);
+  setCheckboxValue(ids.followAuthorizationHeader, settings.followAuthorizationHeader, !request);
+  setCheckboxValue(ids.removeRefererHeaderOnRedirect, settings.removeRefererHeaderOnRedirect, !request);
+  setCheckboxValue(ids.strictHttpParser, settings.strictHttpParser, !request);
+  setCheckboxValue(ids.encodeUrlAutomatically, settings.encodeUrlAutomatically, !request);
+  setCheckboxValue(ids.useServerCipherSuiteDuringHandshake, settings.useServerCipherSuiteDuringHandshake, !request);
+  setTextInputValue(ids.disabledTlsProtocols, settings.disabledTlsProtocols, !request);
+  setTextInputValue(ids.cipherSuiteSelection, settings.cipherSuiteSelection, !request);
+}
+
+function setSelectValue(id, value, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.value = value;
+  input.disabled = disabled;
+}
+
+function setCheckboxValue(id, checked, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.checked = checked === true;
+  input.disabled = disabled;
+}
+
+function setNumberInputValue(id, value, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.value = String(value ?? '');
+  input.disabled = disabled;
+}
+
+function setTextInputValue(id, value, disabled = false) {
+  const input = $(id);
+  if (!input) {
+    return;
+  }
+  input.value = value == null ? '' : String(value);
+  input.disabled = disabled;
 }
 
 function renderPerformanceRequestHeaderControls(request) {
-  renderAutoHeaderControls({
-    request,
-    tokenInputId: 'performanceSendPostMeterTokenInput',
-    showInputId: 'performanceShowGeneratedHeadersInput',
-    labelId: 'performanceShowGeneratedHeadersLabel'
-  });
+  renderRequestHeaderControlsForContext('performance', request);
 }
 
 function renderAutoHeaderControls({ request, tokenInputId, showInputId, labelId }) {
@@ -16691,7 +17169,10 @@ function renderEnvironmentSelect() {
 }
 
 function renderEnvironmentEditor() {
-  const environment = activeEnvironment();
+  if (activeEnvironmentEditorId !== 'none' && !(workspace.environments || []).some((environment) => environment.id === activeEnvironmentEditorId)) {
+    activeEnvironmentEditorId = 'none';
+  }
+  const environment = activeEditorEnvironment();
   const title = $('environmentMainTitle');
   if (title.dataset.editing !== 'true') {
     title.textContent = environment?.name || 'Select an environment';
@@ -16705,6 +17186,7 @@ function renderEnvironmentEditor() {
   $('saveEnvironmentButton').disabled = !environment;
   $('deleteEnvironmentButton').disabled = !environment;
   $('addVariableButton').disabled = !environment;
+  $('setEnvironmentButton').disabled = !environment;
   if (!environment) {
     const container = $('environmentTable');
     container.textContent = '';
@@ -16768,6 +17250,7 @@ function renderCollectionVariablePairs(pairs) {
     onRemove: () => {
       markActiveCollectionTabDirty();
       renderCollectionEditor();
+      renderVariablePreview();
       refreshVariableHighlights();
     }
   });
@@ -16796,6 +17279,7 @@ function renderFolderVariablePairs(pairs) {
     onRemove: () => {
       markActiveFolderTabDirty();
       renderFolderEditor();
+      renderVariablePreview();
       refreshVariableHighlights();
     }
   });
@@ -16812,27 +17296,58 @@ function renderFolderVariablePreview() {
 }
 
 function renderRequestVariablePairs(pairs) {
+  renderRequestVariablePairsForContext('request', pairs);
+}
+
+function renderRequestVariablePairsForContext(contextOrScope, pairs) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
   renderEditorVariablePairs({
     doc: document,
-    containerId: 'requestVariablesTable',
+    containerId: context.variablesTableId,
     pairs,
     onChange: () => {
-      markActiveRequestDirty();
-      renderVariablePreview();
+      markRequestEditorContextDirty(context);
+      renderRequestVariablePreviewForContext(context);
       refreshVariableHighlights();
     },
     onRemove: () => {
-      renderRequestEditor();
-      refreshVariableHighlights();
+      syncRequestVariablesFromTableForContext(context);
     }
   });
+  bindRequestVariableTableSync(context);
+}
+
+function bindRequestVariableTableSync(context) {
+  const container = $(context.variablesTableId);
+  if (!container) {
+    return;
+  }
+  const sync = (event) => {
+    if (!event?.target?.matches?.('input')) {
+      return;
+    }
+    syncRequestVariablesFromTableForContext(context);
+  };
+  container.oninput = sync;
+  container.onchange = sync;
+}
+
+function syncRequestVariablesFromTableForContext(context) {
+  const request = activeRequestForEditorContext(context);
+  if (!request) {
+    return;
+  }
+  request.variables = collectKeyValueRowsFromTable(context.variablesTableId, request.variables);
+  markRequestEditorContextDirty(context);
+  renderRequestVariablePreviewForContext(context);
+  refreshVariableHighlights();
 }
 
 function renderVariablePreview() {
   renderEditorVariablePreview({
     doc: document,
     collection: activeCollection(),
-    environment: activeEnvironment(),
+    environment: activeMainPanel === 'environment' ? activeEditorEnvironment() : activeEnvironment(),
     folder: activeFolderForActiveRequest(),
     folders: activeFolderPathForActiveRequest(),
     request: activeRequest()
@@ -17881,10 +18396,14 @@ function ensureRunnerResultsStructure() {
   }
   root.textContent = '';
 
-  const summary = document.createElement('div');
-  summary.id = 'runnerResultsSummary';
-  summary.className = 'test-results-summary';
-  summary.textContent = 'No runner run yet.';
+  let summary = $('runnerResultsSummary');
+  if (!summary) {
+    summary = document.createElement('div');
+    summary.id = 'runnerResultsSummary';
+    summary.className = 'test-results-summary';
+    summary.textContent = 'No runner run yet.';
+    root.append(summary);
+  }
 
   const grid = document.createElement('div');
   grid.className = 'runner-execution-grid';
@@ -17892,7 +18411,7 @@ function ensureRunnerResultsStructure() {
     runnerExecutionSection('runnerExecutionTitle', 'Execution', 'runnerExecutionSummary', 'No requests', 'runnerExecutionList', 'runner-execution-list'),
     runnerExecutionSection('runnerExecutionDetailsTitle', 'Request details', 'runnerExecutionDetailsStatus', 'No selection', 'runnerExecutionDetails', 'runner-execution-details')
   );
-  root.append(summary, grid);
+  root.append(grid);
   return root;
 }
 
@@ -18452,8 +18971,7 @@ function runnerExecutionRow(item, index) {
   row.setAttribute('aria-pressed', index === selectedRunnerExecutionIndex ? 'true' : 'false');
   row.setAttribute('aria-label', `Show details for ${item?.requestDisplayName || item?.requestName || 'request'} with status ${runnerStatusLabel(item)}`);
   row.addEventListener('click', () => {
-    selectedRunnerExecutionIndex = index;
-    renderRunnerExecutionResult(lastRunnerResult);
+    selectRunnerExecutionRow(index);
   });
 
   const badge = document.createElement('span');
@@ -18470,6 +18988,46 @@ function runnerExecutionRow(item, index) {
   content.append(name, meta);
   row.append(badge, content);
   return row;
+}
+
+function selectPerformanceExecutionRow(index) {
+  const list = $('performanceExecutionList');
+  const scrollTop = list?.scrollTop || 0;
+  selectedPerformanceResultIndex = index;
+  updateExecutionSelectionState(list, 'performanceExecutionIndex', selectedPerformanceResultIndex);
+  const renderDetails = lastPerformanceResult?.storeBacked === true && window.postmeter?.performance?.resultDetail
+    ? renderStoredPerformanceExecutionDetails(lastPerformanceResult)
+    : renderPerformanceExecutionDetails(lastPerformanceResult);
+  if (list) {
+    list.scrollTop = scrollTop;
+  }
+  return renderDetails;
+}
+
+function selectRunnerExecutionRow(index) {
+  const list = $('runnerExecutionList');
+  const scrollTop = list?.scrollTop || 0;
+  selectedRunnerExecutionIndex = index;
+  updateExecutionSelectionState(list, 'runnerExecutionIndex', selectedRunnerExecutionIndex);
+  const renderDetails = lastRunnerResult?.storeBacked === true && window.postmeter?.runner?.resultDetail
+    ? renderStoredRunnerExecutionDetails(lastRunnerResult)
+    : renderRunnerExecutionDetails(lastRunnerResult);
+  if (list) {
+    list.scrollTop = scrollTop;
+  }
+  return renderDetails;
+}
+
+function updateExecutionSelectionState(list, indexDataKey, selectedIndex) {
+  if (!list) {
+    return;
+  }
+  for (const row of list.querySelectorAll('.runner-execution-row')) {
+    const rowIndex = Number(row.dataset[indexDataKey]);
+    const selected = rowIndex === selectedIndex;
+    row.classList.toggle('active', selected);
+    row.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  }
 }
 
 function runnerExecutionMeta(item = {}) {
@@ -18784,7 +19342,9 @@ async function runActiveRunner() {
     allowEnvironmentMutation: runner.allowEnvironmentMutation === true,
     capturePolicy: cloneJson(runner.capturePolicy || {})
   };
-  if (!(await confirmRuntimeResultStoreCapacity('runner', cloneJson(runner), runnerRunConfig))) {
+  const runnerEnvironment = activeEnvironment();
+  const runnerForRun = runnerWithRunEnvironment(runner, runnerEnvironment);
+  if (!(await confirmRuntimeResultStoreCapacity('runner', runnerForRun, runnerRunConfig))) {
     return setStatus('Runner cancelled.');
   }
   const runnerId = crypto.randomUUID();
@@ -18792,9 +19352,6 @@ async function runActiveRunner() {
     runnerConfigId: runner.id,
     workspaceId: activeWorkspaceId
   };
-  const runnerEnvironment = runner.environmentId && runner.environmentId !== 'none'
-    ? (workspace.environments || []).find((environment) => environment.id === runner.environmentId) || null
-    : null;
   lastRunnerResult = null;
   selectedRunnerExecutionIndex = 0;
   runnerExecutionPage = 0;
@@ -18806,7 +19363,7 @@ async function runActiveRunner() {
     $('cancelRunnerButton').disabled = false;
     renderRunnerExecutionMessage('Starting runner...');
     const startRunner = window.__postmeterStartRunner || window.postmeter.runner.start;
-    const result = await startRunner(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), runnerRunConfig);
+    const result = await startRunner(runnerId, runnerForRun, cloneJson(runnerEnvironment), runnerRunConfig);
     if (activeRunnerId !== runnerId || !isActiveRunnerContext(runnerContext)) {
       return;
     }
@@ -18847,6 +19404,13 @@ async function runActiveRunner() {
       $('cancelRunnerButton').disabled = true;
     }
   }
+}
+
+function runnerWithRunEnvironment(runner, environment) {
+  return {
+    ...cloneJson(runner),
+    environmentId: environment?.id || 'none'
+  };
 }
 
 function isActiveRunnerContext(context) {
@@ -18957,7 +19521,7 @@ async function saveFolderFromPane() {
 }
 
 async function saveEnvironmentFromPane() {
-  if (!activeEnvironment()) {
+  if (!activeEditorEnvironment()) {
     setStatus('Select an environment before saving.');
     return false;
   }
@@ -18973,6 +19537,21 @@ async function saveEnvironmentFromPane() {
     notifyUser('Environment Save Failed', message);
     return false;
   }
+}
+
+function setActiveEnvironmentFromPane() {
+  const environment = activeEditorEnvironment();
+  if (!environment) {
+    setStatus('Select an environment before setting it.');
+    return false;
+  }
+  collectEnvironmentFromEditor();
+  activeEnvironmentId = environment.id;
+  renderEnvironmentSelect();
+  refreshVariableHighlights();
+  scheduleSessionSave();
+  setStatus(`Environment set: ${environment.name || 'Untitled Environment'}.`);
+  return true;
 }
 
 async function saveWorkspace(showStatus = true, options = {}) {
@@ -19891,7 +20470,7 @@ async function importEnvironment() {
     environment.name = uniqueName(environment.name || 'Imported Environment', workspace.environments.map((candidate) => candidate.name));
     workspace.environments.push(environment);
     activeRunnerRequestRunnerId = null;
-    activeEnvironmentId = environment.id;
+    activeEnvironmentEditorId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
     ensureOpenEnvironmentTabForActive({ dirty: true, createdUnsaved: true });
@@ -19907,8 +20486,8 @@ async function importEnvironment() {
   }
 }
 
-async function exportEnvironment(environment = activeEnvironment(), format = 'postmeter') {
-  const selectedEnvironment = environment || activeEnvironment() || workspace.environments?.[0] || null;
+async function exportEnvironment(environment = activeEditorEnvironment(), format = 'postmeter') {
+  const selectedEnvironment = environment || activeEditorEnvironment() || workspace.environments?.[0] || null;
   if (!selectedEnvironment) {
     return setStatus('Select an environment before exporting.');
   }
@@ -19918,7 +20497,7 @@ async function exportEnvironment(environment = activeEnvironment(), format = 'po
     return setStatus('Environment export is unavailable in this runtime.');
   }
   if (typeof window.__postmeterExportEnvironment === 'function' || !window.postmeter?.fileExport) {
-    if (selectedEnvironment.id === activeEnvironmentId) {
+    if (selectedEnvironment.id === activeEnvironmentEditorId) {
       collectEnvironmentFromEditor();
     }
     try {
@@ -19939,7 +20518,7 @@ async function exportEnvironment(environment = activeEnvironment(), format = 'po
     format,
     name: selectedEnvironment.name || 'environment',
     payloadFactory: () => {
-      if (selectedEnvironment.id === activeEnvironmentId) {
+      if (selectedEnvironment.id === activeEnvironmentEditorId) {
         collectEnvironmentFromEditor();
       }
       return normalizeImportedEnvironment(cloneJson(selectedEnvironment));
@@ -19954,7 +20533,7 @@ async function exportEnvironment(environment = activeEnvironment(), format = 'po
 
 async function exportEnvironmentFromPicker(format = 'postmeter') {
   const environments = Array.isArray(workspace?.environments) ? workspace.environments : [];
-  const selectedEnvironment = await promptForItemExport('environment', environments, activeEnvironment() || environments[0] || null);
+  const selectedEnvironment = await promptForItemExport('environment', environments, activeEditorEnvironment() || environments[0] || null);
   if (!selectedEnvironment) {
     return null;
   }
@@ -20203,10 +20782,10 @@ function newEnvironment() {
   const environment = {
     id: crypto.randomUUID(),
     name: uniqueName('New Environment', workspace.environments.map((item) => item.name)),
-    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com' }]
+    variables: []
   };
   workspace.environments.push(environment);
-  activeEnvironmentId = environment.id;
+  activeEnvironmentEditorId = environment.id;
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
   ensureOpenEnvironmentTabForActive({ dirty: true, createdUnsaved: true });
@@ -20214,7 +20793,7 @@ function newEnvironment() {
   return environment;
 }
 
-async function deleteEnvironment(environment = activeEnvironment()) {
+async function deleteEnvironment(environment = activeEditorEnvironment()) {
   if (!environment || !(await confirmActionModal({
     title: 'Delete environment?',
     message: `Delete ${environment.name}?`,
@@ -20227,12 +20806,16 @@ async function deleteEnvironment(environment = activeEnvironment()) {
   workspace.environments = workspace.environments.filter((item) => item.id !== environment.id);
   activeRunnerRequestRunnerId = null;
   if (activeEnvironmentId === environment.id) {
-    activeEnvironmentId = workspace.environments[0]?.id || 'none';
+    activeEnvironmentId = 'none';
+  }
+  if (activeEnvironmentEditorId === environment.id) {
+    activeEnvironmentEditorId = 'none';
   }
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
   ensureOpenEnvironmentTabForActive();
   renderAll();
+  scheduleSessionSave();
   restoreTreeFocus(null, activeEnvironmentTreeFocusTargets());
 }
 
@@ -20250,7 +20833,7 @@ async function renameEnvironment(environment) {
   if (value?.trim()) {
     environment.name = value.trim();
     activeRunnerRequestRunnerId = null;
-    activeEnvironmentId = environment.id;
+    activeEnvironmentEditorId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
     ensureOpenEnvironmentTabForActive({ dirty: true });
@@ -20260,7 +20843,7 @@ async function renameEnvironment(environment) {
 }
 
 function addVariable() {
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   if (environment) {
     environment.variables.push({ enabled: true, key: '', value: '' });
     markActiveEnvironmentDirty();
@@ -20289,27 +20872,23 @@ function addFolderVariable() {
 }
 
 function addRequestVariable() {
-  const request = activeRequest();
-  if (request) {
-    request.variables ||= [];
-    request.variables.push({ enabled: true, key: '', value: '' });
-    markActiveRequestDirty();
-    renderRequestEditor();
-  }
+  addRequestVariableForContext('request');
 }
 
 function addPerformanceRequestVariable() {
-  const test = activePerformanceTest();
-  if (test?.request) {
-    const draftAuth = collectPerformanceAuthFromEditor();
-    collectPerformanceTestFromEditor();
-    const request = activePerformanceTest()?.request || test.request;
-    request.auth = draftAuth;
-    request.variables ||= [];
-    request.variables.push({ enabled: true, key: '', value: '' });
-    markActivePerformanceDirty();
-    renderPerformanceRequestEditor();
+  addRequestVariableForContext('performance');
+}
+
+function addRequestVariableForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = prepareRequestForEditorMutation(context);
+  if (!request) {
+    return;
   }
+  request.variables ||= [];
+  request.variables.push({ enabled: true, key: '', value: '' });
+  markRequestEditorContextDirty(context);
+  renderRequestEditorForContextScope(context);
 }
 
 function addCookieDomainFromInput() {
@@ -20386,26 +20965,51 @@ async function clearAllWorkspaceCookies() {
 }
 
 function addPair(fieldName) {
-  const request = activeRequest();
-  if (request) {
-    request[fieldName].push({ enabled: true, key: '', value: '' });
-    markActiveRequestDirty();
-    renderRequestEditor();
-  }
+  addRequestPairForContext('request', fieldName);
 }
 
 function addPerformancePair(fieldName) {
-  const test = activePerformanceTest();
-  if (test?.request) {
+  addRequestPairForContext('performance', fieldName);
+}
+
+function addRequestPairForContext(contextOrScope, fieldName) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = prepareRequestForEditorMutation(context);
+  if (!request) {
+    return;
+  }
+  request[fieldName] ||= [];
+  request[fieldName].push({ enabled: true, key: '', value: '' });
+  markRequestEditorContextDirty(context);
+  renderRequestEditorForContextScope(context);
+}
+
+function prepareRequestForEditorMutation(context) {
+  if (context.scope === 'performance') {
+    const test = activePerformanceTest();
+    if (!test?.request) {
+      return null;
+    }
     const draftAuth = collectPerformanceAuthFromEditor();
     collectPerformanceTestFromEditor();
     const request = activePerformanceTest()?.request || test.request;
     request.auth = draftAuth;
-    request[fieldName] ||= [];
-    request[fieldName].push({ enabled: true, key: '', value: '' });
-    markActivePerformanceDirty();
-    renderPerformanceRequestEditor();
+    return request;
   }
+  const request = activeRequest();
+  if (!request) {
+    return null;
+  }
+  collectRequestFromEditor();
+  return request;
+}
+
+function markRequestEditorContextDirty(context) {
+  if (context.scope === 'performance') {
+    markActivePerformanceDirty();
+    return;
+  }
+  markActiveRequestDirty();
 }
 
 async function renameCollection(collection) {
@@ -20538,7 +21142,7 @@ function duplicateEnvironment(environment) {
   duplicate.name = uniqueName(`${environment.name || 'Environment'} Copy`, workspace.environments.map((candidate) => candidate.name));
   workspace.environments.push(duplicate);
   activeRunnerRequestRunnerId = null;
-  activeEnvironmentId = duplicate.id;
+  activeEnvironmentEditorId = duplicate.id;
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
   ensureOpenEnvironmentTabForActive({ dirty: true, createdUnsaved: true });
@@ -20689,68 +21293,116 @@ async function deleteRequest(collection, folder, request) {
   restoreTreeFocus(null, activeCollectionTreeFocusTargets());
 }
 
+function collectRequestFieldsFromEditorContext(contextOrScope, request, options = {}) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  if (!request) {
+    return;
+  }
+  const method = String($(context.methodSelectId)?.value || '').toUpperCase();
+  request.method = METHODS.includes(method) ? method : 'GET';
+  request.url = $(context.urlInputId)?.value.trim() || '';
+  syncRequestBodyFieldsFromEditor(context.bodyPrefix, request);
+  request.auth = options.auth || collectRequestAuthFromEditorForContext(context);
+  if (typeof options.afterAuth === 'function') {
+    options.afterAuth(request);
+  }
+  request.scripts = {
+    preRequest: $(context.preRequestScriptInputId)?.value || '',
+    tests: $(context.testScriptInputId)?.value || ''
+  };
+  if (options.collectDocs === true || context.scope === 'performance') {
+    request.docs = $(context.docsInputId)?.value || '';
+  }
+  request.cookieJar = {
+    enabled: $(context.cookieJarEnabledInputId)?.checked === true,
+    storeResponses: $(context.cookieJarStoreInputId)?.checked !== false
+  };
+  if (typeof options.applyRefreshingCookieState === 'function') {
+    options.applyRefreshingCookieState(request);
+  }
+  request.autoHeaders = {
+    sendPostMeterToken: $(context.autoHeaderTokenInputId)?.checked === true,
+    showGeneratedHeaders: $(context.autoHeaderShowInputId)?.checked === true
+  };
+  request.settings = requestTlsSettingsFromInputs(request.settings, context.scope);
+  request.queryParams = collectKeyValueRowsFromTable(context.paramsTableId, request.queryParams);
+  request.headers = collectKeyValueRowsFromTable(context.headersTableId, request.headers);
+}
+
+function collectRequestAuthFromEditorForContext(contextOrScope) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  return context.scope === 'performance' ? collectPerformanceAuthFromEditor() : collectAuthFromEditor();
+}
+
 function collectRequestFromEditor() {
   const request = activeRequest();
   if (!request) {
     return;
   }
   collectRequestNameFromTitle({ render: false });
-  request.method = METHODS.includes($('methodSelect').value) ? $('methodSelect').value : 'GET';
-  request.url = $('urlInput').value.trim();
-  syncRequestBodyFieldsFromEditor('', request);
-  request.auth = collectAuthFromEditor();
-  if (activeRequestUsesRefreshingAuthCookie(request)) {
-    request.auth = { type: 'none' };
-  }
-  request.scripts = {
-    preRequest: $('preRequestScriptInput').value,
-    tests: $('testScriptInput').value
-  };
-  request.cookieJar = {
-    enabled: $('requestCookieJarEnabledInput').checked,
-    storeResponses: $('requestCookieJarStoreInput').checked
-  };
-  applyActiveRequestRefreshingCookieState(request);
-  request.autoHeaders = {
-    sendPostMeterToken: $('sendPostMeterTokenInput')?.checked === true,
-    showGeneratedHeaders: $('showGeneratedHeadersInput')?.checked === true
-  };
-  request.settings = requestTlsSettingsFromInputs(request.settings);
+  collectRequestFieldsFromEditorContext('request', request, {
+    afterAuth: () => {
+      if (activeRequestUsesRefreshingAuthCookie(request)) {
+        request.auth = { type: 'none' };
+      }
+    },
+    applyRefreshingCookieState: () => applyActiveRequestRefreshingCookieState(request)
+  });
 }
 
-function setActiveRequestTlsSettingsFromInputs() {
-  const request = activeRequest();
+function setActiveRequestTlsSettingsFromInputs(event = null) {
+  setActiveRequestTlsSettingsFromInputsForContext('request', event);
+}
+
+function setActivePerformanceRequestTlsSettingsFromInputs(event = null) {
+  setActiveRequestTlsSettingsFromInputsForContext('performance', event);
+}
+
+function setActiveRequestTlsSettingsFromInputsForContext(contextOrScope, event = null) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
   if (!request) {
     return;
   }
-  setRequestTlsSettingsFromInput(request, 'requestSslCertificateVerificationInput');
-  markActiveRequestDirty();
-}
-
-function setActivePerformanceRequestTlsSettingsFromInputs() {
-  const test = activePerformanceTest();
-  if (!test?.request) {
-    return;
-  }
-  setRequestTlsSettingsFromInput(test.request, 'performanceRequestSslCertificateVerificationInput');
-  markActivePerformanceDirty();
+  setRequestTlsSettingsFromInput(request, event?.currentTarget?.id || context.scope);
+  markRequestEditorContextDirty(context);
 }
 
 function setRequestTlsSettingsFromInput(request, inputId) {
-  const input = $(inputId);
-  request.settings = {
-    sslCertificateVerification: input?.checked === true ? 'enabled' : 'disabled'
-  };
-  if (input) {
-    input.dataset.verificationValue = request.settings.sslCertificateVerification;
+  const scope = requestSettingsScopeFromInputId(inputId);
+  const ids = requestSettingsControlIds(scope);
+  const verification = $(ids.sslCertificateVerification);
+  request.settings = requestTlsSettingsFromInputs(request.settings, inputId);
+  if (verification) {
+    verification.dataset.verificationValue = request.settings.sslCertificateVerification;
   }
 }
 
-function requestTlsSettingsFromInputs(existingSettings = {}, inputId = 'requestSslCertificateVerificationInput') {
-  const input = $(inputId);
-  const fallback = normalizeRendererRequestTlsSettings(existingSettings).sslCertificateVerification;
-  const value = normalizeRendererRequestSslVerification(input?.dataset?.verificationValue || fallback);
-  return { sslCertificateVerification: value };
+function requestTlsSettingsFromInputs(existingSettings = {}, inputId = '') {
+  const existing = normalizeRendererRequestTlsSettings(existingSettings);
+  const scope = requestSettingsScopeFromInputId(inputId);
+  const ids = requestSettingsControlIds(scope);
+  const verification = $(ids.sslCertificateVerification);
+  const sslChanged = inputId === ids.sslCertificateVerification;
+  const sslCertificateVerification = verification
+    ? (sslChanged
+      ? (verification.checked === true ? 'enabled' : 'disabled')
+      : normalizeRendererRequestSslVerification(verification.dataset.verificationValue || existing.sslCertificateVerification))
+    : existing.sslCertificateVerification;
+  return {
+    sslCertificateVerification,
+    httpVersion: normalizeRendererHttpVersion($(ids.httpVersion)?.value || existing.httpVersion),
+    followRedirects: $(ids.followRedirects) ? $(ids.followRedirects).checked === true : existing.followRedirects,
+    followOriginalHttpMethod: $(ids.followOriginalHttpMethod) ? $(ids.followOriginalHttpMethod).checked === true : existing.followOriginalHttpMethod,
+    followAuthorizationHeader: $(ids.followAuthorizationHeader) ? $(ids.followAuthorizationHeader).checked === true : existing.followAuthorizationHeader,
+    removeRefererHeaderOnRedirect: $(ids.removeRefererHeaderOnRedirect) ? $(ids.removeRefererHeaderOnRedirect).checked === true : existing.removeRefererHeaderOnRedirect,
+    strictHttpParser: $(ids.strictHttpParser) ? $(ids.strictHttpParser).checked === true : existing.strictHttpParser,
+    encodeUrlAutomatically: $(ids.encodeUrlAutomatically) ? $(ids.encodeUrlAutomatically).checked === true : existing.encodeUrlAutomatically,
+    maxRedirects: normalizeRendererMaxRedirects($(ids.maxRedirects)?.value ?? existing.maxRedirects),
+    useServerCipherSuiteDuringHandshake: $(ids.useServerCipherSuiteDuringHandshake) ? $(ids.useServerCipherSuiteDuringHandshake).checked === true : existing.useServerCipherSuiteDuringHandshake,
+    disabledTlsProtocols: normalizeRendererSettingsText($(ids.disabledTlsProtocols)?.value ?? existing.disabledTlsProtocols),
+    cipherSuiteSelection: normalizeRendererSettingsText($(ids.cipherSuiteSelection)?.value ?? existing.cipherSuiteSelection)
+  };
 }
 
 function collectCollectionAndMarkDirty(options = {}) {
@@ -20812,15 +21464,7 @@ function collectFolderFromEditor(options = {}) {
 }
 
 function setActiveRequestAutoHeaderOption(option, value) {
-  const request = activeRequest();
-  if (!request) {
-    return;
-  }
-  collectRequestFromEditor();
-  const autoHeaders = ensureRequestAutoHeaders(request);
-  autoHeaders[option] = value === true;
-  markActiveRequestDirty();
-  renderRequestEditor();
+  setActiveRequestAutoHeaderOptionForContext('request', option, value);
 }
 
 function collectRequestNameFromTitle(options = {}) {
@@ -21006,7 +21650,7 @@ function syncPerformanceRefreshingAuthAccessToken(test, authRefresh = test?.auth
 }
 
 function collectEnvironmentFromEditor() {
-  const environment = activeEnvironment();
+  const environment = activeEditorEnvironment();
   if (environment) {
     const title = $('environmentMainTitle');
     environment.name = environmentTitleInputValue() || 'Untitled Environment';
@@ -21054,7 +21698,7 @@ function collectRunnerFromEditor() {
   const previousShowRefreshingAuthToggle = runnerRefreshingAuthToggleVisible(runner);
   const previousRefreshingAuthType = String(runner.authRefresh?.authType || '').trim();
   runner.name = runnerTitleInputValue() || 'Untitled Runner';
-  runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
+  runner.environmentId = 'none';
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
   runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
   runner.capturePolicy = collectCapturePolicyFromControls('runner', runner.capturePolicy || {});
@@ -21118,35 +21762,20 @@ function collectPerformanceTestFromEditor(editedElement = null) {
   test.request ||= {};
   test.request.id ||= crypto.randomUUID();
   test.request.name ||= 'Performance Request';
-  test.request.method = METHODS.includes(String($('performanceMethodSelect')?.value || '').toUpperCase())
-    ? String($('performanceMethodSelect').value).toUpperCase()
-    : 'GET';
-  test.request.url = $('performanceUrlInput')?.value.trim() || '';
-  syncRequestBodyFieldsFromEditor('performance', test.request);
-  test.request.auth = collectedPerformanceAuth;
-  const authAutoSelected = autoSelectRefreshingAuthAccessTokenForOwner('performance', test, previousAuthRefresh, test.authRefresh);
-  const performanceRequestAuthAutoSelected = syncPerformanceRefreshingAuthAccessToken(test, test.authRefresh);
-  if (authAutoSelected || performanceRequestAuthAutoSelected || refreshTokenAuthAutoSelected) {
+  let authSelectionChanged = false;
+  collectRequestFieldsFromEditorContext('performance', test.request, {
+    auth: collectedPerformanceAuth,
+    collectDocs: true,
+    afterAuth: () => {
+      const authAutoSelected = autoSelectRefreshingAuthAccessTokenForOwner('performance', test, previousAuthRefresh, test.authRefresh);
+      const performanceRequestAuthAutoSelected = syncPerformanceRefreshingAuthAccessToken(test, test.authRefresh);
+      authSelectionChanged = authAutoSelected || performanceRequestAuthAutoSelected;
+    },
+    applyRefreshingCookieState: () => applyPerformanceRefreshingCookieState(test)
+  });
+  if (authSelectionChanged || refreshTokenAuthAutoSelected) {
     markActivePerformanceDirty();
   }
-  test.request.scripts = {
-    preRequest: $('performancePreRequestScriptInput')?.value || '',
-    tests: $('performanceTestScriptInput')?.value || ''
-  };
-  test.request.docs = $('performanceDocsInput')?.value || '';
-  test.request.cookieJar = {
-    enabled: $('performanceRequestCookieJarEnabledInput')?.checked === true,
-    storeResponses: $('performanceRequestCookieJarStoreInput')?.checked !== false
-  };
-  applyPerformanceRefreshingCookieState(test);
-  test.request.autoHeaders = {
-    sendPostMeterToken: $('performanceSendPostMeterTokenInput')?.checked === true,
-    showGeneratedHeaders: $('performanceShowGeneratedHeadersInput')?.checked === true
-  };
-  test.request.settings = requestTlsSettingsFromInputs(test.request.settings, 'performanceRequestSslCertificateVerificationInput');
-  test.request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', test.request.queryParams);
-  test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
-  test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);
   test.source ||= { sourceType: 'manual' };
   renderCapturePolicyControls('performance', test.capturePolicy, true);
   const title = $('performanceMainTitle');
@@ -21157,15 +21786,25 @@ function collectPerformanceTestFromEditor(editedElement = null) {
 }
 
 function setActivePerformanceRequestAutoHeaderOption(option, value) {
-  const test = activePerformanceTest();
-  if (!test?.request) {
+  setActiveRequestAutoHeaderOptionForContext('performance', option, value);
+}
+
+function setActiveRequestAutoHeaderOptionForContext(contextOrScope, option, value) {
+  const context = typeof contextOrScope === 'string' ? requestEditorContext(contextOrScope) : contextOrScope;
+  const request = activeRequestForEditorContext(context);
+  if (!request) {
     return;
   }
-  collectPerformanceTestFromEditor();
-  const autoHeaders = ensureRequestAutoHeaders(test.request);
+  if (context.scope === 'performance') {
+    collectPerformanceTestFromEditor();
+  } else {
+    collectRequestFromEditor();
+  }
+  const updatedRequest = activeRequestForEditorContext(context) || request;
+  const autoHeaders = ensureRequestAutoHeaders(updatedRequest);
   autoHeaders[option] = value === true;
-  markActivePerformanceDirty();
-  renderPerformanceRequestEditor(test);
+  markRequestEditorContextDirty(context);
+  renderRequestEditorForContextScope(context);
 }
 
 function collectKeyValueRowsFromTable(containerId, fallback = []) {
@@ -21206,6 +21845,7 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel, editedElemen
   if (type === 'diagnosis') {
     const profile = diagnosisProfileForScope(config.diagnosisScope);
     config.iterations = profile.totalRequests;
+    syncDiagnosisScopeDurationSafety(panel, previous, config, editedElement || document.activeElement);
   }
   const safetyLimits = {
     maxTotalRequests: clampPerformanceSafetyInput('maxTotalRequests', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.safetyLimits?.maxTotalRequests || 100, panel),
@@ -21230,12 +21870,36 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel, editedElemen
       performanceEffectiveConcurrency(type, config)
     );
   }
+  const panelIsActive = panel.classList.contains('active');
+  const mutationControl = panelIsActive
+    ? $('performanceAllowEnvironmentMutationInput') || panel.querySelector('[data-performance-mutation]')
+    : panel.querySelector('[data-performance-mutation]');
   test.typeSettings[type] = {
-    environmentId: panel.querySelector('[data-performance-environment]')?.value || previous.environmentId || 'none',
-    allowEnvironmentMutation: panel.querySelector('[data-performance-mutation]')?.checked === true,
+    environmentId: 'none',
+    allowEnvironmentMutation: mutationControl?.checked === true,
     config,
     safetyLimits
   };
+}
+
+function syncDiagnosisScopeDurationSafety(panel, previous = {}, config = {}, editedElement = document.activeElement) {
+  const edited = activePerformancePanelField(panel, editedElement);
+  if (edited.kind !== 'config' || edited.name !== 'diagnosisScope') {
+    return;
+  }
+  const durationInput = performancePanelInput(panel, 'safety', 'maxDurationSeconds');
+  if (!durationInput) {
+    return;
+  }
+  const previousProfile = diagnosisProfileForScope(previous.config?.diagnosisScope);
+  const nextProfile = diagnosisProfileForScope(config.diagnosisScope);
+  const parsedDuration = Number.parseInt(durationInput.value || '', 10);
+  const currentDuration = Number.isFinite(parsedDuration)
+    ? parsedDuration
+    : Number(previous.safetyLimits?.maxDurationSeconds || previousProfile.maxDurationSeconds);
+  if (currentDuration <= previousProfile.maxDurationSeconds) {
+    setPerformancePanelControlValue(panel, 'safety', 'maxDurationSeconds', nextProfile.maxDurationSeconds);
+  }
 }
 
 function performancePlannedRequestCount(type, config, safetyLimits) {
@@ -21478,11 +22142,19 @@ function collectPerformanceDiagnosisScope(panel, fallback = 'quick') {
 }
 
 function activePerformanceType() {
+  const selectedType = $('performanceTypeSelect')?.value || '';
+  if (RENDERER_PERFORMANCE_TEST_TYPES.includes(selectedType)) {
+    return selectedType;
+  }
   const type = document.querySelector('.tab[data-tab-group="performance"].active')?.dataset.tab || '';
   return RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : '';
 }
 
 function activePerformanceTypePanel() {
+  const type = activePerformanceType();
+  if (type) {
+    return $(`${type}Tab`) || document.querySelector('.performance-type-panel.active');
+  }
   return document.querySelector('.performance-type-panel.active');
 }
 
@@ -21630,6 +22302,10 @@ function activeEnvironment() {
   return (workspace?.environments || []).find((environment) => environment.id === activeEnvironmentId) || null;
 }
 
+function activeEditorEnvironment() {
+  return (workspace?.environments || []).find((environment) => environment.id === activeEnvironmentEditorId) || null;
+}
+
 function activeRequest() {
   if (!activeCollectionId && !activeRunnerRequestRunnerId && activeAuthRefreshRequestOwnerType && activeAuthRefreshRequestOwnerId && activeRequestId) {
     const owner = authRefreshOwner(activeAuthRefreshRequestOwnerType, activeAuthRefreshRequestOwnerId);
@@ -21702,10 +22378,15 @@ function activateTab(groupName, tabName) {
   }
   if (groupName === 'performance' && RENDERER_PERFORMANCE_TEST_TYPES.includes(tabName)) {
     const test = activePerformanceTest();
+    if ($('performanceTypeSelect')) {
+      $('performanceTypeSelect').value = tabName;
+    }
     if (test) {
       const changed = test.type !== tabName;
       test.type = tabName;
       syncPerformanceActiveTypeSettings(test);
+      renderPerformanceTypeTabs(test);
+      renderPerformanceMutationControls(test);
       if (changed) {
         markActivePerformanceDirty();
       }

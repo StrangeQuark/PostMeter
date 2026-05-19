@@ -3,6 +3,12 @@ const { BODY_TYPES, collectionModel, folderModel, keyValue, requestModel } = req
 const { normalizeAuth } = require('./authModel');
 const { collectSandboxPackageReferencesFromCollection } = require('./sandboxPackageCache');
 const { clientCertificateMatchesUrl, findMatchingClientCertificate } = require('./tlsSettings');
+const { urlQueryMatchesPairs } = require('./requestQueryModel');
+const {
+  mergePostmanProtocolProfiles,
+  postmanRequestSettingsFromProtocolProfile,
+  syncPostmanRequestSettingsProtocolProfile
+} = require('./requestSettings');
 
 const POSTMAN_COLLECTION_SCHEMA = 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json';
 const INTERNAL_POSTMAN_VARIABLE_KEYS = new Set([
@@ -28,8 +34,12 @@ function importPostmanCollection(document) {
     folders: [],
     postman: collectionPostmanMetadata(document)
   });
+  const collectionProtocolProfile = mergePostmanProtocolProfiles(document.protocolProfile, document.protocolProfileBehavior);
   for (const [index, item] of (document.item || []).entries()) {
-    const imported = importItem(item, collection.scripts, { type: 'none' }, [], [collection.name], { orderIndex: index });
+    const imported = importItem(item, collection.scripts, { type: 'none' }, [], [collection.name], {
+      orderIndex: index,
+      protocolProfile: collectionProtocolProfile
+    });
     if (!imported) {
       continue;
     }
@@ -60,6 +70,7 @@ function looksLikePostmanCollection(document) {
 
 function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { type: 'none' }, inheritedVariables = [], pathSegments = [], options = {}) {
   const itemPath = pathSegments.concat(item?.name || item?.id || item?._postman_id || item?.uid || 'item');
+  const itemProtocolProfile = mergePostmanProtocolProfiles(options.protocolProfile, item?.protocolProfile, item?.protocolProfileBehavior);
   const ownEvents = importEvents(item?.event);
   const itemEvents = mergeEvents(inheritedEvents, ownEvents);
   const ownAuth = item?.auth ? importAuth(item.auth, { type: 'none' }) : { type: 'none' };
@@ -67,7 +78,10 @@ function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { typ
   const ownVariables = importVariables(item?.variable);
   const itemVariables = mergeVariables(inheritedVariables, ownVariables);
   if (item?.request) {
-    return { kind: 'request', value: importRequest(item, itemEvents, itemAuth, itemVariables, itemPath, options) };
+    return { kind: 'request', value: importRequest(item, itemEvents, itemAuth, itemVariables, itemPath, {
+      ...options,
+      protocolProfile: itemProtocolProfile
+    }) };
   }
   if (Array.isArray(item?.item)) {
     const folderId = postmanIdForNode(item, 'folder', itemPath);
@@ -81,7 +95,10 @@ function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { typ
       postman: folderPostmanMetadata(item, folderId, options.orderIndex)
     });
     for (const [index, child] of item.item.entries()) {
-      const imported = importItem(child, itemEvents, itemAuth, itemVariables, itemPath, { orderIndex: index });
+      const imported = importItem(child, itemEvents, itemAuth, itemVariables, itemPath, {
+        orderIndex: index,
+        protocolProfile: itemProtocolProfile
+      });
       if (!imported) {
         continue;
       }
@@ -98,6 +115,13 @@ function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { typ
 
 function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { type: 'none' }, inheritedVariables = [], pathSegments = [], options = {}) {
   const requestNode = item.request || {};
+  const effectiveProtocolProfile = mergePostmanProtocolProfiles(
+    options.protocolProfile,
+    item?.protocolProfile,
+    item?.protocolProfileBehavior,
+    requestNode?.protocolProfile,
+    requestNode?.protocolProfileBehavior
+  );
   const protocol = detectRequestProtocol(item, requestNode);
   const protocolFields = importProtocolFields(item, requestNode, protocol);
   const scripts = scriptsForProtocol(importEvents(item.event), protocol);
@@ -110,16 +134,18 @@ function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { 
     url: importUrl(requestNode.url),
     auth: requestNode.auth ? importAuth(requestNode.auth, inheritedAuth) : { type: 'none' },
     cookieJar: {
-      enabled: !postmanProtocolProfileDisablesCookieJar(item, requestNode),
+      enabled: !postmanProtocolProfileDisablesCookieJar(effectiveProtocolProfile),
       storeResponses: true
     },
+    settings: postmanRequestSettingsFromProtocolProfile(effectiveProtocolProfile),
     variables: importVariables(requestNode.variable || item.variable),
     docs: postmanDescription(item.description || requestNode.description),
     scripts: {
       ...scripts
     },
     postman: requestPostmanMetadata(item, requestNode, requestId, options.orderIndex),
-    ...protocolFields
+    ...protocolFields,
+    protocolProfile: effectiveProtocolProfile
   });
   importHeaders(requestNode.header, request);
   importCookies(requestNode.cookie, request);
@@ -249,8 +275,7 @@ function importUrl(urlNode) {
     return '';
   }
   if (typeof urlNode.raw === 'string' && urlNode.raw.trim()) {
-    const queryStart = urlNode.raw.indexOf('?');
-    return queryStart >= 0 ? urlNode.raw.slice(0, queryStart) : urlNode.raw;
+    return urlNode.raw;
   }
   const protocol = urlNode.protocol || 'https';
   const host = Array.isArray(urlNode.host) ? urlNode.host.join('.') : '';
@@ -1272,14 +1297,8 @@ function collectPostmanBindings(...sources) {
   return bindings;
 }
 
-function postmanProtocolProfileDisablesCookieJar(item, requestNode) {
-  const sources = [
-    requestNode?.protocolProfileBehavior,
-    requestNode?.protocolProfile,
-    item?.protocolProfileBehavior,
-    item?.protocolProfile
-  ];
-  return sources.some((source) => postmanBooleanValue(source?.disableCookieJar) === true);
+function postmanProtocolProfileDisablesCookieJar(protocolProfile) {
+  return postmanBooleanValue(protocolProfile?.disableCookieJar) === true;
 }
 
 function syncPostmanCookieJarProtocolProfile(protocolProfile, request) {
@@ -1288,6 +1307,11 @@ function syncPostmanCookieJarProtocolProfile(protocolProfile, request) {
     return;
   }
   delete protocolProfile.disableCookieJar;
+}
+
+function syncPostmanProtocolProfile(protocolProfile, request) {
+  syncPostmanRequestSettingsProtocolProfile(protocolProfile, request?.settings || {});
+  syncPostmanCookieJarProtocolProfile(protocolProfile, request);
 }
 
 function postmanBooleanValue(value) {
@@ -1425,7 +1449,7 @@ function exportPostmanRequest(request) {
   const protocolProfile = Object.keys(request?.protocolProfile || {}).length
     ? clonePostmanObject(request.protocolProfile)
     : clonePostmanObject(raw.protocolProfile || raw.protocolProfileBehavior || metadata.protocol?.protocolProfile || metadata.protocol?.protocolProfileBehavior);
-  syncPostmanCookieJarProtocolProfile(protocolProfile, request);
+  syncPostmanProtocolProfile(protocolProfile, request);
   if (Object.keys(protocolProfile).length) {
     exported.protocolProfileBehavior = protocolProfile;
   }
@@ -1450,7 +1474,7 @@ function exportPostmanUrl(request, rawUrl) {
 function buildRawUrlWithQuery(request) {
   const url = request?.url || '';
   const queryParams = (request?.queryParams || []).filter((pair) => pair?.key);
-  if (!queryParams.length) {
+  if (!queryParams.length || urlQueryMatchesPairs(url, queryParams)) {
     return url;
   }
   const separator = url.includes('?') ? '&' : '?';

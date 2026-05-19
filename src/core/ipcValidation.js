@@ -16,6 +16,7 @@ const {
   normalizeDiagnosisScope
 } = require('./performanceDiagnosis');
 const { MAX_OPEN_TABS } = require('./sessionState');
+const { MAX_REQUEST_MAX_REDIRECTS, REQUEST_HTTP_VERSION_VALUES } = require('./requestSettings');
 
 const FIELD_ENUMS = payloadSchemas.enums;
 const LIMITS = payloadSchemas.limits;
@@ -59,6 +60,7 @@ function assertSessionPayload(value, field = 'session') {
     'activeWorkspaceId',
     'selectedWorkspaceId',
     'activeEnvironmentId',
+    'activeEnvironmentEditorId',
     'activeCollectionId',
     'activeFolderId',
     'activeRequestId',
@@ -264,7 +266,18 @@ function assertAuthRefreshPayload(value, field = 'authRefresh') {
 function assertRequestSettings(value, field = 'settings') {
   object(value || {}, field);
   assertAllowedObjectFields(value || {}, field, [
-    'sslCertificateVerification'
+    'sslCertificateVerification',
+    'httpVersion',
+    'followRedirects',
+    'followOriginalHttpMethod',
+    'followAuthorizationHeader',
+    'removeRefererHeaderOnRedirect',
+    'strictHttpParser',
+    'encodeUrlAutomatically',
+    'maxRedirects',
+    'useServerCipherSuiteDuringHandshake',
+    'disabledTlsProtocols',
+    'cipherSuiteSelection'
   ]);
   if (
     value?.sslCertificateVerification != null
@@ -273,6 +286,33 @@ function assertRequestSettings(value, field = 'settings') {
   ) {
     fail(`${field}.sslCertificateVerification is not supported.`);
   }
+  if (value?.httpVersion != null && !REQUEST_HTTP_VERSION_VALUES.has(String(value.httpVersion))) {
+    fail(`${field}.httpVersion is not supported.`);
+  }
+  for (const name of [
+    'followRedirects',
+    'followOriginalHttpMethod',
+    'followAuthorizationHeader',
+    'removeRefererHeaderOnRedirect',
+    'strictHttpParser',
+    'encodeUrlAutomatically',
+    'useServerCipherSuiteDuringHandshake'
+  ]) {
+    optionalBoolean(value?.[name], `${field}.${name}`);
+  }
+  assertOptionalInteger(value?.maxRedirects, `${field}.maxRedirects`, 0);
+  if (value?.maxRedirects != null && Number(value.maxRedirects) > MAX_REQUEST_MAX_REDIRECTS) {
+    fail(`${field}.maxRedirects must be less than or equal to ${MAX_REQUEST_MAX_REDIRECTS}.`);
+  }
+  if (value?.disabledTlsProtocols != null && !Array.isArray(value.disabledTlsProtocols)) {
+    optionalString(value.disabledTlsProtocols, `${field}.disabledTlsProtocols`, LIMITS.value);
+  }
+  if (Array.isArray(value?.disabledTlsProtocols)) {
+    array(value.disabledTlsProtocols, `${field}.disabledTlsProtocols`, 16).forEach((item, index) => {
+      string(item, `${field}.disabledTlsProtocols[${index}]`, LIMITS.tiny);
+    });
+  }
+  optionalString(value?.cipherSuiteSelection, `${field}.cipherSuiteSelection`, LIMITS.value);
 }
 
 function assertCsvVariablesPayload(value, field = 'csvVariables') {

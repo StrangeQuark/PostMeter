@@ -58,7 +58,32 @@
     activateTab('collection', 'collectionLevelVariables');
     $('addCollectionVariableButton').click();
     setPairRow('collectionVariablesTable', 'collectionToken', 'from-collection', global);
-    assertUiSmoke($('collectionVariablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
+    assertUiSmoke(
+      variablePreviewHasRow('collectionVariablePreview', 'collectionToken', 'from-collection', 'Collection', 'Active'),
+      'Collection variable inspector did not render collection variables.'
+    );
+    $('addCollectionVariableButton').click();
+    setPairRow('collectionVariablesTable', 'removedCollectionToken', 'remove-me', global);
+    assertUiSmoke(
+      variablePreviewHasRow('collectionVariablePreview', 'removedCollectionToken', 'remove-me', 'Collection', 'Active'),
+      'Collection variable inspector did not render a newly added removable variable.'
+    );
+    removeLastPairRow('collectionVariablesTable');
+    assertUiSmoke(
+      !variablePreviewHasRow('collectionVariablePreview', 'removedCollectionToken', 'remove-me', 'Collection', 'Active'),
+      'Collection variable inspector kept a removed collection variable.'
+    );
+    const workflowEnvironment = {
+      id: crypto.randomUUID(),
+      name: 'Workflow Environment',
+      variables: [
+        { enabled: true, key: 'environmentToken', value: 'from-environment' },
+        { enabled: true, key: 'removedEnvironmentToken', value: 'remove-me' }
+      ]
+    };
+    workspace.environments.push(workflowEnvironment);
+    activeEnvironmentId = workflowEnvironment.id;
+    renderEnvironmentSelect();
     const folder = newFolder(collection.id, null);
     assertUiSmoke(folder, 'New folder was not created.');
     assertUiSmoke(!$('folderMainPanel').hidden, 'New folder did not show the folder editor.');
@@ -84,8 +109,26 @@
       heading: 'Folder overview',
       code: 'folderToken'
     });
+    activateTab('folder', 'folderLevelVariables');
+    $('addFolderVariableButton').click();
+    setPairRow('folderVariablesTable', 'folderToken', 'from-folder', global);
+    assertUiSmoke(
+      variablePreviewHasRow('folderVariablePreview', 'folderToken', 'from-folder', 'Folder', 'Active'),
+      'Folder variable inspector did not render folder variables.'
+    );
+    $('addFolderVariableButton').click();
+    setPairRow('folderVariablesTable', 'removedFolderToken', 'remove-me', global);
+    assertUiSmoke(
+      variablePreviewHasRow('folderVariablePreview', 'removedFolderToken', 'remove-me', 'Folder', 'Active'),
+      'Folder variable inspector did not render a newly added removable variable.'
+    );
+    removeLastPairRow('folderVariablesTable');
+    assertUiSmoke(
+      !variablePreviewHasRow('folderVariablePreview', 'removedFolderToken', 'remove-me', 'Folder', 'Active'),
+      'Folder variable inspector kept a removed folder variable.'
+    );
 
-    newRequest(collection.id, null);
+    newRequest(collection.id, folder.id);
     const request = activeRequest();
     assertUiSmoke(request, 'New request was not selected.');
     assertUiSmoke($('requestEmptyPanel').hidden, 'Create request screen should hide once a request is selected.');
@@ -98,12 +141,83 @@
     activateTab('request', 'collectionVariables');
     $('addRequestVariableButton').click();
     setPairRow('requestVariablesTable', 'requestToken', 'from-request', global);
-    assertUiSmoke($('variablePreview').textContent.includes('requestToken = from-request'), 'Request variable preview did not render.');
-    assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Request variable preview did not include collection variables.');
-    $('urlInput').value = '{{requestToken}}{{collectionToken}}/tail';
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'requestToken', 'from-request', 'Request', 'Active'),
+      'Request variable inspector did not render request variables.'
+    );
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'folderToken', 'from-folder', 'Folder', 'Active'),
+      'Request variable inspector did not include folder variables.'
+    );
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'collectionToken', 'from-collection', 'Collection', 'Active'),
+      'Request variable inspector did not include collection variables.'
+    );
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'environmentToken', 'from-environment', 'Environment', 'Active'),
+      'Request variable inspector did not include environment variables.'
+    );
+    assertUiSmoke(
+      !variablePreviewHasRow('variablePreview', 'removedCollectionToken', 'remove-me', 'Collection', 'Active'),
+      'Request variable inspector included a removed collection variable.'
+    );
+    assertUiSmoke(
+      !variablePreviewHasRow('variablePreview', 'removedFolderToken', 'remove-me', 'Folder', 'Active'),
+      'Request variable inspector included a removed folder variable.'
+    );
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'removedEnvironmentToken', 'remove-me', 'Environment', 'Active'),
+      'Request variable inspector did not include a removable active environment variable.'
+    );
+    selectSidebarPanel('environments');
+    activeEnvironmentEditorId = workflowEnvironment.id;
+    ensureOpenEnvironmentTabForActive();
+    renderAll();
+    removeLastPairRow('environmentTable');
+    selectRequestTab(requestOpenTab);
+    activateTab('request', 'collectionVariables');
+    assertUiSmoke(
+      !variablePreviewHasRow('variablePreview', 'removedEnvironmentToken', 'remove-me', 'Environment', 'Active'),
+      'Request variable inspector kept a removed environment variable.'
+    );
+    $('addRequestVariableButton').click();
+    setPairRow('requestVariablesTable', 'removedToken', 'remove-me', global);
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'removedToken', 'remove-me', 'Request', 'Active'),
+      'Request variable inspector did not render a newly added removable variable.'
+    );
+    const removableVariableRow = $('requestVariablesTable').querySelector('.kv-row:last-child');
+    removableVariableRow.querySelector('button').click();
+    assertUiSmoke(
+      !variablePreviewHasRow('variablePreview', 'removedToken', 'remove-me', 'Request', 'Active'),
+      'Request variable inspector kept a removed request variable.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Name');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Name') === 'requestToken',
+      'Clicking the variable Name header should sort request variables descending first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Name');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Name') === 'collectionToken',
+      'Clicking the variable Name header again should sort request variables ascending first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Source');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Source') === 'Environment',
+      'Clicking the variable Source header should sort by lowest shadowing precedence first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Source');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Source') === 'Request',
+      'Clicking the variable Source header again should sort by highest shadowing precedence first.'
+    );
+    $('urlInput').value = '{{requestToken}}{{folderToken}}{{collectionToken}}{{environmentToken}}/tail';
     dispatchInput($('urlInput'));
     assertVariableHighlight($('urlInput'), 'requestToken', 'Request variables should render as request-scope tokens.', 'valid', 'request');
+    assertVariableHighlight($('urlInput'), 'folderToken', 'Folder variables should render as folder-scope tokens.', 'valid', 'folder');
     assertVariableHighlight($('urlInput'), 'collectionToken', 'Collection variables should render as collection-scope tokens.', 'valid', 'collection');
+    assertVariableHighlight($('urlInput'), 'environmentToken', 'Environment variables should render as environment-scope tokens.', 'valid', 'environment');
     const requestVariableInputs = $('requestVariablesTable').querySelector('.kv-row').querySelectorAll('input');
     assertHighClickPlacesCaret($('urlInput'), 'URL input');
     assertHighClickPlacesCaret(requestVariableInputs[2], 'Request variable value input');
@@ -119,11 +233,43 @@
     requestVariableInputs[1].value = 'requestToken';
     dispatchInput(requestVariableInputs[1]);
     assertVariableHighlight($('urlInput'), 'requestToken', 'Restoring a request variable key should refresh URL highlighting immediately.', 'valid', 'request');
+    $('addRequestVariableButton').click();
+    setPairRow('requestVariablesTable', 'environmentToken', 'request-overrides-environment', global);
+    assertUiSmoke(
+      variablePreviewHasRow('variablePreview', 'environmentToken', 'request-overrides-environment', 'Request', 'Active')
+      && variablePreviewHasRow('variablePreview', 'environmentToken', 'from-environment', 'Environment', 'Shadowed'),
+      'Request variable inspector did not render active and shadowed rows for duplicate variables.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Status');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Status') === 'Active',
+      'Clicking the variable Status header should sort active variables first.'
+    );
+    clickVariablePreviewHeader('variablePreview', 'Status');
+    assertUiSmoke(
+      variablePreviewFirstCellText('variablePreview', 'Status') === 'Shadowed',
+      'Clicking the variable Status header again should sort shadowed variables first.'
+    );
     await setIncludePrereleases(true, { showStatus: false });
 
     editRequestTitle('Smoke Request');
+    const requestTreeBadge = () => Array.from(document.querySelectorAll('.request-node .tree-item'))
+      .find((button) => button.dataset.treeId === request.id)
+      ?.querySelector('.tree-badge');
+    const activeRequestTabBadge = () => document.querySelector('.request-tab-button.active .request-tab-method');
+    $('methodSelect').value = 'DELETE';
+    dispatchChange($('methodSelect'));
+    assertUiSmoke(request.method === 'DELETE', 'Changing the method dropdown should update the active request method.');
+    assertUiSmoke(requestTreeBadge()?.textContent === 'DEL', 'DELETE request tree badge should compact to DEL immediately.');
+    assertUiSmoke(activeRequestTabBadge()?.textContent === 'DEL', 'DELETE request tab badge should compact to DEL immediately.');
+    $('methodSelect').value = 'OPTIONS';
+    dispatchChange($('methodSelect'));
+    assertUiSmoke(requestTreeBadge()?.textContent === 'OPT', 'OPTIONS request tree badge should compact to OPT immediately.');
+    assertUiSmoke(activeRequestTabBadge()?.textContent === 'OPT', 'OPTIONS request tab badge should compact to OPT immediately.');
     $('methodSelect').value = 'POST';
     dispatchChange($('methodSelect'));
+    assertUiSmoke(requestTreeBadge()?.textContent === 'POST', 'Request tree badge should update immediately after method changes.');
+    assertUiSmoke(activeRequestTabBadge()?.textContent === 'POST', 'Request tab badge should update immediately after method changes.');
     $('urlInput').value = `${baseUrl}/echo`;
     dispatchInput($('urlInput'));
     activateTab('request', 'requestSettings');
@@ -158,12 +304,17 @@
     $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.variables.get('requestToken')).to.equal('from-request'); pm.expect(pm.variables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
     dispatchInput($('testScriptInput'));
 
+    const previouslyLoadedEnvironmentId = activeEnvironmentId;
     newEnvironment();
-    const environment = activeEnvironment();
+    const environment = activeEditorEnvironment();
     assertUiSmoke(environment, 'New environment was not created.');
+    assertUiSmoke(activeEnvironmentId === previouslyLoadedEnvironmentId, 'Creating a new environment should not switch the loaded request environment.');
+    assertUiSmoke(Array.isArray(environment.variables) && environment.variables.length === 0, 'New environments should start without default variables.');
     environment.name = 'Smoke Environment';
     environment.variables = [{ enabled: true, key: 'localToken', value: 'local-value' }];
     renderAll();
+    $('setEnvironmentButton').click();
+    assertUiSmoke(activeEnvironment()?.id === environment.id, 'Set Environment should load the environment for requests.');
     selectRequestTab(openRequestTabs.find((tab) => tab.requestId === request.id));
     activateTab('request', 'body');
     const variableAutocomplete = document.getElementById('variableAutocompleteMenu');
@@ -218,7 +369,6 @@
 
     selectSidebarPanel('runners');
     const runner = newRunner();
-    runner.environmentId = activeEnvironmentId;
     importCollectionIntoRunner(workspace.collections[0]);
     assertUiSmoke(runner.requests.length > 0, 'Workflow runner did not import collection requests.');
     runner.requests[0].scripts.tests = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.response.to.have.status(200); });";
@@ -510,6 +660,48 @@
       global
     );
     assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Codes over time'), 'RPS / Throughput graphs did not render the response-code timeline graph.');
+
+    selectSidebarPanel('environments');
+    activeEnvironmentEditorId = environment.id;
+    ensureOpenEnvironmentTabForActive();
+    renderAll();
+    assertUiSmoke(activeEnvironmentId === environment.id, 'Smoke environment should still be loaded before deletion.');
+    const deleteLoadedEnvironment = deleteEnvironment(environment);
+    assertUiSmoke(!$('confirmActionModal').hidden, 'Deleting the loaded environment should ask for confirmation.');
+    $('confirmActionButton').click();
+    await deleteLoadedEnvironment;
+    assertUiSmoke(activeEnvironmentId === 'none', 'Deleting the loaded environment should switch requests to No Environment.');
+    assertUiSmoke($('environmentSelect').value === 'none', 'Deleting the loaded environment should update the top-right environment selector.');
+  }
+
+  function variablePreviewHasRow(previewId, key, value, source, status) {
+    const preview = $(previewId);
+    return Array.from(preview.querySelectorAll('.variable-preview-data')).some((row) =>
+      row.dataset.variableKey === key
+      && row.dataset.variableSource === source
+      && row.dataset.variableStatus === status
+      && row.querySelector('.variable-preview-value')?.textContent === value
+    );
+  }
+
+  function removeLastPairRow(tableId) {
+    const row = $(tableId).querySelector('.kv-row:last-child');
+    assertUiSmoke(row, `Missing removable row in ${tableId}.`);
+    const removeButton = row.querySelector('button');
+    assertUiSmoke(removeButton, `Missing remove button in ${tableId}.`);
+    removeButton.click();
+  }
+
+  function clickVariablePreviewHeader(previewId, column) {
+    const button = $(previewId).querySelector(`.variable-preview-header [data-column="${column}"] button`);
+    assertUiSmoke(button, `Missing sortable ${column} header in ${previewId}.`);
+    button.click();
+  }
+
+  function variablePreviewFirstCellText(previewId, column) {
+    const row = $(previewId).querySelector('.variable-preview-data');
+    assertUiSmoke(row, `Missing variable preview data row in ${previewId}.`);
+    return row.querySelector(`[data-column="${column}"]`)?.textContent.trim() || '';
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {

@@ -17,7 +17,7 @@ test('renderer state builds active tab keys from the current ids', () => {
   const state = createRendererState();
   state.activeCollectionId = 'collection-1';
   state.activeRequestId = 'request-1';
-  state.activeEnvironmentId = 'environment-1';
+  state.activeEnvironmentEditorId = 'environment-1';
   state.activeWorkspaceId = 'current';
   state.selectedWorkspaceId = 'workspace-2';
 

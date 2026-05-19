@@ -748,6 +748,7 @@
       remove.setAttribute('aria-label', `Remove ${keyPlaceholder.toLowerCase()} ${pair.key || index + 1}`);
       remove.addEventListener('click', () => {
         pairs.splice(index, 1);
+        row.parentNode?.removeChild(row);
         onRemove(index);
       });
 
@@ -815,64 +816,255 @@
     refreshVariableTextboxes(container);
   }
 
-  function buildVariablePreviewText(collection, environment, request, folder, folders = null) {
+  function buildAvailableVariableRows(collection, environment, request, folder, folders = null) {
     const rows = [];
-    const effective = new Map();
-
-    for (const pair of environment?.variables || []) {
-      if (pair.enabled === false || !pair.key) {
-        continue;
-      }
-      effective.set(pair.key, {
-        key: pair.key,
-        value: pair.value ?? '',
-        source: 'Environment'
-      });
-    }
-    for (const pair of collection?.variables || []) {
-      if (pair.enabled === false || !pair.key) {
-        continue;
-      }
-      effective.set(pair.key, {
-        key: pair.key,
-        value: pair.value ?? '',
-        source: 'Collection'
-      });
-    }
-    const folderScopes = Array.isArray(folders) ? folders : (folder ? [folder] : []);
-    for (const folderScope of folderScopes) {
-      for (const pair of folderScope?.variables || []) {
-        if (pair.enabled === false || !pair.key) {
+    let order = 0;
+    const addScope = (source, variables, precedence, sourceName = '') => {
+      for (const pair of variables || []) {
+        const key = String(pair?.key || '').trim();
+        if (!key || pair?.enabled === false) {
           continue;
         }
-        effective.set(pair.key, {
-          key: pair.key,
-          value: pair.value ?? '',
-          source: 'Folder'
+        rows.push({
+          key,
+          value: pair.value == null ? '' : String(pair.value),
+          source,
+          sourceName,
+          status: 'Active',
+          precedence,
+          order: order++
         });
       }
-    }
-    for (const pair of request?.variables || []) {
-      if (pair.enabled === false || !pair.key) {
-        continue;
+    };
+
+    addScope('Environment', environment?.variables || [], 10, environment?.name || '');
+    addScope('Collection', collection?.variables || [], 20, collection?.name || '');
+    const folderScopes = Array.isArray(folders) ? folders : (folder ? [folder] : []);
+    folderScopes.forEach((folderScope, index) => {
+      addScope('Folder', folderScope?.variables || [], 30 + index, folderScope?.name || '');
+    });
+    addScope('Request', request?.variables || [], 100, request?.name || '');
+
+    const winners = new Map();
+    for (const row of rows) {
+      const existing = winners.get(row.key);
+      if (!existing || row.precedence > existing.precedence || (row.precedence === existing.precedence && row.order > existing.order)) {
+        winners.set(row.key, row);
       }
-      effective.set(pair.key, {
-        key: pair.key,
-        value: pair.value ?? '',
-        source: 'Request'
-      });
+    }
+    for (const row of rows) {
+      row.status = winners.get(row.key) === row ? 'Active' : 'Shadowed';
     }
 
-    for (const item of [...effective.values()].sort((left, right) => left.key.localeCompare(right.key))) {
-      rows.push(`${item.key} = ${item.value} (${item.source})`);
-    }
+    return rows.sort((left, right) =>
+      left.key.localeCompare(right.key)
+      || right.precedence - left.precedence
+      || left.order - right.order
+    );
+  }
+
+  const VARIABLE_PREVIEW_DEFAULT_SORT = { column: 'Name', direction: 'asc' };
+  const VARIABLE_PREVIEW_SORT_COLUMNS = new Set(['Name', 'Source', 'Status']);
+
+  function buildVariablePreviewText(collection, environment, request, folder, folders = null) {
+    const rows = buildAvailableVariableRows(collection, environment, request, folder, folders)
+      .filter((item) => item.status === 'Active')
+      .map((item) => `${item.key} = ${item.value} (${item.source})`);
     return rows.length ? rows.join('\n') : 'No variables';
   }
 
   function renderVariablePreview(options = {}) {
     const doc = options.doc || document;
     const container = element(doc, options.containerId || 'variablePreview');
-    container.textContent = buildVariablePreviewText(options.collection, options.environment, options.request, options.folder, options.folders);
+    const sort = variablePreviewSortState(container, options.sort);
+    const rows = sortAvailableVariableRows(
+      buildAvailableVariableRows(options.collection, options.environment, options.request, options.folder, options.folders),
+      sort
+    );
+    container.textContent = '';
+    container.dataset.variablePreviewMode = 'grid';
+    container.dataset.variablePreviewSortColumn = sort.column;
+    container.dataset.variablePreviewSortDirection = sort.direction;
+    if (!rows.length) {
+      const empty = doc.createElement('div');
+      empty.className = 'variable-preview-empty';
+      empty.textContent = 'No variables';
+      container.append(empty);
+      return;
+    }
+
+    const heading = doc.createElement('div');
+    heading.className = 'variable-preview-heading';
+    const title = doc.createElement('strong');
+    title.className = 'variable-preview-title';
+    title.textContent = `Available Variables (${rows.length})`;
+    heading.append(title);
+
+    const tableWrap = doc.createElement('div');
+    tableWrap.className = 'variable-preview-table-wrap';
+    const table = doc.createElement('div');
+    table.className = 'variable-preview-table';
+    table.setAttribute('role', 'table');
+    table.setAttribute('aria-label', 'Available variables');
+
+    const header = variablePreviewRow(doc, {
+      key: 'Name',
+      value: 'Value',
+      source: 'Source',
+      status: 'Status'
+    }, {
+      header: true,
+      sort,
+      onSort: (column) => {
+        const currentSort = variablePreviewSortState(container);
+        const nextDirection = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
+        container.dataset.variablePreviewSortColumn = column;
+        container.dataset.variablePreviewSortDirection = nextDirection;
+        const nextOptions = { ...options, doc };
+        delete nextOptions.sort;
+        renderVariablePreview(nextOptions);
+      }
+    });
+    table.append(header);
+    for (const row of rows) {
+      table.append(variablePreviewRow(doc, row));
+    }
+    tableWrap.append(table);
+    container.append(heading, tableWrap);
+  }
+
+  function variablePreviewRow(doc, row, options = {}) {
+    const wrapper = doc.createElement('div');
+    wrapper.className = options.header
+      ? 'variable-preview-row variable-preview-header'
+      : `variable-preview-row variable-preview-data variable-preview-${row.status.toLowerCase()}`;
+    wrapper.setAttribute('role', 'row');
+    wrapper.dataset.variableKey = row.key;
+    wrapper.dataset.variableSource = row.source;
+    wrapper.dataset.variableStatus = row.status;
+    wrapper.append(
+      variablePreviewCell(doc, row.key, 'Name', 'variable-preview-key', row.key, options),
+      variablePreviewCell(doc, row.value, 'Value', 'variable-preview-value', row.value, options),
+      variablePreviewCell(doc, row.source, 'Source', 'variable-preview-source', row.sourceName || row.source, options),
+      variablePreviewStatusCell(doc, row.status, options.header, options)
+    );
+    return wrapper;
+  }
+
+  function variablePreviewCell(doc, value, column, className, title = '', options = {}) {
+    const cell = doc.createElement('div');
+    cell.className = `variable-preview-cell ${className}`;
+    cell.setAttribute('role', options.header ? 'columnheader' : 'cell');
+    cell.dataset.column = column;
+    const text = value == null ? '' : String(value);
+    if (options.header && VARIABLE_PREVIEW_SORT_COLUMNS.has(column)) {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.className = 'variable-preview-sort-button';
+      button.textContent = text;
+      const isActiveSort = options.sort?.column === column;
+      button.setAttribute('aria-label', `${text}: sort ${isActiveSort && options.sort?.direction === 'asc' ? 'descending' : 'ascending'}`);
+      if (typeof options.onSort === 'function') {
+        button.addEventListener('click', () => options.onSort(column));
+      }
+      const indicator = doc.createElement('span');
+      indicator.className = 'variable-preview-sort-indicator';
+      indicator.setAttribute('aria-hidden', 'true');
+      indicator.textContent = isActiveSort ? (options.sort.direction === 'asc' ? '^' : 'v') : '';
+      button.append(indicator);
+      cell.append(button);
+      cell.setAttribute('aria-sort', isActiveSort ? (options.sort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+    } else {
+      cell.textContent = text;
+    }
+    if (title) {
+      cell.title = String(title);
+    }
+    return cell;
+  }
+
+  function variablePreviewStatusCell(doc, status, header = false, options = {}) {
+    const cell = variablePreviewCell(doc, status, 'Status', 'variable-preview-status-cell', status, { ...options, header });
+    if (!header) {
+      const badge = doc.createElement('span');
+      badge.className = `variable-preview-status variable-preview-status-${String(status || '').toLowerCase()}`;
+      badge.textContent = status;
+      badge.title = status === 'Shadowed'
+        ? 'A variable with this name exists in a higher-priority scope, so this value will not be used.'
+        : 'This is the variable value that will be used for this name.';
+      cell.textContent = '';
+      cell.append(badge);
+    }
+    return cell;
+  }
+
+  function variablePreviewSortState(container, override = null) {
+    const column = normalizeVariablePreviewSortColumn(override?.column || container?.dataset?.variablePreviewSortColumn);
+    const direction = normalizeVariablePreviewSortDirection(override?.direction || container?.dataset?.variablePreviewSortDirection);
+    return {
+      column: column || VARIABLE_PREVIEW_DEFAULT_SORT.column,
+      direction: direction || VARIABLE_PREVIEW_DEFAULT_SORT.direction
+    };
+  }
+
+  function normalizeVariablePreviewSortColumn(column) {
+    const normalized = String(column || '').trim().toLowerCase();
+    if (normalized === 'name') {
+      return 'Name';
+    }
+    if (normalized === 'source') {
+      return 'Source';
+    }
+    if (normalized === 'status') {
+      return 'Status';
+    }
+    return '';
+  }
+
+  function normalizeVariablePreviewSortDirection(direction) {
+    return String(direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc';
+  }
+
+  function sortAvailableVariableRows(rows, sort = VARIABLE_PREVIEW_DEFAULT_SORT) {
+    const state = {
+      column: normalizeVariablePreviewSortColumn(sort?.column) || VARIABLE_PREVIEW_DEFAULT_SORT.column,
+      direction: normalizeVariablePreviewSortDirection(sort?.direction)
+    };
+    const multiplier = state.direction === 'desc' ? -1 : 1;
+    return [...(rows || [])].sort((left, right) => {
+      const primary = compareVariablePreviewColumn(left, right, state.column);
+      if (primary) {
+        return primary * multiplier;
+      }
+      return compareVariablePreviewFallback(left, right);
+    });
+  }
+
+  function compareVariablePreviewColumn(left, right, column) {
+    if (column === 'Source') {
+      return (left.precedence || 0) - (right.precedence || 0);
+    }
+    if (column === 'Status') {
+      return variablePreviewStatusRank(left.status) - variablePreviewStatusRank(right.status);
+    }
+    return compareVariablePreviewText(left.key, right.key);
+  }
+
+  function compareVariablePreviewFallback(left, right) {
+    return compareVariablePreviewText(left.key, right.key)
+      || right.precedence - left.precedence
+      || left.order - right.order;
+  }
+
+  function variablePreviewStatusRank(status) {
+    return String(status || '') === 'Active' ? 0 : 1;
+  }
+
+  function compareVariablePreviewText(left, right) {
+    return String(left || '').localeCompare(String(right || ''), undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    });
   }
 
   function renderCookieJarEditor(options = {}) {
@@ -1143,11 +1335,13 @@
   const exported = {
     beautifyBodyText,
     bodyTypeCodeLanguage,
+    buildAvailableVariableRows,
     buildVariablePreviewText,
     collectAuthFromEditor,
     renderAuthEditor,
     renderCookieJarEditor,
     renderRequestPairs,
+    sortAvailableVariableRows,
     syncJwtAlgorithmFields,
     syncOauth1SignatureFields,
     syncOauth2GrantFields,

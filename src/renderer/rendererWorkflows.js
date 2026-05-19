@@ -281,8 +281,9 @@
     }
 
     function currentEnvironmentTabKey() {
-      return state?.activeEnvironmentId && state.activeEnvironmentId !== 'none'
-        ? `environment:${state.activeEnvironmentId}`
+      const environmentId = state?.activeEnvironmentEditorId ?? state?.activeEnvironmentId;
+      return environmentId && environmentId !== 'none'
+        ? `environment:${environmentId}`
         : '';
     }
 

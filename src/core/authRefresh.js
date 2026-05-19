@@ -176,7 +176,11 @@ class AuthRefreshManager {
       if (this.config.failurePolicy === 'continue') {
         return refreshSnapshot(scope, this.stats(), { refreshed: false, error: this.lastError }, this.autoRefreshAuth());
       }
-      throw error;
+      const wrapped = new Error(`Refreshing Auth failed: ${this.lastError}`);
+      if (error?.code) {
+        wrapped.code = error.code;
+      }
+      throw wrapped;
     }
   }
 

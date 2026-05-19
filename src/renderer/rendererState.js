@@ -16,6 +16,7 @@
       activeRunnerConfigId: null,
       activePerformanceTestId: null,
       activeEnvironmentId: 'none',
+      activeEnvironmentEditorId: 'none',
       activeWorkspaceId: 'current',
       activeSidebarPanel: 'collections',
       activeMainPanel: 'request',
@@ -77,8 +78,9 @@
   }
 
   function activeEnvironmentTabKey(state) {
-    return state?.activeEnvironmentId && state.activeEnvironmentId !== 'none'
-      ? `environment:${state.activeEnvironmentId}`
+    const environmentId = state?.activeEnvironmentEditorId ?? state?.activeEnvironmentId;
+    return environmentId && environmentId !== 'none'
+      ? `environment:${environmentId}`
       : '';
   }
 

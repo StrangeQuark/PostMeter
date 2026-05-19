@@ -1428,7 +1428,7 @@ test('renderer workflows only persist the active environment tab on a normal sav
     settings: { updates: { includePrereleases: true } }
   };
   state.activeMainPanel = 'environment';
-  state.activeEnvironmentId = 'environment-1';
+  state.activeEnvironmentEditorId = 'environment-1';
   state.openEnvironmentTabs = [
     {
       key: 'environment:environment-1',

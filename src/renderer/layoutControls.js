@@ -45,41 +45,21 @@ function initResizablePanes() {
       return event.clientY - rect.top;
     }
   });
-  setupDragResize('performanceSettingsResize', {
+  setupDragResize('performanceResultsResize', {
     cssVariable: '--performance-request-height',
-    fallbackPixels: 320,
-    label: 'Resize performance request builder and settings panels',
+    fallbackPixels: 420,
+    label: 'Resize performance request builder and results panels',
     orientation: 'horizontal',
     currentPixels: () => measuredElementPixels('#performanceRequestSection', 'height'),
     max: () => {
       const panel = document.getElementById('performanceMainPanel');
       const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
-      return Math.max(220, panelRect.height - 276);
+      return Math.max(320, panelRect.height - 140);
     },
-    min: 220,
+    min: 320,
     valueFromEvent: (event) => {
       const section = document.getElementById('performanceRequestSection');
       const rect = section?.getBoundingClientRect?.() || { top: 0 };
-      return event.clientY - rect.top;
-    }
-  });
-  setupDragResize('performanceResultsResize', {
-    cssVariable: '--performance-editor-height',
-    fallbackPixels: 160,
-    label: 'Resize performance settings and results panels',
-    orientation: 'horizontal',
-    currentPixels: () => measuredElementPixels('#performanceEditorSection', 'height'),
-    max: () => {
-      const panel = document.getElementById('performanceMainPanel');
-      const requestSection = document.getElementById('performanceRequestSection');
-      const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
-      const requestHeight = requestSection?.getBoundingClientRect?.().height || currentLayoutPixels('--performance-request-height', 320);
-      return Math.max(96, panelRect.height - requestHeight - 140);
-    },
-    min: 96,
-    valueFromEvent: (event) => {
-      const editor = document.getElementById('performanceEditorSection');
-      const rect = editor?.getBoundingClientRect?.() || { top: 0 };
       return event.clientY - rect.top;
     }
   });
@@ -245,7 +225,7 @@ function defaultLayoutVars() {
     '--sidebar-width': '300px',
     '--request-height': '52%',
     '--runner-editor-height': '52%',
-    '--performance-request-height': '320px',
+    '--performance-request-height': '420px',
     '--performance-editor-height': 'max-content'
   };
 }

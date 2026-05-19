@@ -196,7 +196,7 @@
             <button id="addCollectionVariableButton" type="button">Add Variable</button>
           </div>
           <div id="collectionVariablesTable" class="kv-table"></div>
-          <pre id="collectionVariablePreview" class="variable-preview">No variables</pre>
+          <div id="collectionVariablePreview" class="variable-preview">No variables</div>
         </div>
       </section>
 
@@ -252,7 +252,7 @@
             <button id="addFolderVariableButton" type="button">Add Variable</button>
           </div>
           <div id="folderVariablesTable" class="kv-table"></div>
-          <pre id="folderVariablePreview" class="variable-preview">No variables</pre>
+          <div id="folderVariablePreview" class="variable-preview">No variables</div>
         </div>
       </section>
 
@@ -306,8 +306,8 @@
         <div id="headersTab" class="tab-panel" role="tabpanel" aria-labelledby="requestHeadersTabButton">
           <div class="table-actions">
             <button id="addHeaderButton">Add Header</button>
-            <label class="inline-toggle headers-auto-toggle">
-              <input id="sendPostMeterTokenInput" type="checkbox">
+            <label class="inline-toggle headers-auto-toggle" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
+              <input id="sendPostMeterTokenInput" type="checkbox" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
               <span>PostMeter token</span>
             </label>
             <label class="inline-toggle headers-auto-toggle">
@@ -1048,35 +1048,87 @@
             <button id="addRequestVariableButton">Add Variable</button>
           </div>
           <div id="requestVariablesTable" class="kv-table"></div>
-          <pre id="variablePreview" class="variable-preview">No variables</pre>
+          <div id="variablePreview" class="variable-preview">No variables</div>
         </div>
 
         <div id="requestSettingsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestSettingsTabButton">
           <div class="request-settings-grid">
             <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
               <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-              <label class="settings-toggle">
-                <input id="requestSslCertificateVerificationInput" type="checkbox">
+              <label class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+                <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                 <span>Enable SSL certificate verification</span>
               </label>
             </section>
             <section class="request-settings-section" aria-labelledby="requestCookiesSettingsTitle">
               <h3 id="requestCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
               <div class="cookie-jar-options">
-                <label class="field inline">
-                  <input id="requestCookieJarEnabledInput" type="checkbox">
+                <label class="field inline" title="Send matching cookies from the cookie jar with this request.">
+                  <input id="requestCookieJarEnabledInput" type="checkbox" title="Send matching cookies from the cookie jar with this request.">
                   <span>Use cookie jar for this request</span>
                 </label>
-                <label class="field inline">
-                  <input id="requestCookieJarStoreInput" type="checkbox">
+                <label class="field inline" title="Save Set-Cookie values from this response into the cookie jar.">
+                  <input id="requestCookieJarStoreInput" type="checkbox" title="Save Set-Cookie values from this response into the cookie jar.">
                   <span>Store response cookies</span>
                 </label>
-                <label class="field inline">
-                  <input id="filterCookiesToRequestHostInput" type="checkbox">
+                <label class="field inline" title="Limit the cookie manager view to cookies matching the current request host.">
+                  <input id="filterCookiesToRequestHostInput" type="checkbox" title="Limit the cookie manager view to cookies matching the current request host.">
                   <span>Active host only</span>
                 </label>
-                <button id="openRequestCookiesButton" type="button">Open Cookies</button>
+                <button id="openRequestCookiesButton" type="button" title="Open the shared cookie manager.">Open Cookies</button>
               </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestProtocolSettingsTitle">
+              <h3 id="requestProtocolSettingsTitle" class="request-settings-title">Protocol</h3>
+              <div class="request-settings-columns">
+                <label class="field" title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version."><span>HTTP version</span><select id="requestHttpVersionSelect" data-request-setting title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version.">
+                  <option value="auto">Auto</option>
+                  <option value="http1">HTTP/1.x</option>
+                  <option value="http2">HTTP/2</option>
+                </select></label>
+                <label class="settings-toggle" title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                  <input id="requestStrictHttpParserInput" type="checkbox" data-request-setting title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                  <span>Enable strict HTTP parser</span>
+                </label>
+              </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestRedirectSettingsTitle">
+              <h3 id="requestRedirectSettingsTitle" class="request-settings-title">Redirects</h3>
+              <div class="request-settings-columns">
+                <label class="settings-toggle" title="Automatically follow HTTP 3xx responses as redirects.">
+                  <input id="requestFollowRedirectsInput" type="checkbox" data-request-setting title="Automatically follow HTTP 3xx responses as redirects.">
+                  <span>Automatically follow redirects</span>
+                </label>
+                <label class="field compact-number-field" title="Set the maximum number of redirects PostMeter can follow for this request."><span>Maximum number of redirects</span><input id="requestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-request-setting title="Set the maximum number of redirects PostMeter can follow for this request."></label>
+                <label class="settings-toggle" title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                  <input id="requestFollowOriginalHttpMethodInput" type="checkbox" data-request-setting title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                  <span>Follow original HTTP method</span>
+                </label>
+                <label class="settings-toggle" title="Retain the Authorization header when a redirect points to a different host.">
+                  <input id="requestFollowAuthorizationHeaderInput" type="checkbox" data-request-setting title="Retain the Authorization header when a redirect points to a different host.">
+                  <span>Follow Authorization header</span>
+                </label>
+                <label class="settings-toggle" title="Remove the Referer header from redirected requests.">
+                  <input id="requestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-request-setting title="Remove the Referer header from redirected requests.">
+                  <span>Remove referer header on redirect</span>
+                </label>
+              </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestUrlSettingsTitle">
+              <h3 id="requestUrlSettingsTitle" class="request-settings-title">URL</h3>
+              <label class="settings-toggle" title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                <input id="requestEncodeUrlAutomaticallyInput" type="checkbox" data-request-setting title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                <span>Encode URL automatically</span>
+              </label>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestTlsHandshakeSettingsTitle">
+              <h3 id="requestTlsHandshakeSettingsTitle" class="request-settings-title">TLS handshake</h3>
+              <label class="settings-toggle" title="Use the server's preferred cipher suite order during the TLS handshake.">
+                <input id="requestUseServerCipherSuiteInput" type="checkbox" data-request-setting title="Use the server's preferred cipher suite order during the TLS handshake.">
+                <span>Use server cipher suite during handshake</span>
+              </label>
+              <label class="field" title="Comma-separate TLS or SSL protocol versions to disable during the handshake."><span>TLS/SSL protocols disabled during handshake</span><input id="requestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-request-setting title="Comma-separate TLS or SSL protocol versions to disable during the handshake."></label>
+              <label class="field" title="Specify the cipher suite order to use for TLS connections."><span>Cipher suite selection</span><textarea id="requestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-request-setting title="Specify the cipher suite order to use for TLS connections."></textarea></label>
             </section>
           </div>
         </div>
@@ -1103,6 +1155,7 @@
           </div>
           <div class="environment-actions">
             <button id="addVariableButton" type="button">Add Variable</button>
+            <button id="setEnvironmentButton" type="button">Set Environment</button>
             <button id="saveEnvironmentButton" type="button">Save Environment</button>
             <button id="deleteEnvironmentButton" class="danger-button" type="button">Delete Environment</button>
           </div>
@@ -1150,6 +1203,12 @@
               <div id="runnerMainTitle" class="runner-main-title editable-title" tabindex="0" aria-label="Runner name">Select a runner</div>
             </div>
             <div class="runner-actions">
+              <button id="saveRunnerButton" type="button">Save Runner</button>
+              <button id="deleteRunnerButton" class="danger-button" type="button">Delete Runner</button>
+            </div>
+          </div>
+          <div class="runner-control-row">
+            <div class="runner-settings">
               <div class="toolbar-group menu-group csv-variables-menu-group" aria-label="Runner CSV variables">
                 <button id="runnerCsvVariablesButton" class="menu-trigger csv-variables-trigger" type="button" aria-haspopup="menu" aria-expanded="false">CSV Variables: Off</button>
                 <div id="runnerCsvVariablesMenu" class="toolbar-menu csv-variables-menu" role="menu" aria-labelledby="runnerCsvVariablesButton" hidden>
@@ -1157,59 +1216,32 @@
                   <button id="runnerEditCsvVariablesButton" type="button" role="menuitem">Edit</button>
                 </div>
               </div>
-              <button id="saveRunnerButton" type="button">Save Runner</button>
-              <button id="deleteRunnerButton" class="danger-button" type="button">Delete Runner</button>
-              <button id="runCollectionButton" type="button" class="primary">Run</button>
-              <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
-              <div class="toolbar-group menu-group result-export-menu-group" aria-label="Runner result export">
-                <button id="exportRunnerResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
-                <div id="exportRunnerResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRunnerResultsButton" hidden>
-                  <button id="exportRunnerHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
-                  <button id="exportRunnerJsonButton" type="button" role="menuitem" disabled>JSON</button>
-                  <button id="exportRunnerCsvButton" type="button" role="menuitem" disabled>CSV</button>
+              <div class="capture-settings-menu-group">
+                <button id="runnerCaptureSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerCaptureSettingsPanel">Capture Settings</button>
+                <div id="runnerCaptureSettingsPanel" class="capture-settings-panel" role="group" aria-label="Runner capture settings" hidden>
+                  <label class="field compact">
+                    <span>Response Body</span>
+                    <select id="runnerCaptureResponseBodySelect">
+                      <option value="all">All</option>
+                      <option value="failed">Failed only</option>
+                      <option value="sampled">Sampled</option>
+                      <option value="none">None</option>
+                    </select>
+                  </label>
+                  <label class="field compact-number-field"><span>Preview Bytes</span><input id="runnerCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+                  <label class="checkbox-line"><input id="runnerCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+                  <label class="checkbox-line"><input id="runnerCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+                  <label class="checkbox-line"><input id="runnerCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+                  <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
                 </div>
               </div>
-            </div>
-          </div>
-          <div class="runner-settings">
-            <label class="field inline">
-              <span>Environment</span>
-              <select id="runnerEnvironmentSelect"></select>
-            </label>
-            <label class="checkbox-line">
-              <input id="runnerStopOnFailure" type="checkbox">
-              <span>Stop on failure</span>
-            </label>
-            <label class="checkbox-line">
-              <input id="runnerAllowEnvironmentMutation" type="checkbox">
-              <span>Allow runner to modify environment</span>
-            </label>
-            <div class="capture-settings-menu-group">
-              <button id="runnerCaptureSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerCaptureSettingsPanel">Capture Settings</button>
-              <div id="runnerCaptureSettingsPanel" class="capture-settings-panel" role="group" aria-label="Runner capture settings" hidden>
-                <label class="field compact">
-                  <span>Response Body</span>
-                  <select id="runnerCaptureResponseBodySelect">
-                    <option value="all">All</option>
-                    <option value="failed">Failed only</option>
-                    <option value="sampled">Sampled</option>
-                    <option value="none">None</option>
-                  </select>
-                </label>
-                <label class="field compact-number-field"><span>Preview Bytes</span><input id="runnerCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
-                <label class="checkbox-line"><input id="runnerCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
-                <label class="checkbox-line"><input id="runnerCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
-                <label class="checkbox-line"><input id="runnerCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
-                <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
-              </div>
-            </div>
-            <div class="capture-settings-menu-group toolbar-group menu-group auth-refresh-menu-group" aria-label="Runner refreshing auth">
-              <button id="runnerAuthRefreshButton" class="menu-trigger auth-refresh-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Refreshing Auth: Off</button>
-              <div id="runnerAuthRefreshMenu" class="toolbar-menu auth-refresh-menu" role="menu" aria-labelledby="runnerAuthRefreshButton" hidden>
-                <button id="runnerToggleAuthRefreshButton" type="button" role="menuitem">Turn On</button>
-                <button id="runnerEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
-              </div>
-              <div id="runnerAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Runner refreshing auth settings" hidden>
+              <div class="capture-settings-menu-group toolbar-group menu-group auth-refresh-menu-group" aria-label="Runner refreshing auth">
+                <button id="runnerAuthRefreshButton" class="menu-trigger auth-refresh-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Refreshing Auth: Off</button>
+                <div id="runnerAuthRefreshMenu" class="toolbar-menu auth-refresh-menu" role="menu" aria-labelledby="runnerAuthRefreshButton" hidden>
+                  <button id="runnerToggleAuthRefreshButton" type="button" role="menuitem">Turn On</button>
+                  <button id="runnerEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
+                </div>
+                <div id="runnerAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Runner refreshing auth settings" hidden>
                 <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="runnerAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
                 <datalist id="runnerAuthRefreshVariableList"></datalist>
                 <div class="auth-refresh-request-card">
@@ -1308,45 +1340,81 @@
                     <label class="field compact"><span>On Failure</span><select id="runnerAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
                   </div>
                 </details>
+                </div>
+              </div>
+              <div class="capture-settings-menu-group runner-advanced-settings-menu-group">
+                <button id="runnerAdvancedSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerAdvancedSettingsPanel">Advanced</button>
+                <div id="runnerAdvancedSettingsPanel" class="capture-settings-panel runner-advanced-settings-panel" role="group" aria-label="Runner advanced settings" hidden>
+                  <label class="checkbox-line">
+                    <input id="runnerStopOnFailure" type="checkbox">
+                    <span>Stop on failure</span>
+                  </label>
+                  <label class="checkbox-line">
+                    <input id="runnerAllowEnvironmentMutation" type="checkbox">
+                    <span>Allow runner to modify environment</span>
+                  </label>
+                </div>
               </div>
             </div>
+            <div class="runner-run-actions">
+              <button id="runCollectionButton" type="button" class="primary">Run</button>
+              <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
+            </div>
           </div>
-          <div class="runner-request-actions">
-            <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
+          <div class="runner-requests-header">
+            <h3>Requests</h3>
+            <div class="runner-request-actions">
+              <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
+            </div>
           </div>
           <div id="runnerRequestList" class="runner-request-list" aria-label="Runner requests"></div>
         </div>
         <div id="runnerResultsResize" class="splitter horizontal runner-results-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-        <div id="runnerResults" class="runner-results" role="status" aria-live="polite">
-          <div id="runnerResultsSummary" class="test-results-summary">No runner run yet.</div>
-          <div class="runner-execution-grid">
-            <section class="script-results-section runner-execution-section" aria-labelledby="runnerExecutionTitle">
-              <div class="script-results-header">
-                <div class="script-results-title-row">
-                  <h3 id="runnerExecutionTitle">Execution</h3>
-                  <label class="runner-execution-filter">
-                    <span>Status</span>
-                    <select id="runnerExecutionStatusFilter" aria-label="Filter runner requests by status code">
-                      <option value="all">All</option>
-                    </select>
-                  </label>
+        <div id="runnerResultsShell" class="runner-results-shell">
+          <div class="runner-results-header">
+            <div class="runner-results-heading">
+              <h3>Results</h3>
+              <span id="runnerResultsSummary" class="test-results-summary">No runner run yet.</span>
+            </div>
+            <div class="toolbar-group menu-group result-export-menu-group" aria-label="Runner result export">
+              <button id="exportRunnerResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
+              <div id="exportRunnerResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRunnerResultsButton" hidden>
+                <button id="exportRunnerHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
+                <button id="exportRunnerJsonButton" type="button" role="menuitem" disabled>JSON</button>
+                <button id="exportRunnerCsvButton" type="button" role="menuitem" disabled>CSV</button>
+              </div>
+            </div>
+          </div>
+          <div id="runnerResults" class="runner-results" role="status" aria-live="polite">
+            <div class="runner-execution-grid">
+              <section class="script-results-section runner-execution-section" aria-labelledby="runnerExecutionTitle">
+                <div class="script-results-header">
+                  <div class="script-results-title-row">
+                    <h3 id="runnerExecutionTitle">Execution</h3>
+                    <label class="runner-execution-filter">
+                      <span>Status</span>
+                      <select id="runnerExecutionStatusFilter" aria-label="Filter runner requests by status code">
+                        <option value="all">All</option>
+                      </select>
+                    </label>
+                  </div>
+                  <span id="runnerExecutionSummary" class="script-results-count">No requests</span>
                 </div>
-                <span id="runnerExecutionSummary" class="script-results-count">No requests</span>
-              </div>
-              <div id="runnerExecutionList" class="runner-execution-list" aria-live="polite">
-                <p class="test-result-empty">No runner execution yet.</p>
-              </div>
-              <div id="runnerExecutionPagination" class="runner-execution-pagination" hidden></div>
-            </section>
-            <section class="script-results-section runner-detail-section" aria-labelledby="runnerExecutionDetailsTitle">
-              <div class="script-results-header">
-                <h3 id="runnerExecutionDetailsTitle">Request details</h3>
-                <span id="runnerExecutionDetailsStatus" class="script-results-count">No selection</span>
-              </div>
-              <div id="runnerExecutionDetails" class="runner-execution-details">
-                <p class="test-result-empty">Select a completed request to inspect its execution details.</p>
-              </div>
-            </section>
+                <div id="runnerExecutionList" class="runner-execution-list" aria-live="polite">
+                  <p class="test-result-empty">No runner execution yet.</p>
+                </div>
+                <div id="runnerExecutionPagination" class="runner-execution-pagination" hidden></div>
+              </section>
+              <section class="script-results-section runner-detail-section" aria-labelledby="runnerExecutionDetailsTitle">
+                <div class="script-results-header">
+                  <h3 id="runnerExecutionDetailsTitle">Request details</h3>
+                  <span id="runnerExecutionDetailsStatus" class="script-results-count">No selection</span>
+                </div>
+                <div id="runnerExecutionDetails" class="runner-execution-details">
+                  <p class="test-result-empty">Select a completed request to inspect its execution details.</p>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
       </section>
@@ -1368,153 +1436,253 @@
               <div id="performanceMainTitle" class="performance-main-title editable-title" tabindex="0" aria-label="Performance test name">Select a performance test</div>
             </div>
             <div class="performance-actions">
-              <div class="toolbar-group menu-group csv-variables-menu-group" aria-label="Performance CSV variables">
-                <button id="performanceCsvVariablesButton" class="menu-trigger csv-variables-trigger" type="button" aria-haspopup="menu" aria-expanded="false">CSV Variables: Off</button>
-                <div id="performanceCsvVariablesMenu" class="toolbar-menu csv-variables-menu" role="menu" aria-labelledby="performanceCsvVariablesButton" hidden>
-                  <button id="performanceToggleCsvVariablesButton" type="button" role="menuitem">Turn On</button>
-                  <button id="performanceEditCsvVariablesButton" type="button" role="menuitem">Edit</button>
-                </div>
-              </div>
               <button id="savePerformanceTestButton" type="button">Save Performance Test</button>
               <button id="deletePerformanceTestButton" class="danger-button" type="button">Delete Performance Test</button>
-              <button id="importPerformanceRequestButton" type="button">Import Request</button>
-              <button id="exportPerformanceTestButton" type="button">Export Test</button>
+            </div>
+          </div>
+          <div class="performance-control-row">
+            <div class="performance-settings">
+              <div class="toolbar-group menu-group csv-variables-menu-group" aria-label="Performance CSV variables">
+                              <button id="performanceCsvVariablesButton" class="menu-trigger csv-variables-trigger" type="button" aria-haspopup="menu" aria-expanded="false">CSV Variables: Off</button>
+                              <div id="performanceCsvVariablesMenu" class="toolbar-menu csv-variables-menu" role="menu" aria-labelledby="performanceCsvVariablesButton" hidden>
+                                <button id="performanceToggleCsvVariablesButton" type="button" role="menuitem">Turn On</button>
+                                <button id="performanceEditCsvVariablesButton" type="button" role="menuitem">Edit</button>
+                              </div>
+                            </div>
               <div class="capture-settings-menu-group">
-                <button id="performanceCaptureSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
-                <div id="performanceCaptureSettingsPanel" class="capture-settings-panel" role="group" aria-label="Performance capture settings" hidden>
-                  <label class="field compact">
-                    <span>Response Body</span>
-                    <select id="performanceCaptureResponseBodySelect">
-                      <option value="all">All</option>
-                      <option value="failed">Failed only</option>
-                      <option value="sampled">Sampled</option>
-                      <option value="none">None</option>
-                    </select>
-                  </label>
-                  <label class="field compact-number-field"><span>Preview Bytes</span><input id="performanceCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
-                  <label class="checkbox-line"><input id="performanceCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
-                  <label class="checkbox-line"><input id="performanceCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
-                  <label class="checkbox-line"><input id="performanceCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
-                  <label class="checkbox-line"><input id="performanceCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
-                  <label class="checkbox-line"><input id="performanceCaptureHeadersInput" type="checkbox"><span>Response headers</span></label>
-                  <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
-                </div>
-              </div>
+                              <button id="performanceCaptureSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
+                              <div id="performanceCaptureSettingsPanel" class="capture-settings-panel" role="group" aria-label="Performance capture settings" hidden>
+                                <label class="field compact">
+                                  <span>Response Body</span>
+                                  <select id="performanceCaptureResponseBodySelect">
+                                    <option value="all">All</option>
+                                    <option value="failed">Failed only</option>
+                                    <option value="sampled">Sampled</option>
+                                    <option value="none">None</option>
+                                  </select>
+                                </label>
+                                <label class="field compact-number-field"><span>Preview Bytes</span><input id="performanceCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+                                <label class="checkbox-line"><input id="performanceCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+                                <label class="checkbox-line"><input id="performanceCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+                                <label class="checkbox-line"><input id="performanceCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+                                <label class="checkbox-line"><input id="performanceCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
+                                <label class="checkbox-line"><input id="performanceCaptureHeadersInput" type="checkbox"><span>Response headers</span></label>
+                                <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
+                              </div>
+                            </div>
               <div class="capture-settings-menu-group toolbar-group menu-group auth-refresh-menu-group" aria-label="Performance refreshing auth">
-                <button id="performanceAuthRefreshButton" class="menu-trigger auth-refresh-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Refreshing Auth: Off</button>
-                <div id="performanceAuthRefreshMenu" class="toolbar-menu auth-refresh-menu" role="menu" aria-labelledby="performanceAuthRefreshButton" hidden>
-                  <button id="performanceToggleAuthRefreshButton" type="button" role="menuitem">Turn On</button>
-                  <button id="performanceEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
-                </div>
-                <div id="performanceAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Performance refreshing auth settings" hidden>
-                  <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="performanceAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
-                  <datalist id="performanceAuthRefreshVariableList"></datalist>
-                  <div class="auth-refresh-request-card">
-                    <div class="auth-refresh-request-copy">
-                      <span>Auth request</span>
-                      <strong id="performanceAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
-                    </div>
-                    <div class="auth-refresh-request-actions">
-                      <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage auth request">
-                        <button id="performanceAuthRefreshManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
-                        <div id="performanceAuthRefreshManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="performanceAuthRefreshManageRequestButton" hidden>
-                          <button id="performanceAuthRefreshOpenRequestButton" type="button" role="menuitem">Open</button>
-                          <button id="performanceAuthRefreshAutoDetectRequestButton" type="button" role="menuitem">Auto-Detect</button>
-                          <button id="performanceAuthRefreshNewRequestButton" type="button" role="menuitem">New Request</button>
-                          <button id="performanceAuthRefreshImportButton" type="button" role="menuitem">Import</button>
-                          <button id="performanceAuthRefreshRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer">
-                    <div class="auth-refresh-field-grid">
-                      <label class="field compact"><span>Read Access Token From</span><select id="performanceAuthRefreshAccessTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                      <label id="performanceAuthRefreshAccessTokenPathField" class="field compact"><span id="performanceAuthRefreshAccessTokenPathLabel">Access Token Response Path</span><input id="performanceAuthRefreshAccessTokenPathInput" autocomplete="off" placeholder="access_token"></label>
-                    </div>
-                  </div>
-                  <div class="auth-refresh-type-panel" data-auth-refresh-types="apiKey">
-                    <div class="auth-refresh-field-grid">
-                      <label class="field compact"><span>Read API Key From</span><select id="performanceAuthRefreshApiKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                      <label id="performanceAuthRefreshApiKeyPathField" class="field compact"><span id="performanceAuthRefreshApiKeyPathLabel">API Key Response Path</span><input id="performanceAuthRefreshApiKeyPathInput" autocomplete="off" placeholder="api_key"></label>
-                      <label class="field compact"><span>Send API Key As</span><select id="performanceAuthRefreshApiKeyLocationSelect"><option value="header">Header</option><option value="query">Query Param</option></select></label>
-                      <label class="field compact"><span>API Key Name</span><input id="performanceAuthRefreshApiKeyNameInput" autocomplete="off" placeholder="X-API-Key"></label>
-                    </div>
-                  </div>
-                  <div class="auth-refresh-type-panel" data-auth-refresh-types="cookie">
-                    <div class="auth-refresh-field-grid">
-                      <label class="field compact"><span>Cookie Name</span><input id="performanceAuthRefreshCookieNameInput" autocomplete="off" placeholder="session"></label>
-                    </div>
-                    <p class="auth-refresh-panel-note">Response cookies are stored when the auth request has response cookie storage enabled.</p>
-                  </div>
-                  <div class="auth-refresh-type-panel" data-auth-refresh-types="aws">
-                    <div class="auth-refresh-field-grid">
-                      <label class="field compact auth-refresh-full"><span>Read Credentials From</span><select id="performanceAuthRefreshAwsCredentialsSourceSelect"><option value="body">JSON body paths</option><option value="header">Response headers</option><option value="cookie">Response cookies</option></select></label>
-                      <label id="performanceAuthRefreshAwsAccessKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsAccessKeyPathLabel">Access Key ID Response Path</span><input id="performanceAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
-                      <label id="performanceAuthRefreshAwsSecretKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsSecretKeyPathLabel">Secret Access Key Response Path</span><input id="performanceAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
-                      <label id="performanceAuthRefreshAwsSessionTokenPathField" class="field compact"><span id="performanceAuthRefreshAwsSessionTokenPathLabel">Session Token Response Path</span><input id="performanceAuthRefreshAwsSessionTokenPathInput" autocomplete="off" placeholder="credentials.sessionToken"></label>
-                    </div>
-                  </div>
-                  <div class="auth-refresh-type-panel" data-auth-refresh-types="custom">
-                    <div class="auth-refresh-field-grid">
-                      <label class="field compact"><span>Save Header Value To</span><input id="performanceAuthRefreshCustomVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AUTH_VALUE"></label>
-                      <label class="field compact"><span>Read Header Value From</span><select id="performanceAuthRefreshCustomSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                      <label id="performanceAuthRefreshCustomPathField" class="field compact"><span id="performanceAuthRefreshCustomPathLabel">Header Value Response Path</span><input id="performanceAuthRefreshCustomPathInput" autocomplete="off" placeholder="token"></label>
-                    </div>
-                  </div>
-                  <div class="auth-refresh-field-grid auth-refresh-schedule-grid">
-                    <label class="field compact-number-field"><span>Refresh Every (s)</span><input id="performanceAuthRefreshIntervalSecondsInput" type="number" min="1" max="86400" step="1"></label>
-                  </div>
-                  <details class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie">
-                    <summary>Refresh Token</summary>
-                    <p>Use this when the access-token request needs a refreshed refresh token.</p>
-                    <div class="auth-refresh-request-card">
-                      <div class="auth-refresh-request-copy">
-                        <span>Refresh token request</span>
-                        <strong id="performanceAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
-                      </div>
-                      <div class="auth-refresh-request-actions">
-                        <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage refresh token request">
-                          <button id="performanceAuthRefreshTokenManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
-                          <div id="performanceAuthRefreshTokenManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="performanceAuthRefreshTokenManageRequestButton" hidden>
-                            <button id="performanceAuthRefreshTokenOpenRequestButton" type="button" role="menuitem">Open</button>
-                            <button id="performanceAuthRefreshTokenAutoDetectRequestButton" type="button" role="menuitem">Auto-Detect</button>
-                            <button id="performanceAuthRefreshTokenNewRequestButton" type="button" role="menuitem">New Request</button>
-                            <button id="performanceAuthRefreshTokenImportButton" type="button" role="menuitem">Import</button>
-                            <button id="performanceAuthRefreshTokenRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="auth-refresh-field-grid">
-                      <label class="field compact"><span>Read Refresh Token From</span><select id="performanceAuthRefreshRefreshTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
-                      <label id="performanceAuthRefreshRefreshTokenPathField" class="field compact"><span id="performanceAuthRefreshRefreshTokenPathLabel">Refresh Token Response Path</span><input id="performanceAuthRefreshRefreshTokenPathInput" autocomplete="off"></label>
-                    </div>
-                  </details>
-                  <details class="auth-refresh-advanced">
-                    <summary>Advanced</summary>
-                    <p>Use these when you need named variables or custom failure behavior.</p>
-                    <div class="auth-refresh-field-grid">
-                      <label class="field compact" data-auth-refresh-types="bearer"><span id="performanceAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="performanceAuthRefreshAccessTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
-                      <label class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="performanceAuthRefreshCookieVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
-                      <label class="field compact" data-auth-refresh-types="bearer cookie"><span>Save Refresh Token To</span><input id="performanceAuthRefreshRefreshTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off"></label>
-                      <label class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="performanceAuthRefreshAwsAccessKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
-                      <label class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="performanceAuthRefreshAwsSecretKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
-                      <label class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="performanceAuthRefreshAwsSessionTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
-                      <label class="checkbox-line auth-refresh-before-run"><input id="performanceAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
-                      <label class="field compact"><span>On Failure</span><select id="performanceAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
-                    </div>
-                  </details>
+                              <button id="performanceAuthRefreshButton" class="menu-trigger auth-refresh-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Refreshing Auth: Off</button>
+                              <div id="performanceAuthRefreshMenu" class="toolbar-menu auth-refresh-menu" role="menu" aria-labelledby="performanceAuthRefreshButton" hidden>
+                                <button id="performanceToggleAuthRefreshButton" type="button" role="menuitem">Turn On</button>
+                                <button id="performanceEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
+                              </div>
+                              <div id="performanceAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Performance refreshing auth settings" hidden>
+                                <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="performanceAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
+                                <datalist id="performanceAuthRefreshVariableList"></datalist>
+                                <div class="auth-refresh-request-card">
+                                  <div class="auth-refresh-request-copy">
+                                    <span>Auth request</span>
+                                    <strong id="performanceAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
+                                  </div>
+                                  <div class="auth-refresh-request-actions">
+                                    <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage auth request">
+                                      <button id="performanceAuthRefreshManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                                      <div id="performanceAuthRefreshManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="performanceAuthRefreshManageRequestButton" hidden>
+                                        <button id="performanceAuthRefreshOpenRequestButton" type="button" role="menuitem">Open</button>
+                                        <button id="performanceAuthRefreshAutoDetectRequestButton" type="button" role="menuitem">Auto-Detect</button>
+                                        <button id="performanceAuthRefreshNewRequestButton" type="button" role="menuitem">New Request</button>
+                                        <button id="performanceAuthRefreshImportButton" type="button" role="menuitem">Import</button>
+                                        <button id="performanceAuthRefreshRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer">
+                                  <div class="auth-refresh-field-grid">
+                                    <label class="field compact"><span>Read Access Token From</span><select id="performanceAuthRefreshAccessTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                                    <label id="performanceAuthRefreshAccessTokenPathField" class="field compact"><span id="performanceAuthRefreshAccessTokenPathLabel">Access Token Response Path</span><input id="performanceAuthRefreshAccessTokenPathInput" autocomplete="off" placeholder="access_token"></label>
+                                  </div>
+                                </div>
+                                <div class="auth-refresh-type-panel" data-auth-refresh-types="apiKey">
+                                  <div class="auth-refresh-field-grid">
+                                    <label class="field compact"><span>Read API Key From</span><select id="performanceAuthRefreshApiKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                                    <label id="performanceAuthRefreshApiKeyPathField" class="field compact"><span id="performanceAuthRefreshApiKeyPathLabel">API Key Response Path</span><input id="performanceAuthRefreshApiKeyPathInput" autocomplete="off" placeholder="api_key"></label>
+                                    <label class="field compact"><span>Send API Key As</span><select id="performanceAuthRefreshApiKeyLocationSelect"><option value="header">Header</option><option value="query">Query Param</option></select></label>
+                                    <label class="field compact"><span>API Key Name</span><input id="performanceAuthRefreshApiKeyNameInput" autocomplete="off" placeholder="X-API-Key"></label>
+                                  </div>
+                                </div>
+                                <div class="auth-refresh-type-panel" data-auth-refresh-types="cookie">
+                                  <div class="auth-refresh-field-grid">
+                                    <label class="field compact"><span>Cookie Name</span><input id="performanceAuthRefreshCookieNameInput" autocomplete="off" placeholder="session"></label>
+                                  </div>
+                                  <p class="auth-refresh-panel-note">Response cookies are stored when the auth request has response cookie storage enabled.</p>
+                                </div>
+                                <div class="auth-refresh-type-panel" data-auth-refresh-types="aws">
+                                  <div class="auth-refresh-field-grid">
+                                    <label class="field compact auth-refresh-full"><span>Read Credentials From</span><select id="performanceAuthRefreshAwsCredentialsSourceSelect"><option value="body">JSON body paths</option><option value="header">Response headers</option><option value="cookie">Response cookies</option></select></label>
+                                    <label id="performanceAuthRefreshAwsAccessKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsAccessKeyPathLabel">Access Key ID Response Path</span><input id="performanceAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
+                                    <label id="performanceAuthRefreshAwsSecretKeyPathField" class="field compact"><span id="performanceAuthRefreshAwsSecretKeyPathLabel">Secret Access Key Response Path</span><input id="performanceAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
+                                    <label id="performanceAuthRefreshAwsSessionTokenPathField" class="field compact"><span id="performanceAuthRefreshAwsSessionTokenPathLabel">Session Token Response Path</span><input id="performanceAuthRefreshAwsSessionTokenPathInput" autocomplete="off" placeholder="credentials.sessionToken"></label>
+                                  </div>
+                                </div>
+                                <div class="auth-refresh-type-panel" data-auth-refresh-types="custom">
+                                  <div class="auth-refresh-field-grid">
+                                    <label class="field compact"><span>Save Header Value To</span><input id="performanceAuthRefreshCustomVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AUTH_VALUE"></label>
+                                    <label class="field compact"><span>Read Header Value From</span><select id="performanceAuthRefreshCustomSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                                    <label id="performanceAuthRefreshCustomPathField" class="field compact"><span id="performanceAuthRefreshCustomPathLabel">Header Value Response Path</span><input id="performanceAuthRefreshCustomPathInput" autocomplete="off" placeholder="token"></label>
+                                  </div>
+                                </div>
+                                <div class="auth-refresh-field-grid auth-refresh-schedule-grid">
+                                  <label class="field compact-number-field"><span>Refresh Every (s)</span><input id="performanceAuthRefreshIntervalSecondsInput" type="number" min="1" max="86400" step="1"></label>
+                                </div>
+                                <details class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie">
+                                  <summary>Refresh Token</summary>
+                                  <p>Use this when the access-token request needs a refreshed refresh token.</p>
+                                  <div class="auth-refresh-request-card">
+                                    <div class="auth-refresh-request-copy">
+                                      <span>Refresh token request</span>
+                                      <strong id="performanceAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
+                                    </div>
+                                    <div class="auth-refresh-request-actions">
+                                      <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage refresh token request">
+                                        <button id="performanceAuthRefreshTokenManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                                        <div id="performanceAuthRefreshTokenManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="performanceAuthRefreshTokenManageRequestButton" hidden>
+                                          <button id="performanceAuthRefreshTokenOpenRequestButton" type="button" role="menuitem">Open</button>
+                                          <button id="performanceAuthRefreshTokenAutoDetectRequestButton" type="button" role="menuitem">Auto-Detect</button>
+                                          <button id="performanceAuthRefreshTokenNewRequestButton" type="button" role="menuitem">New Request</button>
+                                          <button id="performanceAuthRefreshTokenImportButton" type="button" role="menuitem">Import</button>
+                                          <button id="performanceAuthRefreshTokenRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div class="auth-refresh-field-grid">
+                                    <label class="field compact"><span>Read Refresh Token From</span><select id="performanceAuthRefreshRefreshTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                                    <label id="performanceAuthRefreshRefreshTokenPathField" class="field compact"><span id="performanceAuthRefreshRefreshTokenPathLabel">Refresh Token Response Path</span><input id="performanceAuthRefreshRefreshTokenPathInput" autocomplete="off"></label>
+                                  </div>
+                                </details>
+                                <details class="auth-refresh-advanced">
+                                  <summary>Advanced</summary>
+                                  <p>Use these when you need named variables or custom failure behavior.</p>
+                                  <div class="auth-refresh-field-grid">
+                                    <label class="field compact" data-auth-refresh-types="bearer"><span id="performanceAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="performanceAuthRefreshAccessTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                                    <label class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="performanceAuthRefreshCookieVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
+                                    <label class="field compact" data-auth-refresh-types="bearer cookie"><span>Save Refresh Token To</span><input id="performanceAuthRefreshRefreshTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off"></label>
+                                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="performanceAuthRefreshAwsAccessKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="performanceAuthRefreshAwsSecretKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="performanceAuthRefreshAwsSessionTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
+                                    <label class="checkbox-line auth-refresh-before-run"><input id="performanceAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
+                                    <label class="field compact"><span>On Failure</span><select id="performanceAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
+                                  </div>
+                                </details>
+                              </div>
+                            </div>
+              <div class="capture-settings-menu-group performance-advanced-settings-menu-group">
+                <button id="performanceAdvancedSettingsButton" class="capture-settings-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="performanceAdvancedSettingsPanel">Advanced</button>
+                <div id="performanceAdvancedSettingsPanel" class="capture-settings-panel performance-advanced-settings-panel" role="group" aria-label="Advanced performance settings" hidden>
+                  <label class="checkbox-line performance-mutation-option">
+                    <input id="performanceAllowEnvironmentMutationInput" data-performance-mutation type="checkbox" />
+                    <span>Allow performance test to modify environment</span>
+                  </label>
                 </div>
               </div>
-              <div class="toolbar-group menu-group result-export-menu-group" aria-label="Performance result export">
-                <button id="exportPerformanceResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
-                <div id="exportPerformanceResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportPerformanceResultsButton" hidden>
-                  <button id="exportPerformanceResultHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
-                  <button id="exportPerformanceResultJsonButton" type="button" role="menuitem" disabled>JSON</button>
-                  <button id="exportPerformanceResultCsvButton" type="button" role="menuitem" disabled>CSV</button>
-                </div>
-              </div>
+            </div>
+          </div>
+          <div id="performanceEditorSection" class="performance-editor-section performance-plan-section">
+                    <label class="field compact-number-field performance-type-select-field">
+                      <span>Test Type</span>
+                      <select id="performanceTypeSelect" aria-label="Performance test type">
+                        <option value="diagnosis">Full Endpoint Diagnosis</option>
+                        <option value="latency">Latency</option>
+                        <option value="throughput">RPS / Throughput</option>
+                        <option value="concurrency">Concurrency</option>
+                        <option value="stress">Stress</option>
+                        <option value="spike">Spike</option>
+                        <option value="soak">Soak</option>
+                        <option value="ramp">Ramp</option>
+                      </select>
+                    </label>
+                    <div id="diagnosisTab" class="tab-panel performance-type-panel active" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Scope</span><select data-performance-config="diagnosisScope">
+                          <option value="quick">Quick Test</option>
+                          <option value="medium">Medium Test</option>
+                          <option value="extended">Extended Test</option>
+                        </select></label>
+                        <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                    <div id="latencyTab" class="tab-panel performance-type-panel" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                    <div id="throughputTab" class="tab-panel performance-type-panel" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                    <div id="concurrencyTab" class="tab-panel performance-type-panel" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Virtual Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Requests / User</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                    <div id="stressTab" class="tab-panel performance-type-panel" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                    <div id="spikeTab" class="tab-panel performance-type-panel" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Baseline Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Spike Multiplier</span><input data-performance-config="spikeMultiplier" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Spike Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                    <div id="soakTab" class="tab-panel performance-type-panel" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="1" max="3600" step="1"></label>
+                        <label class="field compact-number-field"><span>Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                    <div id="rampTab" class="tab-panel performance-type-panel" role="group">
+                      <div class="performance-type-grid">
+                        <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+                        <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+                      </div>
+                    </div>
+                  </div>
+          <div class="performance-request-header">
+            <h3>Request</h3>
+            <div class="performance-request-header-actions">
+              <button id="importPerformanceRequestButton" type="button">Import Request</button>
             </div>
           </div>
           <div class="performance-request-editor">
@@ -1529,8 +1697,10 @@
                 <option class="method-options">OPTIONS</option>
               </select>
               <input id="performanceUrlInput" placeholder="https://api.example.com/resource" aria-label="Performance request URL">
-              <button id="runPerformanceTestButton" type="button" class="primary">Run</button>
-              <button id="cancelPerformanceTestButton" type="button" class="danger-button" disabled>Cancel</button>
+              <div class="performance-run-actions">
+                <button id="runPerformanceTestButton" type="button" class="primary">Run</button>
+                <button id="cancelPerformanceTestButton" type="button" class="danger-button" disabled>Cancel</button>
+              </div>
             </div>
 
             <div class="tabs performance-request-tabs" role="tablist" aria-label="Performance request editor sections" data-tab-group="performanceRequest">
@@ -1554,8 +1724,8 @@
             <div id="performanceHeadersTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestHeadersTabButton">
               <div class="table-actions">
                 <button id="addPerformanceHeaderButton" type="button">Add Header</button>
-                <label class="inline-toggle headers-auto-toggle">
-                  <input id="performanceSendPostMeterTokenInput" type="checkbox">
+                <label class="inline-toggle headers-auto-toggle" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
+                  <input id="performanceSendPostMeterTokenInput" type="checkbox" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
                   <span>PostMeter token</span>
                 </label>
                 <label class="inline-toggle headers-auto-toggle">
@@ -2287,35 +2457,87 @@
                 <button id="addPerformanceRequestVariableButton" type="button">Add Variable</button>
               </div>
               <div id="performanceRequestVariablesTable" class="kv-table"></div>
-              <pre id="performanceVariablePreview" class="variable-preview">No variables</pre>
+              <div id="performanceVariablePreview" class="variable-preview">No variables</div>
             </div>
 
             <div id="performanceSettingsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestSettingsTabButton">
               <div class="request-settings-grid">
                 <section class="request-settings-section" aria-labelledby="performanceCertificatesSettingsTitle">
                   <h3 id="performanceCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-                  <label class="settings-toggle">
-                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox">
+                  <label class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox" data-performance-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                     <span>Enable SSL certificate verification</span>
                   </label>
                 </section>
                 <section class="request-settings-section" aria-labelledby="performanceCookiesSettingsTitle">
                   <h3 id="performanceCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
                   <div class="cookie-jar-options">
-                    <label class="field inline">
-                      <input id="performanceRequestCookieJarEnabledInput" type="checkbox">
+                    <label class="field inline" title="Send matching cookies from the cookie jar with this request.">
+                      <input id="performanceRequestCookieJarEnabledInput" type="checkbox" title="Send matching cookies from the cookie jar with this request.">
                       <span>Use cookie jar for this request</span>
                     </label>
-                    <label class="field inline">
-                      <input id="performanceRequestCookieJarStoreInput" type="checkbox">
+                    <label class="field inline" title="Save Set-Cookie values from this response into the cookie jar.">
+                      <input id="performanceRequestCookieJarStoreInput" type="checkbox" title="Save Set-Cookie values from this response into the cookie jar.">
                       <span>Store response cookies</span>
                     </label>
-                    <label class="field inline">
-                      <input id="performanceFilterCookiesToRequestHostInput" type="checkbox">
+                    <label class="field inline" title="Limit the cookie manager view to cookies matching the current request host.">
+                      <input id="performanceFilterCookiesToRequestHostInput" type="checkbox" title="Limit the cookie manager view to cookies matching the current request host.">
                       <span>Active host only</span>
                     </label>
-                    <button id="openPerformanceCookiesButton" type="button">Open Cookies</button>
+                    <button id="openPerformanceCookiesButton" type="button" title="Open the shared cookie manager.">Open Cookies</button>
                   </div>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceProtocolSettingsTitle">
+                  <h3 id="performanceProtocolSettingsTitle" class="request-settings-title">Protocol</h3>
+                  <div class="request-settings-columns">
+                    <label class="field" title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version."><span>HTTP version</span><select id="performanceRequestHttpVersionSelect" data-performance-request-setting title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version.">
+                      <option value="auto">Auto</option>
+                      <option value="http1">HTTP/1.x</option>
+                      <option value="http2">HTTP/2</option>
+                    </select></label>
+                    <label class="settings-toggle" title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                      <input id="performanceRequestStrictHttpParserInput" type="checkbox" data-performance-request-setting title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                      <span>Enable strict HTTP parser</span>
+                    </label>
+                  </div>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceRedirectSettingsTitle">
+                  <h3 id="performanceRedirectSettingsTitle" class="request-settings-title">Redirects</h3>
+                  <div class="request-settings-columns">
+                    <label class="settings-toggle" title="Automatically follow HTTP 3xx responses as redirects.">
+                      <input id="performanceRequestFollowRedirectsInput" type="checkbox" data-performance-request-setting title="Automatically follow HTTP 3xx responses as redirects.">
+                      <span>Automatically follow redirects</span>
+                    </label>
+                    <label class="field compact-number-field" title="Set the maximum number of redirects PostMeter can follow for this request."><span>Maximum number of redirects</span><input id="performanceRequestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-performance-request-setting title="Set the maximum number of redirects PostMeter can follow for this request."></label>
+                    <label class="settings-toggle" title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                      <input id="performanceRequestFollowOriginalHttpMethodInput" type="checkbox" data-performance-request-setting title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                      <span>Follow original HTTP method</span>
+                    </label>
+                    <label class="settings-toggle" title="Retain the Authorization header when a redirect points to a different host.">
+                      <input id="performanceRequestFollowAuthorizationHeaderInput" type="checkbox" data-performance-request-setting title="Retain the Authorization header when a redirect points to a different host.">
+                      <span>Follow Authorization header</span>
+                    </label>
+                    <label class="settings-toggle" title="Remove the Referer header from redirected requests.">
+                      <input id="performanceRequestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-performance-request-setting title="Remove the Referer header from redirected requests.">
+                      <span>Remove referer header on redirect</span>
+                    </label>
+                  </div>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceUrlSettingsTitle">
+                  <h3 id="performanceUrlSettingsTitle" class="request-settings-title">URL</h3>
+                  <label class="settings-toggle" title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                    <input id="performanceRequestEncodeUrlAutomaticallyInput" type="checkbox" data-performance-request-setting title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                    <span>Encode URL automatically</span>
+                  </label>
+                </section>
+                <section class="request-settings-section" aria-labelledby="performanceTlsHandshakeSettingsTitle">
+                  <h3 id="performanceTlsHandshakeSettingsTitle" class="request-settings-title">TLS handshake</h3>
+                  <label class="settings-toggle" title="Use the server's preferred cipher suite order during the TLS handshake.">
+                    <input id="performanceRequestUseServerCipherSuiteInput" type="checkbox" data-performance-request-setting title="Use the server's preferred cipher suite order during the TLS handshake.">
+                    <span>Use server cipher suite during handshake</span>
+                  </label>
+                  <label class="field" title="Comma-separate TLS or SSL protocol versions to disable during the handshake."><span>TLS/SSL protocols disabled during handshake</span><input id="performanceRequestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-performance-request-setting title="Comma-separate TLS or SSL protocol versions to disable during the handshake."></label>
+                  <label class="field" title="Specify the cipher suite order to use for TLS connections."><span>Cipher suite selection</span><textarea id="performanceRequestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-performance-request-setting title="Specify the cipher suite order to use for TLS connections."></textarea></label>
                 </section>
               </div>
             </div>
@@ -2325,120 +2547,31 @@
             </div>
           </div>
         </div>
-        <div id="performanceSettingsResize" class="splitter horizontal performance-settings-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-        <div id="performanceEditorSection" class="performance-editor-section">
-          <div class="tabs performance-type-tabs" role="tablist" aria-label="Performance test types" data-tab-group="performance">
-            <button id="performanceDiagnosisTabButton" class="tab active" type="button" role="tab" data-tab-group="performance" data-tab="diagnosis" aria-selected="true" aria-controls="diagnosisTab">Full Endpoint Diagnosis</button>
-            <button id="performanceLatencyTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="latency" aria-selected="false" aria-controls="latencyTab">Latency</button>
-            <button id="performanceThroughputTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="throughput" aria-selected="false" aria-controls="throughputTab">RPS / Throughput</button>
-            <button id="performanceConcurrencyTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="concurrency" aria-selected="false" aria-controls="concurrencyTab">Concurrency</button>
-            <button id="performanceStressTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="stress" aria-selected="false" aria-controls="stressTab">Stress</button>
-            <button id="performanceSpikeTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="spike" aria-selected="false" aria-controls="spikeTab">Spike</button>
-            <button id="performanceSoakTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="soak" aria-selected="false" aria-controls="soakTab">Soak</button>
-            <button id="performanceRampTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="ramp" aria-selected="false" aria-controls="rampTab">Ramp</button>
-          </div>
-          <div id="diagnosisTab" class="tab-panel performance-type-panel active" role="tabpanel" aria-labelledby="performanceDiagnosisTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Scope</span><select data-performance-config="diagnosisScope">
-                <option value="quick">Quick Test</option>
-                <option value="medium">Medium Test</option>
-                <option value="extended">Extended Test</option>
-              </select></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-          <div id="latencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-          <div id="throughputTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceThroughputTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-          <div id="concurrencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceConcurrencyTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Virtual Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / User</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-          <div id="stressTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceStressTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-          <div id="spikeTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceSpikeTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Baseline Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Spike Multiplier</span><input data-performance-config="spikeMultiplier" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Spike Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-          <div id="soakTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceSoakTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field compact-number-field"><span>Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-          <div id="rampTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceRampTabButton">
-            <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
-              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
-            </div>
-          </div>
-        </div>
+        
+        
         <div id="performanceResultsResize" class="splitter horizontal performance-results-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
         <div id="performanceResults" class="runner-results performance-results" role="status" aria-live="polite">
+          <div class="runner-results-header performance-results-header">
+            <div class="runner-results-heading performance-results-heading">
+              <h3>Results</h3>
+              <div id="performanceResultsSummary" class="test-results-summary">No performance run yet.</div>
+            </div>
+            <div class="toolbar-group menu-group result-export-menu-group" aria-label="Performance result export">
+              <button id="exportPerformanceResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
+              <div id="exportPerformanceResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportPerformanceResultsButton" hidden>
+                <button id="exportPerformanceResultHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
+                <button id="exportPerformanceResultJsonButton" type="button" role="menuitem" disabled>JSON</button>
+                <button id="exportPerformanceResultCsvButton" type="button" role="menuitem" disabled>CSV</button>
+              </div>
+            </div>
+          </div>
           <div class="tabs performance-output-tabs" role="tablist" aria-label="Performance output sections" data-tab-group="performanceOutput">
             <button id="performanceOutputResultsTabButton" class="tab active" type="button" role="tab" data-tab-group="performanceOutput" data-tab="performanceOutputResults" aria-selected="true" aria-controls="performanceOutputResultsTab">Results</button>
             <button id="performanceOutputRequestsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceOutput" data-tab="performanceOutputRequests" aria-selected="false" aria-controls="performanceOutputRequestsTab">Requests</button>
             <button id="performanceOutputGraphsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceOutput" data-tab="performanceOutputGraphs" aria-selected="false" aria-controls="performanceOutputGraphsTab">Graphs</button>
           </div>
           <div id="performanceOutputResultsTab" class="tab-panel performance-output-panel active" role="tabpanel" aria-labelledby="performanceOutputResultsTabButton">
-            <div id="performanceResultsSummary" class="test-results-summary">No performance run yet.</div>
+            
             <div id="performanceRunDetails" class="runner-execution-details performance-run-details">
               <p class="test-result-empty">No performance run yet.</p>
             </div>

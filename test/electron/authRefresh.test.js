@@ -589,6 +589,56 @@ test('missing refresh path errors list response keys without leaking response va
   assert.doesNotMatch(message, /secret-refresh/);
 });
 
+test('refresh manager wraps aborting send failures with refreshing auth context', async () => {
+  const manager = createAuthRefreshManager({
+    enabled: true,
+    mode: 'interval',
+    refreshBeforeRun: true,
+    request: {
+      id: 'access-token-request',
+      name: 'Get Access Token',
+      method: 'POST',
+      url: 'http://127.0.0.1:65535/token'
+    }
+  }, {
+    sendRequest: async () => {
+      const error = new Error('connect ECONNREFUSED 127.0.0.1:65535');
+      error.code = 'ECONNREFUSED';
+      throw error;
+    }
+  });
+
+  await assert.rejects(
+    manager.beforeRun({ environment: { id: 'env', name: 'Env', variables: [] } }),
+    (error) => {
+      assert.match(error.message, /^Refreshing Auth failed: connect ECONNREFUSED 127\.0\.0\.1:65535$/);
+      assert.equal(error.code, 'ECONNREFUSED');
+      return true;
+    }
+  );
+  assert.equal(manager.stats().lastError, 'connect ECONNREFUSED 127.0.0.1:65535');
+});
+
+test('refresh manager wraps missing auth request URL before a run starts', async () => {
+  const manager = createAuthRefreshManager({
+    enabled: true,
+    mode: 'interval',
+    refreshBeforeRun: true,
+    request: {
+      id: 'access-token-request',
+      name: 'Get Access Token',
+      method: 'POST',
+      url: ''
+    }
+  });
+
+  await assert.rejects(
+    manager.beforeRun({ environment: { id: 'env', name: 'Env', variables: [] } }),
+    /Refreshing Auth failed: Auth refresh request URL is required\./
+  );
+  assert.equal(manager.stats().lastError, 'Auth refresh request URL is required.');
+});
+
 function response(statusCode, payload) {
   return {
     statusCode,

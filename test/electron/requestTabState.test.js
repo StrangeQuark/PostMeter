@@ -553,7 +553,7 @@ test('request tab state refuses to open environment workspace runner and perform
     runners,
     performanceTests
   };
-  state.activeEnvironmentId = environments.at(-1).id;
+  state.activeEnvironmentEditorId = environments.at(-1).id;
   state.activeRunnerConfigId = runners.at(-1).id;
   state.activePerformanceTestId = performanceTests.at(-1).id;
   state.selectedWorkspaceId = workspaceItems.at(-1).id;
@@ -656,7 +656,7 @@ test('request tab state applies the open tab limit across request environment wo
     runners: [runner],
     performanceTests: [performanceTest]
   };
-  state.activeEnvironmentId = environment.id;
+  state.activeEnvironmentEditorId = environment.id;
   state.activeRunnerConfigId = runner.id;
   state.activePerformanceTestId = performanceTest.id;
   state.selectedWorkspaceId = workspaceItem.id;
@@ -755,7 +755,7 @@ test('request tab state snapshots environments and restores saved changes when c
     ]
   };
   state.activeMainPanel = 'environment';
-  state.activeEnvironmentId = 'environment-1';
+  state.activeEnvironmentEditorId = 'environment-1';
   state.openEnvironmentTabs = [
     { key: 'environment:environment-1', environmentId: 'environment-1', dirty: true, snapshot: JSON.stringify(state.workspace.environments[0]) }
   ];
@@ -786,7 +786,7 @@ test('request tab state snapshots environments and restores saved changes when c
   assert.equal(collected, 1);
   assert.equal(state.workspace.environments[0].name, 'Saved Environment');
   assert.deepEqual(state.openEnvironmentTabs, []);
-  assert.equal(state.activeEnvironmentId, 'none');
+  assert.equal(state.activeEnvironmentEditorId, 'none');
   assert.equal(renders, 1);
 });
 
@@ -800,7 +800,7 @@ test('request tab state keeps environment mode when discarding the last active u
   };
   state.activeSidebarPanel = 'environments';
   state.activeMainPanel = 'environment';
-  state.activeEnvironmentId = 'environment-1';
+  state.activeEnvironmentEditorId = 'environment-1';
   state.openEnvironmentTabs = [
     {
       key: 'environment:environment-1',
@@ -829,7 +829,7 @@ test('request tab state keeps environment mode when discarding the last active u
 
   assert.deepEqual(state.workspace.environments, []);
   assert.deepEqual(state.openEnvironmentTabs, []);
-  assert.equal(state.activeEnvironmentId, 'none');
+  assert.equal(state.activeEnvironmentEditorId, 'none');
   assert.equal(state.activeSidebarPanel, 'environments');
   assert.equal(state.activeMainPanel, 'environment');
   assert.equal(renders, 1);
