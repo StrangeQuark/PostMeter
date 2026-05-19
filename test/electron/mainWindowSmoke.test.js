@@ -5,13 +5,17 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const {
+  applyWindowShortcutAction,
+  bindKeyboardShortcutActions,
   bindNumpadZoomShortcuts,
   bindStartupLoadFailureHooks,
   captureUiSmokeDomState,
+  classifyKeyboardShortcutAction,
   classifyNumpadZoomShortcut,
   expectedDefaultUserDataRoot,
   isPathInside,
   nextNumpadZoomLevel,
+  nextZoomLevel,
   requiredPreloadApiSurface,
   redactUiSmokeText,
   runStartupSmokeProbe,
@@ -36,6 +40,105 @@ test('numpad zoom shortcut classifier only handles modified numpad zoom keys', (
   assert.equal(classifyNumpadZoomShortcut({ type: 'keyUp', control: true, code: 'NumpadAdd', key: '+' }), '');
   assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, alt: true, code: 'NumpadAdd', key: '+' }), '');
   assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, code: 'Equal', key: '+' }), '');
+});
+
+test('custom keyboard shortcut classifier treats normal and numpad keys as shortcut equivalents', () => {
+  assert.equal(classifyKeyboardShortcutAction({
+    type: 'keyDown',
+    control: true,
+    code: 'Numpad1',
+    key: '1'
+  }, { 'new-request': 'CmdOrCtrl+1' }), 'new-request');
+  assert.equal(classifyKeyboardShortcutAction({
+    type: 'keyDown',
+    control: true,
+    code: 'Digit1',
+    key: '1'
+  }, { 'new-request': 'CmdOrCtrl+1' }), 'new-request');
+  assert.equal(classifyKeyboardShortcutAction({
+    type: 'keyDown',
+    control: true,
+    code: 'NumpadAdd',
+    key: '+'
+  }, { 'new-request': 'CmdOrCtrl+1', 'zoom-in': 'CmdOrCtrl+=' }), 'zoom-in');
+  assert.equal(classifyKeyboardShortcutAction({
+    type: 'keyDown',
+    control: true,
+    code: 'Minus',
+    key: '-'
+  }, { 'zoom-out': 'CmdOrCtrl+Minus' }), 'zoom-out');
+  assert.equal(classifyKeyboardShortcutAction({
+    type: 'keyDown',
+    control: true,
+    code: 'KeyT',
+    key: 't'
+  }), 'new-runner');
+  assert.equal(classifyKeyboardShortcutAction({
+    type: 'keyDown',
+    control: true,
+    code: 'KeyQ',
+    key: 'q'
+  }), 'quit');
+  assert.equal(classifyKeyboardShortcutAction({
+    type: 'keyDown',
+    control: true,
+    code: 'KeyR',
+    key: 'r'
+  }), 'reload');
+});
+
+test('custom keyboard shortcut binding dispatches menu actions for normal and numpad equivalents', () => {
+  const webContents = new EventEmitter();
+  const dispatched = [];
+  let preventCount = 0;
+
+  bindKeyboardShortcutActions({ webContents }, {
+    getShortcuts: () => ({ 'new-request': 'CmdOrCtrl+1' }),
+    sendAction: (action) => dispatched.push(action)
+  });
+
+  webContents.emit('before-input-event', {
+    preventDefault: () => {
+      preventCount += 1;
+    }
+  }, { type: 'keyDown', control: true, code: 'Numpad1', key: '1' });
+
+  assert.equal(preventCount, 1);
+  assert.deepEqual(dispatched, ['new-request']);
+
+  webContents.emit('before-input-event', {
+    preventDefault: () => {
+      preventCount += 1;
+    }
+  }, {
+    type: 'keyDown',
+    control: true,
+    code: 'Digit1',
+    key: '1'
+  });
+  assert.equal(preventCount, 2);
+  assert.deepEqual(dispatched, ['new-request', 'new-request']);
+});
+
+test('custom keyboard shortcut binding skips dispatch while shortcut capture is active', () => {
+  const webContents = new EventEmitter();
+  webContents.__postmeterMenuShortcutsIgnored = true;
+  const dispatched = [];
+  let prevented = false;
+
+  bindKeyboardShortcutActions({ webContents }, {
+    getShortcuts: () => ({ 'new-request': 'CmdOrCtrl+1' }),
+    sendAction: (action) => dispatched.push(action)
+  });
+
+  webContents.emit('before-input-event', {
+    preventDefault: () => {
+      prevented = true;
+    }
+  }, { type: 'keyDown', control: true, code: 'Numpad1', key: '1' });
+
+  assert.equal(prevented, false);
+  assert.deepEqual(dispatched, []);
 });
 
 test('numpad zoom shortcut binding updates window zoom level', () => {
@@ -65,7 +168,93 @@ test('numpad zoom shortcut binding updates window zoom level', () => {
   assert.equal(zoomLevel, 0);
 });
 
+test('window shortcut actions handle configurable View menu actions in the main process', () => {
+  const calls = [];
+  let zoomLevel = 0;
+  let fullScreen = false;
+  const webContents = {
+    getZoomLevel: () => zoomLevel,
+    setZoomLevel: (level) => {
+      zoomLevel = level;
+      calls.push(`zoom:${level}`);
+    },
+    reload: () => calls.push('reload'),
+    reloadIgnoringCache: () => calls.push('force-reload'),
+    toggleDevTools: () => calls.push('toggle-devtools')
+  };
+  const mainWindow = {
+    webContents,
+    isFullScreen: () => fullScreen,
+    setFullScreen: (nextValue) => {
+      fullScreen = nextValue;
+      calls.push(`fullscreen:${nextValue}`);
+    }
+  };
+
+  assert.equal(applyWindowShortcutAction(mainWindow, 'zoom-in'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'zoom-out'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'zoom-reset'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'reload'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'force-reload'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'toggle-devtools'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'toggle-fullscreen'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'new-request'), false);
+
+  assert.deepEqual(calls, [
+    'zoom:0.5',
+    'zoom:0',
+    'zoom:0',
+    'reload',
+    'force-reload',
+    'toggle-devtools',
+    'fullscreen:true'
+  ]);
+});
+
+test('window shortcut actions handle configurable Application and Edit menu actions in the main process', () => {
+  const calls = [];
+  const webContents = {
+    undo: () => calls.push('undo'),
+    redo: () => calls.push('redo'),
+    cut: () => calls.push('cut'),
+    copy: () => calls.push('copy'),
+    paste: () => calls.push('paste'),
+    pasteAndMatchStyle: () => calls.push('paste-and-match-style'),
+    delete: () => calls.push('delete'),
+    selectAll: () => calls.push('select-all')
+  };
+  const mainWindow = {
+    webContents,
+    close: () => calls.push('quit')
+  };
+
+  assert.equal(applyWindowShortcutAction(mainWindow, 'undo'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'redo'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'cut'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'copy'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'paste'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'paste-and-match-style'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'delete'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'select-all'), true);
+  assert.equal(applyWindowShortcutAction(mainWindow, 'quit'), true);
+
+  assert.deepEqual(calls, [
+    'undo',
+    'redo',
+    'cut',
+    'copy',
+    'paste',
+    'paste-and-match-style',
+    'delete',
+    'select-all',
+    'quit'
+  ]);
+});
+
 test('numpad zoom levels clamp to supported bounds', () => {
+  assert.equal(nextZoomLevel(0, 'zoom-in'), 0.5);
+  assert.equal(nextZoomLevel(0, 'zoom-out'), -0.5);
+  assert.equal(nextZoomLevel(3, 'zoom-reset'), 0);
   assert.equal(nextNumpadZoomLevel(6, 'in'), 6);
   assert.equal(nextNumpadZoomLevel(-6, 'out'), -6);
   assert.equal(nextNumpadZoomLevel(0, 'in'), 0.5);
@@ -653,6 +842,7 @@ test('UI smoke DOM-state capture redacts active element ARIA metadata', async ()
 test('packaged startup smoke validates the full preload API contract list', () => {
   const api = requiredPreloadApiSurface().map((pathParts) => pathParts.join('.'));
   assert.ok(api.includes('app.versions'));
+  assert.ok(api.includes('app.setMenuShortcutsIgnored'));
   assert.ok(api.includes('workspace.load'));
   assert.ok(api.includes('request.send'));
   assert.ok(api.includes('runner.start'));

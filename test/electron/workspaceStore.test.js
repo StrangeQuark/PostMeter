@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { CURRENT_SCHEMA_VERSION } = require('../../src/core/models');
+const { CURRENT_SCHEMA_VERSION, normalizeSettings } = require('../../src/core/models');
 const { moveFileNoOverwrite, temporaryJsonPath, writeTextFileAtomic } = require('../../src/core/workspacePersistence');
 const {
   WorkspaceRecoveryError,
@@ -21,55 +21,7 @@ test('creates a default current-schema workspace when no file exists', async () 
 
   assert.equal(store.getWorkspacePath(), workspacePath);
   assert.equal(workspace.schemaVersion, CURRENT_SCHEMA_VERSION);
-  assert.deepEqual(workspace.settings, {
-    appearance: {
-      theme: 'system',
-      interfaceFont: 'default',
-      interfaceFontSize: 13,
-      editorFont: 'default',
-      editorFontSize: 13
-    },
-    diagnostics: {
-      logging: {
-        enabled: true,
-        level: 'info'
-      },
-      requestResponseLogging: {
-        urls: false,
-        headers: false,
-        cookies: false,
-        bodies: false,
-        protocolMessages: false,
-        scriptConsole: false,
-        payloadIdentifiers: false
-      }
-    },
-    sandbox: {
-      fileBindings: [],
-      packageCache: [],
-      trustedCapabilities: {
-        sendRequest: true,
-        cookies: true,
-        vault: true,
-        vaultGrants: {
-          workspace: false,
-          collections: [],
-          requests: [],
-          deniedCollections: [],
-          deniedRequests: []
-        }
-      }
-    },
-    editor: { lineNumbers: true, variableTooltipHints: true },
-    request: {
-      sslCertificateVerification: false,
-      caCertificatePath: '',
-      clientCertificates: []
-    },
-    tabs: { saveOnForceClose: false },
-    modals: { closeOnBackdropClick: false },
-    updates: { includePrereleases: false }
-  });
+  assert.deepEqual(workspace.settings, normalizeSettings());
   assert.deepEqual(workspace.collections, []);
   assert.deepEqual(workspace.environments, []);
   assert.deepEqual(workspace.cookies, []);
@@ -610,6 +562,44 @@ test('preserves an intentionally empty collection list on save and reload', asyn
   assert.equal(workspace.settings.loadTestPolicy, undefined);
   assert.deepEqual(workspace.collections, []);
   assert.deepEqual(workspace.cookies, []);
+});
+
+test('persists only workspace-local settings and strips app-wide shortcuts from workspace files', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-settings-split-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const store = new WorkspaceStore(workspacePath);
+
+  await store.save({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    settings: {
+      appearance: { theme: 'dark' },
+      shortcuts: { 'new-environment': 'CmdOrCtrl+8' },
+      updates: { includePrereleases: true },
+      request: {
+        sslCertificateVerification: false,
+        caCertificatePath: '/tmp/local-ca.pem'
+      }
+    },
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: []
+  });
+
+  const persisted = JSON.parse(await fs.readFile(workspacePath, 'utf8'));
+  assert.equal(Object.hasOwn(persisted, 'settings'), false);
+  assert.equal(Object.hasOwn(persisted.localsettings, 'shortcuts'), false);
+  assert.equal(Object.hasOwn(persisted.localsettings, 'appearance'), false);
+  assert.equal(Object.hasOwn(persisted.localsettings, 'updates'), false);
+  assert.equal(persisted.localsettings.request.sslCertificateVerification, false);
+  assert.equal(persisted.localsettings.request.caCertificatePath, '/tmp/local-ca.pem');
+
+  const { workspace } = await store.load();
+  assert.equal(workspace.settings.shortcuts['new-environment'], 'CmdOrCtrl+E');
+  assert.equal(workspace.settings.appearance.theme, 'system');
+  assert.equal(workspace.settings.updates.includePrereleases, false);
+  assert.equal(workspace.settings.request.sslCertificateVerification, false);
+  assert.equal(workspace.settings.request.caCertificatePath, '/tmp/local-ca.pem');
 });
 
 function legacyWorkspaceFixture(schemaVersion) {

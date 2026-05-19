@@ -48,6 +48,9 @@ const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
 const TYPOGRAPHY_FONT_SIZE_OPTIONS = Object.freeze([10, 13, 16, 19]);
+const KEYBOARD_SHORTCUTS = window.PostMeterKeyboardShortcuts || {};
+const KEYBOARD_SHORTCUT_ACTIONS = KEYBOARD_SHORTCUTS.KEYBOARD_SHORTCUT_ACTIONS || [];
+const DEFAULT_KEYBOARD_SHORTCUTS = KEYBOARD_SHORTCUTS.DEFAULT_KEYBOARD_SHORTCUTS || {};
 const DEFAULT_INTERFACE_FONT = 'default';
 const DEFAULT_INTERFACE_FONT_SIZE = 13;
 const DEFAULT_EDITOR_FONT = 'default';
@@ -829,6 +832,10 @@ function bindUi() {
     onNextTutorialStep: nextTutorialStep,
     onEndTutorial: endTutorial,
     onSelectSettingsSection: selectSettingsSection,
+    onKeyboardShortcutKeydown: handleKeyboardShortcutCapture,
+    onKeyboardShortcutCaptureModeChange: setKeyboardShortcutCaptureMode,
+    onResetKeyboardShortcut: resetKeyboardShortcutFromButton,
+    onResetAllKeyboardShortcuts: resetAllKeyboardShortcuts,
     onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
     onInterfaceTypographyChange: () => setInterfaceTypographyFromControls({ save: true }),
     onEditorTypographyChange: () => setEditorTypographyFromControls({ save: true }),
@@ -3156,6 +3163,9 @@ function showModal(modalId, cancelValue) {
 }
 
 function resolveActiveModal(value, options = {}) {
+  if (state.activeModalId === 'settingsModal') {
+    setKeyboardShortcutCaptureMode(false);
+  }
   const resolver = resolveModalState(state);
   if (resolver) {
     resolver(value);
@@ -5199,6 +5209,7 @@ async function openSettingsModal(section = activeSettingsSection) {
 function selectSettingsSection(section) {
   const normalizedSection = [
     'appearance',
+    'shortcuts',
     'tabs',
     'modals',
     'updates',
@@ -5225,12 +5236,14 @@ function selectSettingsSection(section) {
     panel.classList.toggle('active', isActive);
     panel.hidden = !isActive;
   }
+  setKeyboardShortcutCaptureMode(normalizedSection === 'shortcuts' && state.activeModalId === 'settingsModal');
 }
 
 function renderSettingsControls() {
   ensureSettings();
   renderThemeControl();
   renderTypographyControls();
+  renderKeyboardShortcutControls();
   if ($('saveOnForceCloseInput')) {
     $('saveOnForceCloseInput').checked = workspace.settings.tabs.saveOnForceClose === true;
   }
@@ -5262,10 +5275,198 @@ function renderSettingsControls() {
   renderVaultMetadataPanel();
 }
 
+function renderKeyboardShortcutControls() {
+  const list = $('keyboardShortcutsList');
+  if (!list || !Array.isArray(KEYBOARD_SHORTCUT_ACTIONS)) {
+    return;
+  }
+  const shortcuts = workspace.settings?.shortcuts || {};
+  let lastGroup = '';
+  const rows = [];
+  for (const action of KEYBOARD_SHORTCUT_ACTIONS) {
+    if (action.group !== lastGroup) {
+      lastGroup = action.group;
+      rows.push(`<div class="keyboard-shortcuts-group">${escapeHtmlText(lastGroup || 'Shortcuts')}</div>`);
+    }
+    const value = shortcuts[action.id] || '';
+    const defaultValue = DEFAULT_KEYBOARD_SHORTCUTS[action.id] || '';
+    const displayValue = keyboardShortcutDisplayText(value);
+    const defaultDisplayValue = keyboardShortcutDisplayText(defaultValue);
+    rows.push(`
+      <div class="keyboard-shortcut-row">
+        <div class="keyboard-shortcut-label">
+          <span>${escapeHtmlText(action.label)}</span>
+          <small>${defaultDisplayValue ? `Default: ${escapeHtmlText(defaultDisplayValue)}` : 'No default shortcut'}</small>
+        </div>
+        <input
+          class="keyboard-shortcut-input"
+          data-shortcut-action="${escapeHtmlAttribute(action.id)}"
+          value="${escapeHtmlAttribute(displayValue)}"
+          placeholder="Press shortcut"
+          readonly
+          aria-label="${escapeHtmlAttribute(`${action.label} shortcut`)}">
+        <button type="button" data-shortcut-reset="${escapeHtmlAttribute(action.id)}">Reset</button>
+      </div>
+    `);
+  }
+  list.innerHTML = rows.join('');
+}
+
+function keyboardShortcutDisplayText(shortcut) {
+  if (KEYBOARD_SHORTCUTS.formatShortcutForDisplay) {
+    return KEYBOARD_SHORTCUTS.formatShortcutForDisplay(shortcut);
+  }
+  return String(shortcut || '').replace(/\bCmdOrCtrl\b/g, 'Ctrl');
+}
+
+function handleKeyboardShortcutCapture(event) {
+  const input = event?.target?.closest?.('[data-shortcut-action]') || event?.target;
+  const actionId = input?.dataset?.shortcutAction || '';
+  if (!actionId) {
+    return;
+  }
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  if (event.key === 'Escape') {
+    input.blur?.();
+    return;
+  }
+  const shortcut = KEYBOARD_SHORTCUTS.recordShortcutFromEvent?.(event) || '';
+  if (!shortcut) {
+    return;
+  }
+  void setKeyboardShortcut(actionId, shortcut).finally(() => {
+    input.blur?.();
+  });
+}
+
+let keyboardShortcutCaptureModeActive = false;
+
+function setKeyboardShortcutCaptureMode(active) {
+  const nextActive = active === true;
+  if (keyboardShortcutCaptureModeActive === nextActive) {
+    return;
+  }
+  keyboardShortcutCaptureModeActive = nextActive;
+  const setIgnored = window.postmeter?.app?.setMenuShortcutsIgnored;
+  if (typeof setIgnored === 'function') {
+    Promise.resolve(setIgnored(nextActive)).catch((error) => {
+      const message = error?.message || String(error);
+      setStatus(`Keyboard shortcut capture failed: ${message}`);
+    });
+  }
+}
+
+function resetKeyboardShortcutFromButton(event) {
+  const button = event?.target?.closest?.('[data-shortcut-reset]');
+  const actionId = button?.dataset?.shortcutReset || '';
+  if (!actionId) {
+    return;
+  }
+  event.preventDefault?.();
+  const shortcut = DEFAULT_KEYBOARD_SHORTCUTS[actionId] || '';
+  void setKeyboardShortcut(actionId, shortcut, { reset: true });
+}
+
+async function resetAllKeyboardShortcuts() {
+  const confirmed = await confirmActionModal({
+    title: 'Reset Keyboard Shortcuts?',
+    message: 'Reset all keyboard shortcuts to their default values?',
+    confirmLabel: 'Reset All',
+    danger: true
+  });
+  if (!confirmed) {
+    setStatus('Keyboard shortcut reset cancelled.');
+    return false;
+  }
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.shortcuts = KEYBOARD_SHORTCUTS.normalizeKeyboardShortcuts
+    ? KEYBOARD_SHORTCUTS.normalizeKeyboardShortcuts(DEFAULT_KEYBOARD_SHORTCUTS)
+    : { ...DEFAULT_KEYBOARD_SHORTCUTS };
+  renderSettingsControls();
+  return saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    'Keyboard shortcuts reset.',
+    'Keyboard shortcut reset failed',
+    'Keyboard Shortcut Reset Failed'
+  );
+}
+
+async function setKeyboardShortcut(actionId, shortcut, options = {}) {
+  ensureSettings();
+  if (!KEYBOARD_SHORTCUT_ACTIONS.some((action) => action.id === actionId)) {
+    return false;
+  }
+  const normalizedShortcut = KEYBOARD_SHORTCUTS.normalizeShortcutText
+    ? KEYBOARD_SHORTCUTS.normalizeShortcutText(shortcut, DEFAULT_KEYBOARD_SHORTCUTS[actionId] || '')
+    : String(shortcut || '');
+  const duplicateAction = duplicateKeyboardShortcutAction(actionId, normalizedShortcut);
+  if (duplicateAction) {
+    const confirmed = await confirmActionModal({
+      title: 'Shortcut Already Assigned',
+      message: `${keyboardShortcutDisplayText(normalizedShortcut)} is already assigned to ${duplicateAction.label}. Continue to assign it to ${shortcutActionLabel(actionId)} and clear ${duplicateAction.label}'s shortcut?`,
+      confirmLabel: 'Continue',
+      cancelLabel: 'Cancel'
+    });
+    if (!confirmed) {
+      setStatus('Keyboard shortcut change cancelled.');
+      renderSettingsControls();
+      return false;
+    }
+  }
+  const previousSettings = cloneWorkspaceSettings();
+  if (duplicateAction) {
+    workspace.settings.shortcuts[duplicateAction.id] = '';
+  }
+  workspace.settings.shortcuts[actionId] = normalizedShortcut;
+  renderSettingsControls();
+  const action = KEYBOARD_SHORTCUT_ACTIONS.find((candidate) => candidate.id === actionId);
+  const successMessage = duplicateAction
+    ? `${action.label} shortcut updated. ${duplicateAction.label} shortcut cleared.`
+    : options.reset === true
+      ? `${action.label} shortcut reset.`
+      : `${action.label} shortcut updated.`;
+  return saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    successMessage,
+    'Keyboard shortcut save failed',
+    'Keyboard Shortcut Save Failed'
+  );
+}
+
+function shortcutActionLabel(actionId) {
+  return KEYBOARD_SHORTCUT_ACTIONS.find((candidate) => candidate.id === actionId)?.label || 'this action';
+}
+
+function duplicateKeyboardShortcutAction(actionId, shortcut) {
+  const normalizedShortcut = KEYBOARD_SHORTCUTS.normalizeShortcutText
+    ? KEYBOARD_SHORTCUTS.normalizeShortcutText(shortcut)
+    : String(shortcut || '');
+  if (!normalizedShortcut) {
+    return null;
+  }
+  for (const action of KEYBOARD_SHORTCUT_ACTIONS) {
+    if (action.id === actionId) {
+      continue;
+    }
+    const otherShortcut = KEYBOARD_SHORTCUTS.normalizeShortcutText
+      ? KEYBOARD_SHORTCUTS.normalizeShortcutText(workspace.settings?.shortcuts?.[action.id])
+      : String(workspace.settings?.shortcuts?.[action.id] || '');
+    if (otherShortcut && otherShortcut === normalizedShortcut) {
+      return action;
+    }
+  }
+  return null;
+}
+
 function ensureSettings() {
   workspace.runners = normalizeWorkspaceRunners(workspace.runners);
   workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
+  workspace.settings.shortcuts = KEYBOARD_SHORTCUTS.normalizeKeyboardShortcuts
+    ? KEYBOARD_SHORTCUTS.normalizeKeyboardShortcuts(workspace.settings.shortcuts)
+    : { ...DEFAULT_KEYBOARD_SHORTCUTS, ...(workspace.settings.shortcuts || {}) };
   workspace.settings.appearance ||= {};
   workspace.settings.tabs ||= { saveOnForceClose: false };
   workspace.settings.tabs.saveOnForceClose = workspace.settings.tabs.saveOnForceClose === true;

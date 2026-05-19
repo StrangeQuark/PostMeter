@@ -1671,6 +1671,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
       requestResponseLogging: { urls: true }
     },
     editor: { lineNumbers: false, variableTooltipHints: false },
+    shortcuts: { 'new-environment': 'CmdOrCtrl+8' },
     request: {
       sslCertificateVerification: false,
       caCertificatePath: '/tmp/settings-ca.pem',
@@ -1692,6 +1693,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
   assert.equal(savedSettings.diagnostics.requestResponseLogging.bodies, false);
   assert.equal(savedSettings.editor.lineNumbers, false);
   assert.equal(savedSettings.editor.variableTooltipHints, false);
+  assert.equal(savedSettings.shortcuts['new-environment'], 'CmdOrCtrl+8');
   assert.equal(savedSettings.request.sslCertificateVerification, false);
   assert.equal(savedSettings.request.caCertificatePath, '/tmp/settings-ca.pem');
   assert.equal(savedSettings.request.clientCertificates[0].id, 'settings-cert');

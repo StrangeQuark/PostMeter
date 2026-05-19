@@ -9,6 +9,10 @@ const {
   positionToolbarMenu
 } = require('../../src/renderer/rendererBootstrap');
 const { setContextMenuPeerCloser, showContextMenu } = require('../../src/renderer/contextMenu');
+const {
+  formatShortcutForDisplay,
+  recordShortcutFromEvent
+} = require('../../src/core/keyboardShortcuts');
 
 function selectOptionValues(source, id) {
   const match = source.match(new RegExp(`<select id="${id}">([\\s\\S]*?)</select>`));
@@ -728,6 +732,18 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="settingsModal"[^>]+settings-modal/);
   assert.match(indexSource, /id="settingsAppearanceButton"[^>]+data-settings-section="appearance"/);
   assert.match(indexSource, /id="settingsModalsButton"[^>]+data-settings-section="modals"/);
+  assert.match(indexSource, /id="settingsShortcutsButton"[^>]+data-settings-section="shortcuts"/);
+  assert.match(indexSource, /id="settingsShortcutsSection"[\s\S]*id="keyboardShortcutsList"/);
+  assert.match(indexSource, /id="resetAllKeyboardShortcutsButton"[^>]*>Reset All<\/button>/);
+  assert.match(rendererSource, /onResetAllKeyboardShortcuts: resetAllKeyboardShortcuts/);
+  assert.match(rendererSource, /onKeyboardShortcutCaptureModeChange: setKeyboardShortcutCaptureMode/);
+  assert.match(rendererSource, /function resetAllKeyboardShortcuts\(\)/);
+  assert.match(rendererSource, /function setKeyboardShortcutCaptureMode\(active\)/);
+  assert.match(rendererSource, /setKeyboardShortcutCaptureMode\(normalizedSection === 'shortcuts' && state\.activeModalId === 'settingsModal'\)/);
+  assert.match(rendererSource, /Reset all keyboard shortcuts to their default values\?/);
+  assert.match(rendererSource, /const input = event\?\.target\?\.closest\?\.\('\[data-shortcut-action\]'\) \|\| event\?\.target;/);
+  assert.match(rendererSource, /setMenuShortcutsIgnored/);
+  assert.match(indexSource, /src="\.\.\/core\/keyboardShortcuts\.js"/);
   assert.match(indexSource, /id="themeDarkButton"[^>]+data-theme-option="dark"/);
   assert.match(indexSource, /id="interfaceFontSelect"/);
   assert.match(indexSource, /id="interfaceFontSelect"[\s\S]*value="system-mono"/);
@@ -1507,6 +1523,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'tabs',
     'modals',
     'updates',
+    'shortcuts',
     'scripts',
     'certificates',
     'vault',
@@ -1530,6 +1547,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['editorFontSelect', createElement({ tagName: 'SELECT' })],
     ['editorFontSizeInput', createElement({ tagName: 'SELECT' })],
     ['resetEditorTypographyButton', createElement()],
+    ['resetAllKeyboardShortcutsButton', createElement()],
     ['showEditorLineNumbersInput', createElement({ tagName: 'INPUT' })],
     ['showVariableTooltipHintsInput', createElement({ tagName: 'INPUT' })],
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
@@ -1578,6 +1596,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     onEditorTypographyChange: () => calls.push('editor-typography'),
     onResetInterfaceTypography: () => calls.push('reset-interface-typography'),
     onResetEditorTypography: () => calls.push('reset-editor-typography'),
+    onResetAllKeyboardShortcuts: () => calls.push('reset-all-shortcuts'),
     onShowEditorLineNumbersChange: () => calls.push('line-numbers'),
     onShowVariableTooltipHintsChange: () => calls.push('variable-tooltip-hints'),
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
@@ -1605,12 +1624,13 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   elements.get('editorFontSelect').dispatch('change');
   elements.get('editorFontSizeInput').dispatch('change');
   elements.get('resetEditorTypographyButton').dispatch('click');
+  elements.get('resetAllKeyboardShortcutsButton').dispatch('click');
   elements.get('showEditorLineNumbersInput').dispatch('change');
   elements.get('showVariableTooltipHintsInput').dispatch('change');
   elements.get('saveOnForceCloseInput').dispatch('change');
   settingsButtons.find((button) => button.dataset.settingsSection === 'modals').dispatch('click');
   elements.get('closeModalsOnBackdropClickInput').dispatch('change');
-  for (const section of ['updates', 'scripts', 'certificates', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
+  for (const section of ['updates', 'shortcuts', 'scripts', 'certificates', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
     settingsButtons.find((button) => button.dataset.settingsSection === section).dispatch('click');
   }
   elements.get('includePrereleasesInput').dispatch('change');
@@ -1642,12 +1662,14 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'editor-typography',
     'editor-typography',
     'reset-editor-typography',
+    'reset-all-shortcuts',
     'line-numbers',
     'variable-tooltip-hints',
     'save-on-force-close',
     'section:modals',
     'close-modals-on-backdrop',
     'section:updates',
+    'section:shortcuts',
     'section:scripts',
     'section:certificates',
     'section:vault',
@@ -1674,6 +1696,63 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'script-capability',
     'resolve:true',
     'resolve:true'
+  ]);
+});
+
+test('renderer bootstrap delegates keyboard shortcut capture and reset actions', () => {
+  const calls = [];
+  const documentListeners = new Map();
+  const docObject = {};
+  const shortcutInput = {
+    dataset: { shortcutAction: 'new-request' },
+    value: '',
+    matches: (selector) => selector === '[data-shortcut-action]',
+    closest: (selector) => (selector === '[data-shortcut-action]' ? shortcutInput : null)
+  };
+  const resetButton = {
+    matches: () => false,
+    closest: (selector) => (selector === '[data-shortcut-reset]' ? resetButton : null)
+  };
+  docObject.getElementById = () => null;
+  docObject.querySelectorAll = () => [];
+  docObject.addEventListener = (name, handler) => {
+    if (!documentListeners.has(name)) {
+      documentListeners.set(name, []);
+    }
+    documentListeners.get(name).push(handler);
+  };
+
+  bindUi({
+    doc: docObject,
+    windowObject: { addEventListener() {} },
+    onKeyboardShortcutKeydown: (event) => {
+      const input = event.target?.closest?.('[data-shortcut-action]') || event.target;
+      const shortcut = recordShortcutFromEvent(event);
+      input.value = formatShortcutForDisplay(shortcut);
+      calls.push(`shortcut:${input.dataset.shortcutAction}:${shortcut}:${input.value}`);
+    },
+    onKeyboardShortcutCaptureModeChange: (active) => calls.push(`capture:${active}`),
+    onResetKeyboardShortcut: () => calls.push('reset-shortcut')
+  });
+
+  for (const handler of documentListeners.get('keydown') || []) {
+    handler({
+      currentTarget: docObject,
+      target: shortcutInput,
+      ctrlKey: true,
+      code: 'Numpad1',
+      key: '1',
+      preventDefault() {},
+      stopPropagation() {}
+    });
+  }
+  for (const handler of documentListeners.get('click') || []) {
+    handler({ target: resetButton });
+  }
+
+  assert.deepEqual(calls, [
+    'shortcut:new-request:CmdOrCtrl+1:Ctrl+1',
+    'reset-shortcut'
   ]);
 });
 

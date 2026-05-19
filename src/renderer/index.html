@@ -2700,6 +2700,7 @@
       <div class="settings-layout">
         <nav class="settings-sidebar" role="tablist" aria-label="Settings categories" aria-orientation="vertical">
           <button id="settingsAppearanceButton" class="settings-nav-button active" type="button" role="tab" data-settings-section="appearance" aria-selected="true" aria-controls="settingsAppearanceSection">Appearance</button>
+          <button id="settingsShortcutsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="shortcuts" aria-selected="false" aria-controls="settingsShortcutsSection">Keyboard Shortcuts</button>
           <button id="settingsTabsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="tabs" aria-selected="false" aria-controls="settingsTabsSection">Tabs</button>
           <button id="settingsModalsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="modals" aria-selected="false" aria-controls="settingsModalsSection">Modals</button>
           <button id="settingsUpdatesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="updates" aria-selected="false" aria-controls="settingsUpdatesSection">Updates</button>
@@ -2801,6 +2802,18 @@
                 <input id="showVariableTooltipHintsInput" type="checkbox">
                 <span>Show variable tooltip shortcut hints</span>
               </label>
+            </div>
+          </section>
+
+          <section id="settingsShortcutsSection" class="settings-section" role="tabpanel" aria-labelledby="settingsShortcutsButton" hidden>
+            <h3>Keyboard Shortcuts</h3>
+            <p class="settings-help">Click a shortcut field, then press the keys to assign it. Number row and numpad keys are treated as equivalent.</p>
+            <div class="settings-card">
+              <div class="settings-card-title-row">
+                <div class="settings-card-title">Shortcuts</div>
+                <button id="resetAllKeyboardShortcutsButton" class="danger-button" type="button">Reset All</button>
+              </div>
+              <div id="keyboardShortcutsList" class="keyboard-shortcuts-list"></div>
             </div>
           </section>
 
@@ -3472,6 +3485,7 @@
   <script src="authRefreshAutoDetectModel.js"></script>
   <script src="rendererBootstrap.js"></script>
   <script src="vaultPromptQueue.js"></script>
+  <script src="../core/keyboardShortcuts.js"></script>
   <script src="rendererWorkflows.js"></script>
   <script src="runResultFormatting.js"></script>
   <script src="vendor/markdown-it.min.js"></script>

@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   assertClipboardTextPayload,
+  assertMenuShortcutsIgnoredPayload,
   registerAppIpc,
   releaseChannelForVersion,
   safeExternalUrl
@@ -23,6 +24,7 @@ test('app IPC registers stable app channels', () => {
   assert.deepEqual([...handlers.keys()].sort(), [
     'app:check-updates',
     'app:open-external',
+    'app:set-menu-shortcuts-ignored',
     'app:versions',
     'clipboard:writeText'
   ]);
@@ -30,6 +32,41 @@ test('app IPC registers stable app channels', () => {
   assert.equal(versions.app, '0.0.0-test');
   assert.equal(versions.releaseChannel, 'stable');
   assert.equal(versions.platform, process.platform);
+});
+
+test('app IPC toggles menu shortcut ignore mode for the sender webContents', async () => {
+  const handlers = new Map();
+  const calls = [];
+  const sender = {
+    setIgnoreMenuShortcuts(value) {
+      calls.push(value);
+    }
+  };
+  registerAppIpc({
+    app: { getVersion: () => '0.0.0-test' },
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    shell: { openExternal: async () => true }
+  });
+
+  assert.equal(await handlers.get('app:set-menu-shortcuts-ignored')({ sender }, true), true);
+  assert.equal(sender.__postmeterMenuShortcutsIgnored, true);
+  assert.deepEqual(calls, [true]);
+
+  assert.equal(await handlers.get('app:set-menu-shortcuts-ignored')({ sender }, false), true);
+  assert.equal(sender.__postmeterMenuShortcutsIgnored, false);
+  assert.deepEqual(calls, [true, false]);
+
+  assert.equal(await handlers.get('app:set-menu-shortcuts-ignored')({}, true), false);
+});
+
+test('app IPC validates menu shortcut ignore payloads', () => {
+  assert.doesNotThrow(() => assertMenuShortcutsIgnoredPayload(true));
+  assert.doesNotThrow(() => assertMenuShortcutsIgnoredPayload(false));
+  assert.throws(() => assertMenuShortcutsIgnoredPayload('true'), /menu shortcut ignored flag must be a boolean/);
 });
 
 test('app IPC writes clipboard text through the main process', async () => {

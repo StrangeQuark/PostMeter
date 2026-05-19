@@ -636,7 +636,12 @@ test('accepts structurally valid IPC payloads', () => {
     },
     tabs: { saveOnForceClose: true },
     modals: { closeOnBackdropClick: true },
-    updates: { includePrereleases: true }
+    updates: { includePrereleases: true },
+    shortcuts: {
+      'new-request': 'CmdOrCtrl+1',
+      'zoom-in': 'CmdOrCtrl+Plus',
+      'zoom-out': 'CmdOrCtrl+Minus'
+    }
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSaveResultPayload({
     settings: {
@@ -833,6 +838,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { requestResponseLogging: { headers: 'yes' } } }), /settings.diagnostics.requestResponseLogging.headers must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { logging: { enabled: 'yes' } } }), /settings.diagnostics.logging.enabled must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { uploadUrl: 'https:\/\/example.test' } }), /settings.diagnostics.uploadUrl is not allowed/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ shortcuts: { unknown: 'CmdOrCtrl+X' } }), /settings.shortcuts.unknown is not allowed/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ shortcuts: { 'new-request': false } }), /settings.shortcuts.new-request must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ sandbox: { trustedCapabilities: { vaultGrants: { requests: 'all' } } } }), /settings.sandbox.trustedCapabilities.vaultGrants.requests must be an array/);
   assert.throws(() => assertWorkspaceSettingsSaveResultPayload({ settings: { updates: { includePrereleases: 'yes' } } }), /result.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);

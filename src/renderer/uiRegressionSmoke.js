@@ -586,6 +586,7 @@
     await assertEditorLineNumbersSettingSmoke();
     await assertVariableTooltipHintsSettingSmoke();
     await assertSettingsPanelNavigationSmoke();
+    await assertKeyboardShortcutSettingsSmoke();
     await assertCertificateSettingsPanelSmoke();
     await assertTabsModalsUpdatesSettingSmoke();
     await assertScriptCapabilitiesSettingSmoke();
@@ -619,6 +620,7 @@
       ['tabs', 'Tabs'],
       ['modals', 'Modals'],
       ['updates', 'Updates'],
+      ['shortcuts', 'Keyboard Shortcuts'],
       ['scripts', 'Scripts'],
       ['certificates', 'Certificates'],
       ['vault', 'Vault'],
@@ -647,6 +649,102 @@
         );
       }
     }
+  }
+
+  async function assertKeyboardShortcutSettingsSmoke() {
+    selectSettingsSection('shortcuts');
+    await nextPaint();
+    const input = document.querySelector('[data-shortcut-action="new-environment"]');
+    assertUiSmoke(input, 'Keyboard Shortcuts panel should render editable shortcut inputs.');
+    input.focus();
+    await nextPaint();
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: '8',
+      code: 'Numpad8'
+    }));
+    await waitForUiSmoke(
+      () => workspace.settings?.shortcuts?.['new-environment'] === 'CmdOrCtrl+8'
+        && document.querySelector('[data-shortcut-action="new-environment"]')?.value === 'Ctrl+8',
+      'Keyboard shortcut input should capture and persist a numpad shortcut.',
+      3000,
+      global
+    );
+    await waitForStatusIncludes(
+      'New Environment shortcut updated.',
+      'Keyboard shortcut save should complete before testing duplicate assignment.'
+    );
+
+    const requestInput = document.querySelector('[data-shortcut-action="new-request"]');
+    assertUiSmoke(requestInput, 'Keyboard Shortcuts panel should render the New Request shortcut input.');
+    requestInput.focus();
+    await nextPaint();
+    requestInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: '8',
+      code: 'Digit8'
+    }));
+    await nextPaint();
+    await waitForUiSmoke(
+      () => !$('confirmActionModal').hidden
+        && $('confirmActionModalTitle').textContent.includes('Shortcut Already Assigned')
+        && $('confirmActionModalMessage').textContent.includes('New Environment'),
+      'Duplicate keyboard shortcut assignment should show a conflict warning.',
+      3000,
+      global
+    );
+    $('cancelConfirmActionButton').click();
+    await waitForUiSmoke(
+      () => workspace.settings?.shortcuts?.['new-environment'] === 'CmdOrCtrl+8'
+        && workspace.settings?.shortcuts?.['new-request'] === 'CmdOrCtrl+N',
+      'Cancelling duplicate shortcut assignment should leave both shortcuts unchanged.',
+      3000,
+      global
+    );
+
+    document.querySelector('[data-shortcut-action="new-request"]')?.focus();
+    await nextPaint();
+    document.querySelector('[data-shortcut-action="new-request"]')?.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: '8',
+      code: 'Digit8'
+    }));
+    await waitForUiSmoke(
+      () => !$('confirmActionModal').hidden
+        && $('confirmActionModalTitle').textContent.includes('Shortcut Already Assigned'),
+      'Duplicate keyboard shortcut assignment should be retryable after cancel.',
+      3000,
+      global
+    );
+    $('confirmActionButton').click();
+    await waitForUiSmoke(
+      () => workspace.settings?.shortcuts?.['new-environment'] === ''
+        && workspace.settings?.shortcuts?.['new-request'] === 'CmdOrCtrl+8'
+        && document.querySelector('[data-shortcut-action="new-environment"]')?.value === ''
+        && document.querySelector('[data-shortcut-action="new-request"]')?.value === 'Ctrl+8',
+      'Continuing duplicate shortcut assignment should clear the previous shortcut and save the new shortcut.',
+      3000,
+      global
+    );
+
+    $('resetAllKeyboardShortcutsButton').click();
+    await nextPaint();
+    assertUiSmoke(!$('confirmActionModal').hidden, 'Reset All shortcuts should show a warning confirmation.');
+    assertUiSmoke($('confirmActionModalTitle').textContent.includes('Reset Keyboard Shortcuts'), 'Reset All shortcuts confirmation should use the reset warning title.');
+    $('confirmActionButton').click();
+    await waitForUiSmoke(
+      () => workspace.settings?.shortcuts?.['new-environment'] === 'CmdOrCtrl+E'
+        && document.querySelector('[data-shortcut-action="new-environment"]')?.value === 'Ctrl+E',
+      'Reset All shortcuts should restore default shortcut values.',
+      3000,
+      global
+    );
   }
 
   async function assertCertificateSettingsPanelSmoke() {

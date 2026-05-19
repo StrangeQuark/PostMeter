@@ -197,6 +197,23 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.app-set-menu-shortcuts-ignored",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `app:set-menu-shortcuts-ignored`: Shortcut editor focus can temporarily suppress native menu accelerators so user-assigned shortcuts are captured in the renderer.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/appIpc.js",
+        "electron/preload.js",
+        "electron/mainWindow.js"
+      ],
+      "tests": [
+        "test/electron/appIpc.test.js",
+        "test/electron/mainWindowSmoke.test.js",
+        "test/electron/rendererBootstrap.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.app-versions",
       "area": "IPC channel",
       "target": "renderer-to-main channel `app:versions`: Version metadata query with no renderer payload.",

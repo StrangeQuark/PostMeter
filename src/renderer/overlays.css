@@ -328,6 +328,66 @@
   text-transform: uppercase;
 }
 
+.settings-card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.keyboard-shortcuts-list {
+  display: grid;
+  gap: 8px;
+}
+
+.keyboard-shortcuts-group {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: calc(var(--ui-font-size) * 1.08);
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.keyboard-shortcuts-group:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.keyboard-shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 260px) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.keyboard-shortcut-label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.keyboard-shortcut-label small {
+  color: var(--muted);
+  font-size: var(--ui-font-size-xs);
+}
+
+.keyboard-shortcut-input {
+  width: 100%;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .keyboard-shortcut-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .settings-help {
   margin: 0;
   color: var(--muted);

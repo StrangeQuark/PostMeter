@@ -85,6 +85,22 @@ test('preload exposes the PostMeter API only in the main frame', () => {
   assert.equal(loadPreloadHarness({ isMainFrame: false }).api, undefined);
 });
 
+test('preload exposes menu shortcut ignore toggling through the app API', async () => {
+  const harness = loadPreloadHarness();
+  assert.deepEqual(await harness.api.app.setMenuShortcutsIgnored(true), {
+    channel: 'app:set-menu-shortcuts-ignored',
+    args: [true]
+  });
+  assert.deepEqual(await harness.api.app.setMenuShortcutsIgnored(false), {
+    channel: 'app:set-menu-shortcuts-ignored',
+    args: [false]
+  });
+  assert.deepEqual(await harness.api.app.setMenuShortcutsIgnored('true'), {
+    channel: 'app:set-menu-shortcuts-ignored',
+    args: [false]
+  });
+});
+
 function loadPreloadHarness(options = {}) {
   const listeners = new Map();
   const exposed = {};

@@ -15,6 +15,10 @@ const {
   redactRequestResponseAliasesInText,
   redactTransportReferences
 } = require('../src/core/diagnostics');
+const {
+  eventMatchesShortcut,
+  normalizeKeyboardShortcuts
+} = require('../src/core/keyboardShortcuts');
 
 const DEFAULT_SMOKE_ARTIFACT_TIMEOUT_MILLIS = 2_000;
 const UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS = 90_000;
@@ -31,6 +35,16 @@ const UI_SMOKE_COOKIE_HEADER_SAFE_CONTEXT_BOUNDARY_PATTERN = new RegExp(String.r
 const NUMPAD_ZOOM_STEP_LEVEL = 0.5;
 const MIN_ZOOM_LEVEL = -6;
 const MAX_ZOOM_LEVEL = 6;
+const EDIT_SHORTCUT_METHODS = Object.freeze({
+  undo: 'undo',
+  redo: 'redo',
+  cut: 'cut',
+  copy: 'copy',
+  paste: 'paste',
+  'paste-and-match-style': 'pasteAndMatchStyle',
+  delete: 'delete',
+  'select-all': 'selectAll'
+});
 
 function createMainWindow(app, options = {}) {
   const env = options.env || process.env;
@@ -59,7 +73,10 @@ function createMainWindow(app, options = {}) {
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
-  bindNumpadZoomShortcuts(mainWindow);
+  bindKeyboardShortcutActions(mainWindow, {
+    getShortcuts: options.getKeyboardShortcuts,
+    sendAction: options.sendShortcutAction
+  });
   bindSmokeHooks(app, mainWindow, env);
   const handleLoadFailure = bindStartupLoadFailureHooks(app, mainWindow, env);
   const loadPromise = mainWindow.loadURL(rendererUrl);
@@ -80,59 +97,139 @@ function bindNavigationGuards(mainWindow, trustedRendererUrl) {
   });
 }
 
-function bindNumpadZoomShortcuts(mainWindow) {
+function bindKeyboardShortcutActions(mainWindow, options = {}) {
   const webContents = mainWindow?.webContents;
   if (!webContents || typeof webContents.on !== 'function') {
     return;
   }
   webContents.on('before-input-event', (event, input) => {
-    const shortcut = classifyNumpadZoomShortcut(input);
-    if (!shortcut) {
+    if (webContents.__postmeterMenuShortcutsIgnored === true) {
+      return;
+    }
+    const action = classifyKeyboardShortcutAction(input, options.getShortcuts?.());
+    if (!action) {
       return;
     }
     event?.preventDefault?.();
-    applyNumpadZoomShortcut(webContents, shortcut);
+    if (applyWindowShortcutAction(mainWindow, action)) {
+      return;
+    }
+    options.sendAction?.(action);
   });
 }
 
-function classifyNumpadZoomShortcut(input = {}) {
+function bindNumpadZoomShortcuts(mainWindow) {
+  bindKeyboardShortcutActions(mainWindow);
+}
+
+function classifyKeyboardShortcutAction(input = {}, shortcuts = {}) {
   if (input.type && input.type !== 'keyDown') {
     return '';
   }
-  if ((!input.control && !input.meta) || input.alt) {
+  const normalizedShortcuts = normalizeKeyboardShortcuts(shortcuts);
+  for (const [action, shortcut] of Object.entries(normalizedShortcuts)) {
+    if (eventMatchesShortcut(input, shortcut, process.platform)
+      || eventMatchesShortcut(input, shortcut, 'darwin')) {
+      return action;
+    }
+  }
+  return '';
+}
+
+function classifyNumpadZoomShortcut(input = {}) {
+  if (!String(input.code || '').startsWith('Numpad')) {
     return '';
   }
-  if (input.code === 'NumpadAdd') {
+  const action = classifyKeyboardShortcutAction(input);
+  if (action === 'zoom-in') {
     return 'in';
   }
-  if (input.code === 'NumpadSubtract') {
+  if (action === 'zoom-out') {
     return 'out';
   }
-  if (input.code === 'Numpad0') {
+  if (action === 'zoom-reset') {
     return 'reset';
   }
   return '';
 }
 
-function applyNumpadZoomShortcut(webContents, shortcut) {
+function applyWindowShortcutAction(mainWindow, action) {
+  const webContents = mainWindow?.webContents;
+  const editMethod = EDIT_SHORTCUT_METHODS[action];
+  if (editMethod) {
+    if (typeof webContents?.[editMethod] === 'function') {
+      webContents[editMethod]();
+      return true;
+    }
+    return false;
+  }
+  if (action === 'quit') {
+    if (typeof mainWindow?.close === 'function') {
+      mainWindow.close();
+      return true;
+    }
+    return false;
+  }
+  if (action === 'zoom-in' || action === 'zoom-out' || action === 'zoom-reset') {
+    applyZoomShortcut(webContents, action);
+    return true;
+  }
+  if (action === 'reload') {
+    webContents?.reload?.();
+    return true;
+  }
+  if (action === 'force-reload') {
+    webContents?.reloadIgnoringCache?.();
+    return true;
+  }
+  if (action === 'toggle-devtools') {
+    if (typeof webContents?.toggleDevTools === 'function') {
+      webContents.toggleDevTools();
+      return true;
+    }
+    if (typeof webContents?.isDevToolsOpened === 'function' && webContents.isDevToolsOpened()) {
+      webContents.closeDevTools?.();
+    } else {
+      webContents?.openDevTools?.();
+    }
+    return true;
+  }
+  if (action === 'toggle-fullscreen') {
+    if (typeof mainWindow?.setFullScreen === 'function') {
+      mainWindow.setFullScreen(!mainWindow.isFullScreen?.());
+    }
+    return true;
+  }
+  return false;
+}
+
+function applyZoomShortcut(webContents, shortcut) {
   if (!webContents || typeof webContents.setZoomLevel !== 'function') {
     return;
   }
-  if (shortcut === 'reset') {
+  if (shortcut === 'zoom-reset' || shortcut === 'reset') {
     webContents.setZoomLevel(0);
     return;
   }
   const currentLevel = Number(webContents.getZoomLevel?.() || 0);
-  webContents.setZoomLevel(nextNumpadZoomLevel(currentLevel, shortcut));
+  webContents.setZoomLevel(nextZoomLevel(currentLevel, shortcut));
+}
+
+function applyNumpadZoomShortcut(webContents, shortcut) {
+  applyZoomShortcut(webContents, shortcut);
+}
+
+function nextZoomLevel(currentLevel, shortcut) {
+  const numericLevel = Number.isFinite(Number(currentLevel)) ? Number(currentLevel) : 0;
+  if (shortcut === 'zoom-reset' || shortcut === 'reset') {
+    return 0;
+  }
+  const delta = shortcut === 'zoom-in' || shortcut === 'in' ? NUMPAD_ZOOM_STEP_LEVEL : -NUMPAD_ZOOM_STEP_LEVEL;
+  return Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, numericLevel + delta));
 }
 
 function nextNumpadZoomLevel(currentLevel, shortcut) {
-  const numericLevel = Number.isFinite(Number(currentLevel)) ? Number(currentLevel) : 0;
-  if (shortcut === 'reset') {
-    return 0;
-  }
-  const delta = shortcut === 'in' ? NUMPAD_ZOOM_STEP_LEVEL : -NUMPAD_ZOOM_STEP_LEVEL;
-  return Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, numericLevel + delta));
+  return nextZoomLevel(currentLevel, shortcut);
 }
 
 function isAllowedRendererNavigation(targetUrl, trustedRendererUrl = createAppRendererUrl()) {
@@ -447,6 +544,7 @@ function requiredPreloadApiSurface() {
     ['app', 'versions'],
     ['app', 'checkForUpdates'],
     ['app', 'openExternal'],
+    ['app', 'setMenuShortcutsIgnored'],
     ['app', 'onMenuAction'],
     ['session', 'load'],
     ['session', 'save'],
@@ -985,12 +1083,16 @@ function nativeImageHasVariance(image) {
 }
 
 module.exports = {
+  applyWindowShortcutAction,
   bindNavigationGuards,
+  bindKeyboardShortcutActions,
   bindNumpadZoomShortcuts,
   bindStartupLoadFailureHooks,
+  classifyKeyboardShortcutAction,
   classifyNumpadZoomShortcut,
   createMainWindow,
   expectedDefaultUserDataRoot,
+  nextZoomLevel,
   nextNumpadZoomLevel,
   captureUiSmokeDomState,
   isAllowedRendererNavigation,

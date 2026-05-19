@@ -17,7 +17,11 @@ const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('./appIpc');
 const { createTrustedIpcMain } = require('./ipcSecurity');
 const { createOAuthFlowController } = require('./oauthFlows');
-const { createMainWindow, writeStartupSmokeFailureArtifacts } = require('./mainWindow');
+const {
+  applyWindowShortcutAction,
+  createMainWindow,
+  writeStartupSmokeFailureArtifacts
+} = require('./mainWindow');
 const {
   startupFailureDiagnosticEvent,
   workspaceRecoveryDiagnosticEvent
@@ -103,7 +107,9 @@ async function runSandboxRuntimeValidation() {
 
 function createWindow() {
   mainWindow = createMainWindow(app, {
-    preloadPath: path.join(__dirname, 'preload.js')
+    preloadPath: path.join(__dirname, 'preload.js'),
+    getKeyboardShortcuts: () => workspace?.settings?.shortcuts || {},
+    sendShortcutAction: sendMenuAction
   });
 }
 
@@ -112,6 +118,13 @@ function sendMenuAction(action) {
     return;
   }
   mainWindow.webContents.send('menu:action', action);
+}
+
+function handleViewMenuAction(action) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  applyWindowShortcutAction(mainWindow, action);
 }
 
 function fileOperationResult(result) {
@@ -124,8 +137,10 @@ function refreshApplicationMenu() {
     appName: app.name,
     includePrereleases: workspace?.settings?.updates?.includePrereleases === true,
     saveOnForceClose: workspace?.settings?.tabs?.saveOnForceClose === true,
+    shortcuts: workspace?.settings?.shortcuts || {},
     platform: process.platform,
     sendMenuAction,
+    handleViewMenuAction,
     openExternal: (url) => shell.openExternal(safeExternalUrl(url).toString())
   });
 }
@@ -217,23 +232,25 @@ app.on('activate', () => {
 async function saveWorkspace(nextWorkspace) {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const nextSettings = await saveLocalSettings(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
-  const savedWorkspace = await workspaceStore.save({
-    ...nextWorkspace,
-    settings: nextSettings,
-    localsettings: normalizeWorkspaceLocalSettings(nextSettings)
-  });
+  const savedWorkspace = await workspaceStore.save(workspacePayloadForPersistence(nextWorkspace, nextSettings));
   return hydrateWorkspaceSettings(savedWorkspace);
 }
 
 function saveWorkspaceSync(nextWorkspace) {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const nextSettings = saveLocalSettingsSync(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
-  const savedWorkspace = workspaceStore.saveSync({
-    ...nextWorkspace,
-    settings: nextSettings,
-    localsettings: normalizeWorkspaceLocalSettings(nextSettings)
-  });
+  const savedWorkspace = workspaceStore.saveSync(workspacePayloadForPersistence(nextWorkspace, nextSettings));
   return hydrateWorkspaceSettings(savedWorkspace);
+}
+
+function workspacePayloadForPersistence(nextWorkspace, nextSettings) {
+  const { settings: _runtimeSettings, ...workspaceWithoutRuntimeSettings } = nextWorkspace && typeof nextWorkspace === 'object'
+    ? nextWorkspace
+    : {};
+  return {
+    ...workspaceWithoutRuntimeSettings,
+    localsettings: normalizeWorkspaceLocalSettings(nextSettings)
+  };
 }
 
 function hydrateWorkspaceSettings(nextWorkspace, workspaceId = workspaceStore?.getWorkspaceId?.() || '') {

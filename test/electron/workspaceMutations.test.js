@@ -567,11 +567,14 @@ test('applies workspace settings saves without touching request or environment d
 
   const updatedWorkspace = applyWorkspaceSettingsSaveToWorkspace(workspace, {
     appearance: { theme: 'dark' },
+    shortcuts: { 'new-environment': 'CmdOrCtrl+8' },
     updates: { includePrereleases: true }
   });
 
   assert.equal(workspace.settings.updates.includePrereleases, false);
   assert.equal(updatedWorkspace.settings.appearance.theme, 'dark');
+  assert.equal(updatedWorkspace.settings.shortcuts['new-environment'], 'CmdOrCtrl+8');
+  assert.equal(updatedWorkspace.settings.shortcuts['new-request'], 'CmdOrCtrl+N');
   assert.equal(updatedWorkspace.settings.updates.includePrereleases, true);
   assert.equal(updatedWorkspace.collections[0].requests[0].id, 'request-1');
   assert.equal(updatedWorkspace.environments[0].id, 'environment-1');

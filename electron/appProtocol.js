@@ -22,6 +22,7 @@ const ALLOWED_CORE_ASSETS = new Set([
   '/src/core/authModel.js',
   '/src/core/cookieModel.js',
   '/src/core/csvVariables.js',
+  '/src/core/keyboardShortcuts.js',
   '/src/core/payloadSchemas.js',
   '/src/core/resultCapturePolicy.js',
   '/src/core/requestQueryModel.js'
