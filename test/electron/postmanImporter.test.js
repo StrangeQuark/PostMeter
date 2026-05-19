@@ -296,6 +296,38 @@ test('imports and exports Postman request settings protocol profile controls', (
   assert.equal(profile.httpVersion, 'http1');
 });
 
+test('preserves Postman raw URL query text while importing structured query params', () => {
+  const rawUrl = 'http://localhost:6001/api/auth/user/search-users?query=test@t.com';
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Raw URL Query',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'Search Users',
+      request: {
+        method: 'GET',
+        url: {
+          raw: rawUrl,
+          protocol: 'http',
+          host: ['localhost'],
+          port: '6001',
+          path: ['api', 'auth', 'user', 'search-users'],
+          query: [{ key: 'query', value: 'test@t.com' }]
+        }
+      }
+    }]
+  });
+
+  const request = collection.requests[0];
+  assert.equal(request.url, rawUrl);
+  assert.deepEqual(request.queryParams, [{ enabled: true, key: 'query', value: 'test@t.com' }]);
+
+  const exported = exportPostmanCollection(collection);
+  assert.equal(exported.item[0].request.url.raw, rawUrl);
+  assert.deepEqual(exported.item[0].request.url.query, [{ key: 'query', value: 'test@t.com', disabled: false }]);
+});
+
 test('imports and exports OAuth 2.0 Postman controls', () => {
   const authRequestParams = [
     { key: 'prompt', value: 'consent', enabled: true }

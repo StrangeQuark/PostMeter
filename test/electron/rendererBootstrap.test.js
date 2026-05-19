@@ -5,7 +5,8 @@ const test = require('node:test');
 const {
   bindUi,
   closeToolbarMenus,
-  initializeRenderer
+  initializeRenderer,
+  positionToolbarMenu
 } = require('../../src/renderer/rendererBootstrap');
 const { setContextMenuPeerCloser, showContextMenu } = require('../../src/renderer/contextMenu');
 
@@ -253,6 +254,13 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerCsvVariablesButton"/);
   assert.match(indexSource, /id="runnerToggleCsvVariablesButton"/);
   assert.match(indexSource, /id="runnerEditCsvVariablesButton"/);
+  assert.match(chromeSource, /\.csv-variables-menu-group \.toolbar-menu\s*\{[\s\S]*right:\s*auto;[\s\S]*left:\s*0;/);
+  assert.match(chromeSource, /\.toolbar-menu\.toolbar-menu-fixed\s*\{[\s\S]*position:\s*fixed;[\s\S]*z-index:\s*1050;/);
+  assert.match(bootstrapSource, /function shouldUseFixedToolbarMenu\(menu\)/);
+  assert.match(bootstrapSource, /menu\.closest\?\.\('\.result-export-menu-group'\)/);
+  assert.match(bootstrapSource, /function positionFixedToolbarMenu/);
+  assert.match(bootstrapSource, /menu\.style\.maxHeight = `\$\{availableHeight\}px`;/);
+  assert.match(rendererSource, /positionToolbarMenu:\s*positionRendererToolbarMenu/);
   assert.match(indexSource, /id="runnerAuthRefreshMenu"[\s\S]*id="runnerToggleAuthRefreshButton"[\s\S]*Turn On[\s\S]*id="runnerEditAuthRefreshButton"[\s\S]*Edit/);
   assert.match(indexSource, /id="performanceAuthRefreshMenu"[\s\S]*id="performanceToggleAuthRefreshButton"[\s\S]*Turn On[\s\S]*id="performanceEditAuthRefreshButton"[\s\S]*Edit/);
   assert.doesNotMatch(indexSource, /Refresh auth during run/);
@@ -279,6 +287,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.capture-settings-panel\.auth-refresh-panel[\s\S]*max-height:\s*calc\(100vh - 24px\)/);
   assert.doesNotMatch(chromeSource, /\.capture-settings-panel\.auth-refresh-panel[\s\S]{0,180}max-height:\s*min\(560px/);
   assert.match(rendererSource, /classList\.toggle\('auth-refresh-active', active\)/);
+  assert.match(rendererSource, /function bindAuthRefreshDisclosurePlacement\(\)/);
+  assert.match(rendererSource, /querySelectorAll\('\.auth-refresh-refresh-token, \.auth-refresh-advanced'\)/);
+  assert.match(rendererSource, /details\.addEventListener\('toggle', \(\) => positionVisibleAuthRefreshPanel\(prefix\)\)/);
+  assert.match(rendererSource, /panel\.style\.maxHeight = `\$\{availableHeight\}px`;/);
   assert.match(rendererSource, /autoSelectRefreshingAuthAccessTokenForOwner\('performance', test, previousAuthRefresh, test\.authRefresh\)/);
   assert.match(rendererSource, /performanceRefreshingAuthAccessTokenAvailable\(auth, authRefresh\)/);
   assert.match(rendererSource, /syncPerformanceRefreshingAuthTypeLock\(auth, authRefresh\)/);
@@ -730,9 +742,30 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="collectionDescriptionPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestSslCertificateVerificationInput"/);
   assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestCookieJarEnabledInput"/);
+  assert.match(indexSource, /title="Adds a generated PostMeter-Token header with a new random value/);
+  assert.match(indexSource, /title="Verify SSL certificates when sending this request/);
+  assert.match(indexSource, /title="Choose the HTTP protocol version for this request/);
+  assert.match(indexSource, /title="Automatically follow HTTP 3xx responses as redirects/);
+  assert.match(indexSource, /title="Encode the URL path, query parameters, and authentication fields/);
+  assert.match(editorPanelsSource, /#collectionScriptsTab\.active,[\s\S]*#performanceScriptsTab\.active\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;/);
+  assert.match(editorPanelsSource, /\.field\.script-field\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;/);
+  assert.match(editorPanelsSource, /\.script-field > \.code-editor\s*\{[\s\S]*min-height:\s*0;[\s\S]*height:\s*100%;/);
+  assert.match(editorPanelsSource, /\.field\.script-field textarea\s*\{[\s\S]*min-height:\s*0;[\s\S]*resize:\s*none;/);
+  assert.doesNotMatch(editorPanelsSource, /\.request-settings-grid\s*\{[\s\S]{0,160}margin-inline:\s*auto;/);
+  assert.match(chromeSource, /\.performance-main-panel\s*\{[\s\S]*overflow-y:\s*auto;/);
+  assert.match(chromeSource, /\.performance-request-section\s*\{[\s\S]*overflow-y:\s*auto;/);
+  assert.match(chromeSource, /\.performance-request-editor\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*min-height:\s*260px;[\s\S]*overflow:\s*hidden;/);
+  assert.match(chromeSource, /\.performance-request-editor > \.tab-panel\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*overflow:\s*auto;/);
+  assert.match(chromeSource, /\.performance-request-editor > #performanceScriptsTab\.active\s*\{[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/);
+  assert.match(chromeSource, /\.environment-main-panel,\s*\.workspace-main-panel\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*auto;/);
+  assert.match(chromeSource, /\.environment-main-header,\s*\.workspace-main-header\s*\{[\s\S]*flex-wrap:\s*wrap;/);
+  assert.match(chromeSource, /\.environment-main-header \.environment-actions,\s*\.workspace-main-header \.workspace-actions\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*max-width:\s*100%;/);
+  assert.match(chromeSource, /\.environment-table \.kv-row\s*\{[\s\S]*grid-template-columns:\s*28px minmax\(0, 1fr\) minmax\(0, 1\.35fr\) max-content;/);
   assert.doesNotMatch(indexSource, /id="requestCookiesTabButton"/);
   assert.match(indexSource, /id="performanceSettingsTab"[\s\S]*id="performanceRequestSslCertificateVerificationInput"/);
   assert.match(indexSource, /id="performanceSettingsTab"[\s\S]*id="performanceRequestCookieJarEnabledInput"/);
+  assert.match(indexSource, /<span>Test Type<\/span>\s*<select id="performanceTypeSelect"/);
+  assert.doesNotMatch(indexSource, /<span>Type<\/span>\s*<select id="performanceTypeSelect"/);
   assert.doesNotMatch(indexSource, /id="performanceRequestCookiesTabButton"/);
   assert.doesNotMatch(indexSource, /id="requestCaCertificatePathInput"/);
   assert.match(rendererSource, /request:\s*\[[^\]]*'requestSettingsTab'[^\]]*\]/);
@@ -809,6 +842,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.toolbar-group button\.primary\s*\{[^}]*background:\s*var\(--primary\);/s);
   assert.match(chromeSource, /\.toolbar-menu:has\(\.toolbar-submenu-row:hover\) \.toolbar-submenu-row:not\(:hover\) \.toolbar-submenu/);
   assert.match(chromeSource, /\.toolbar-submenu::before/);
+  assert.match(chromeSource, /\.request-tab-item\s*\{[\s\S]*overflow:\s*hidden;/);
+  assert.match(chromeSource, /\.request-tab-button\s*\{[\s\S]*overflow:\s*hidden;/);
+  assert.match(chromeSource, /\.request-tab-method\s*\{[\s\S]*flex:\s*0 0 auto;[\s\S]*text-overflow:\s*ellipsis;/);
   assert.match(chromeSource, /\.request-tab-method\.method-post/);
   assert.match(chromeSource, /\.request-tab-method\.entity-collection/);
   assert.match(chromeSource, /\.request-tab-method\.entity-runner/);
@@ -1395,6 +1431,66 @@ test('renderer bootstrap flips nested toolbar menus upward when lower panel spac
     }
   });
   assert.equal(manageMenu.classList.contains('toolbar-menu-open-up'), false);
+});
+
+test('renderer bootstrap positions result export menus as fixed viewport overlays', () => {
+  const menuClasses = new Set();
+  const menu = {
+    hidden: false,
+    offsetHeight: 220,
+    offsetWidth: 180,
+    scrollHeight: 220,
+    style: {},
+    getBoundingClientRect: () => ({ height: 220, width: 180 }),
+    closest: (selector) => (selector === '.result-export-menu-group' ? {} : null),
+    classList: {
+      add: (name) => menuClasses.add(name),
+      remove: (name) => menuClasses.delete(name),
+      contains: (name) => menuClasses.has(name)
+    }
+  };
+  const button = {
+    attributes: {},
+    getBoundingClientRect: () => ({ bottom: 710, right: 390, top: 680 }),
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    }
+  };
+
+  positionToolbarMenu(button, menu, { windowObject: { innerHeight: 720, innerWidth: 400 } });
+
+  assert.equal(menu.classList.contains('toolbar-menu-fixed'), true);
+  assert.equal(menu.classList.contains('toolbar-menu-open-up'), true);
+  assert.equal(menu.style.right, 'auto');
+  assert.equal(menu.style.bottom, 'auto');
+  assert.equal(menu.style.overflowY, 'auto');
+  assert.match(menu.style.maxHeight, /^\d+px$/);
+  const left = Number.parseFloat(menu.style.left);
+  const top = Number.parseFloat(menu.style.top);
+  assert.ok(left >= 8);
+  assert.ok(left + 180 <= 392);
+  assert.ok(top >= 8);
+  assert.ok(top + 220 <= 712);
+
+  closeToolbarMenus({
+    querySelectorAll(selector) {
+      if (selector === '.toolbar-menu') {
+        return [menu];
+      }
+      if (selector === '.menu-trigger') {
+        return [button];
+      }
+      return [];
+    }
+  });
+
+  assert.equal(menu.hidden, true);
+  assert.equal(menu.classList.contains('toolbar-menu-fixed'), false);
+  assert.equal(menu.classList.contains('toolbar-menu-open-up'), false);
+  assert.equal(menu.style.left, '');
+  assert.equal(menu.style.top, '');
+  assert.equal(menu.style.maxHeight, '');
+  assert.equal(button.attributes['aria-expanded'], 'false');
 });
 
 test('renderer bootstrap binds settings menu, category, theme, and setting controls', () => {

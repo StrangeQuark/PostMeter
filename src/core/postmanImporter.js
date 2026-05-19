@@ -3,6 +3,7 @@ const { BODY_TYPES, collectionModel, folderModel, keyValue, requestModel } = req
 const { normalizeAuth } = require('./authModel');
 const { collectSandboxPackageReferencesFromCollection } = require('./sandboxPackageCache');
 const { clientCertificateMatchesUrl, findMatchingClientCertificate } = require('./tlsSettings');
+const { urlQueryMatchesPairs } = require('./requestQueryModel');
 const {
   mergePostmanProtocolProfiles,
   postmanRequestSettingsFromProtocolProfile,
@@ -274,8 +275,7 @@ function importUrl(urlNode) {
     return '';
   }
   if (typeof urlNode.raw === 'string' && urlNode.raw.trim()) {
-    const queryStart = urlNode.raw.indexOf('?');
-    return queryStart >= 0 ? urlNode.raw.slice(0, queryStart) : urlNode.raw;
+    return urlNode.raw;
   }
   const protocol = urlNode.protocol || 'https';
   const host = Array.isArray(urlNode.host) ? urlNode.host.join('.') : '';
@@ -1474,7 +1474,7 @@ function exportPostmanUrl(request, rawUrl) {
 function buildRawUrlWithQuery(request) {
   const url = request?.url || '';
   const queryParams = (request?.queryParams || []).filter((pair) => pair?.key);
-  if (!queryParams.length) {
+  if (!queryParams.length || urlQueryMatchesPairs(url, queryParams)) {
     return url;
   }
   const separator = url.includes('?') ? '&' : '?';

@@ -635,19 +635,52 @@ textarea.code-editor-input.has-openable-variable-hover {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
   gap: 10px;
+  align-items: stretch;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
-.script-field textarea {
-  min-height: 220px;
+.field.script-field {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#collectionScriptsTab.active,
+#folderScriptsTab.active,
+#scriptsTab.active,
+#performanceScriptsTab.active {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.script-field > .code-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.collection-script-field > .code-editor {
+  min-height: 0;
+}
+
+.field.script-field textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   font-family: var(--mono);
   font-size: var(--editor-font-size);
   line-height: 1.45;
-  resize: vertical;
+  resize: none;
 }
 
-.collection-script-field textarea {
-  min-height: 320px;
+.field.script-field textarea.code-editor-input {
+  height: 100%;
+}
+
+.field.collection-script-field textarea {
+  min-height: 0;
 }
 
 #collectionOverviewTab.active,

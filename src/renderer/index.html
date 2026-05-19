@@ -306,8 +306,8 @@
         <div id="headersTab" class="tab-panel" role="tabpanel" aria-labelledby="requestHeadersTabButton">
           <div class="table-actions">
             <button id="addHeaderButton">Add Header</button>
-            <label class="inline-toggle headers-auto-toggle">
-              <input id="sendPostMeterTokenInput" type="checkbox">
+            <label class="inline-toggle headers-auto-toggle" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
+              <input id="sendPostMeterTokenInput" type="checkbox" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
               <span>PostMeter token</span>
             </label>
             <label class="inline-toggle headers-auto-toggle">
@@ -1055,39 +1055,39 @@
           <div class="request-settings-grid">
             <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
               <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-              <label class="settings-toggle">
-                <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting>
+              <label class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+                <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                 <span>Enable SSL certificate verification</span>
               </label>
             </section>
             <section class="request-settings-section" aria-labelledby="requestCookiesSettingsTitle">
               <h3 id="requestCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
               <div class="cookie-jar-options">
-                <label class="field inline">
-                  <input id="requestCookieJarEnabledInput" type="checkbox">
+                <label class="field inline" title="Send matching cookies from the cookie jar with this request.">
+                  <input id="requestCookieJarEnabledInput" type="checkbox" title="Send matching cookies from the cookie jar with this request.">
                   <span>Use cookie jar for this request</span>
                 </label>
-                <label class="field inline">
-                  <input id="requestCookieJarStoreInput" type="checkbox">
+                <label class="field inline" title="Save Set-Cookie values from this response into the cookie jar.">
+                  <input id="requestCookieJarStoreInput" type="checkbox" title="Save Set-Cookie values from this response into the cookie jar.">
                   <span>Store response cookies</span>
                 </label>
-                <label class="field inline">
-                  <input id="filterCookiesToRequestHostInput" type="checkbox">
+                <label class="field inline" title="Limit the cookie manager view to cookies matching the current request host.">
+                  <input id="filterCookiesToRequestHostInput" type="checkbox" title="Limit the cookie manager view to cookies matching the current request host.">
                   <span>Active host only</span>
                 </label>
-                <button id="openRequestCookiesButton" type="button">Open Cookies</button>
+                <button id="openRequestCookiesButton" type="button" title="Open the shared cookie manager.">Open Cookies</button>
               </div>
             </section>
             <section class="request-settings-section" aria-labelledby="requestProtocolSettingsTitle">
               <h3 id="requestProtocolSettingsTitle" class="request-settings-title">Protocol</h3>
               <div class="request-settings-columns">
-                <label class="field"><span>HTTP version</span><select id="requestHttpVersionSelect" data-request-setting>
+                <label class="field" title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version."><span>HTTP version</span><select id="requestHttpVersionSelect" data-request-setting title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version.">
                   <option value="auto">Auto</option>
                   <option value="http1">HTTP/1.x</option>
                   <option value="http2">HTTP/2</option>
                 </select></label>
-                <label class="settings-toggle">
-                  <input id="requestStrictHttpParserInput" type="checkbox" data-request-setting>
+                <label class="settings-toggle" title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                  <input id="requestStrictHttpParserInput" type="checkbox" data-request-setting title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
                   <span>Enable strict HTTP parser</span>
                 </label>
               </div>
@@ -1095,40 +1095,40 @@
             <section class="request-settings-section" aria-labelledby="requestRedirectSettingsTitle">
               <h3 id="requestRedirectSettingsTitle" class="request-settings-title">Redirects</h3>
               <div class="request-settings-columns">
-                <label class="settings-toggle">
-                  <input id="requestFollowRedirectsInput" type="checkbox" data-request-setting>
+                <label class="settings-toggle" title="Automatically follow HTTP 3xx responses as redirects.">
+                  <input id="requestFollowRedirectsInput" type="checkbox" data-request-setting title="Automatically follow HTTP 3xx responses as redirects.">
                   <span>Automatically follow redirects</span>
                 </label>
-                <label class="field compact-number-field"><span>Maximum number of redirects</span><input id="requestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-request-setting></label>
-                <label class="settings-toggle">
-                  <input id="requestFollowOriginalHttpMethodInput" type="checkbox" data-request-setting>
+                <label class="field compact-number-field" title="Set the maximum number of redirects PostMeter can follow for this request."><span>Maximum number of redirects</span><input id="requestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-request-setting title="Set the maximum number of redirects PostMeter can follow for this request."></label>
+                <label class="settings-toggle" title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                  <input id="requestFollowOriginalHttpMethodInput" type="checkbox" data-request-setting title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
                   <span>Follow original HTTP method</span>
                 </label>
-                <label class="settings-toggle">
-                  <input id="requestFollowAuthorizationHeaderInput" type="checkbox" data-request-setting>
+                <label class="settings-toggle" title="Retain the Authorization header when a redirect points to a different host.">
+                  <input id="requestFollowAuthorizationHeaderInput" type="checkbox" data-request-setting title="Retain the Authorization header when a redirect points to a different host.">
                   <span>Follow Authorization header</span>
                 </label>
-                <label class="settings-toggle">
-                  <input id="requestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-request-setting>
+                <label class="settings-toggle" title="Remove the Referer header from redirected requests.">
+                  <input id="requestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-request-setting title="Remove the Referer header from redirected requests.">
                   <span>Remove referer header on redirect</span>
                 </label>
               </div>
             </section>
             <section class="request-settings-section" aria-labelledby="requestUrlSettingsTitle">
               <h3 id="requestUrlSettingsTitle" class="request-settings-title">URL</h3>
-              <label class="settings-toggle">
-                <input id="requestEncodeUrlAutomaticallyInput" type="checkbox" data-request-setting>
+              <label class="settings-toggle" title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                <input id="requestEncodeUrlAutomaticallyInput" type="checkbox" data-request-setting title="Encode the URL path, query parameters, and authentication fields before sending the request.">
                 <span>Encode URL automatically</span>
               </label>
             </section>
             <section class="request-settings-section" aria-labelledby="requestTlsHandshakeSettingsTitle">
               <h3 id="requestTlsHandshakeSettingsTitle" class="request-settings-title">TLS handshake</h3>
-              <label class="settings-toggle">
-                <input id="requestUseServerCipherSuiteInput" type="checkbox" data-request-setting>
+              <label class="settings-toggle" title="Use the server's preferred cipher suite order during the TLS handshake.">
+                <input id="requestUseServerCipherSuiteInput" type="checkbox" data-request-setting title="Use the server's preferred cipher suite order during the TLS handshake.">
                 <span>Use server cipher suite during handshake</span>
               </label>
-              <label class="field"><span>TLS/SSL protocols disabled during handshake</span><input id="requestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-request-setting></label>
-              <label class="field"><span>Cipher suite selection</span><textarea id="requestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-request-setting></textarea></label>
+              <label class="field" title="Comma-separate TLS or SSL protocol versions to disable during the handshake."><span>TLS/SSL protocols disabled during handshake</span><input id="requestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-request-setting title="Comma-separate TLS or SSL protocol versions to disable during the handshake."></label>
+              <label class="field" title="Specify the cipher suite order to use for TLS connections."><span>Cipher suite selection</span><textarea id="requestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-request-setting title="Specify the cipher suite order to use for TLS connections."></textarea></label>
             </section>
           </div>
         </div>
@@ -1590,7 +1590,7 @@
           </div>
           <div id="performanceEditorSection" class="performance-editor-section performance-plan-section">
                     <label class="field compact-number-field performance-type-select-field">
-                      <span>Type</span>
+                      <span>Test Type</span>
                       <select id="performanceTypeSelect" aria-label="Performance test type">
                         <option value="diagnosis">Full Endpoint Diagnosis</option>
                         <option value="latency">Latency</option>
@@ -1724,8 +1724,8 @@
             <div id="performanceHeadersTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestHeadersTabButton">
               <div class="table-actions">
                 <button id="addPerformanceHeaderButton" type="button">Add Header</button>
-                <label class="inline-toggle headers-auto-toggle">
-                  <input id="performanceSendPostMeterTokenInput" type="checkbox">
+                <label class="inline-toggle headers-auto-toggle" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
+                  <input id="performanceSendPostMeterTokenInput" type="checkbox" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
                   <span>PostMeter token</span>
                 </label>
                 <label class="inline-toggle headers-auto-toggle">
@@ -2464,39 +2464,39 @@
               <div class="request-settings-grid">
                 <section class="request-settings-section" aria-labelledby="performanceCertificatesSettingsTitle">
                   <h3 id="performanceCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-                  <label class="settings-toggle">
-                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox" data-performance-request-setting>
+                  <label class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox" data-performance-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                     <span>Enable SSL certificate verification</span>
                   </label>
                 </section>
                 <section class="request-settings-section" aria-labelledby="performanceCookiesSettingsTitle">
                   <h3 id="performanceCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
                   <div class="cookie-jar-options">
-                    <label class="field inline">
-                      <input id="performanceRequestCookieJarEnabledInput" type="checkbox">
+                    <label class="field inline" title="Send matching cookies from the cookie jar with this request.">
+                      <input id="performanceRequestCookieJarEnabledInput" type="checkbox" title="Send matching cookies from the cookie jar with this request.">
                       <span>Use cookie jar for this request</span>
                     </label>
-                    <label class="field inline">
-                      <input id="performanceRequestCookieJarStoreInput" type="checkbox">
+                    <label class="field inline" title="Save Set-Cookie values from this response into the cookie jar.">
+                      <input id="performanceRequestCookieJarStoreInput" type="checkbox" title="Save Set-Cookie values from this response into the cookie jar.">
                       <span>Store response cookies</span>
                     </label>
-                    <label class="field inline">
-                      <input id="performanceFilterCookiesToRequestHostInput" type="checkbox">
+                    <label class="field inline" title="Limit the cookie manager view to cookies matching the current request host.">
+                      <input id="performanceFilterCookiesToRequestHostInput" type="checkbox" title="Limit the cookie manager view to cookies matching the current request host.">
                       <span>Active host only</span>
                     </label>
-                    <button id="openPerformanceCookiesButton" type="button">Open Cookies</button>
+                    <button id="openPerformanceCookiesButton" type="button" title="Open the shared cookie manager.">Open Cookies</button>
                   </div>
                 </section>
                 <section class="request-settings-section" aria-labelledby="performanceProtocolSettingsTitle">
                   <h3 id="performanceProtocolSettingsTitle" class="request-settings-title">Protocol</h3>
                   <div class="request-settings-columns">
-                    <label class="field"><span>HTTP version</span><select id="performanceRequestHttpVersionSelect" data-performance-request-setting>
+                    <label class="field" title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version."><span>HTTP version</span><select id="performanceRequestHttpVersionSelect" data-performance-request-setting title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version.">
                       <option value="auto">Auto</option>
                       <option value="http1">HTTP/1.x</option>
                       <option value="http2">HTTP/2</option>
                     </select></label>
-                    <label class="settings-toggle">
-                      <input id="performanceRequestStrictHttpParserInput" type="checkbox" data-performance-request-setting>
+                    <label class="settings-toggle" title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                      <input id="performanceRequestStrictHttpParserInput" type="checkbox" data-performance-request-setting title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
                       <span>Enable strict HTTP parser</span>
                     </label>
                   </div>
@@ -2504,40 +2504,40 @@
                 <section class="request-settings-section" aria-labelledby="performanceRedirectSettingsTitle">
                   <h3 id="performanceRedirectSettingsTitle" class="request-settings-title">Redirects</h3>
                   <div class="request-settings-columns">
-                    <label class="settings-toggle">
-                      <input id="performanceRequestFollowRedirectsInput" type="checkbox" data-performance-request-setting>
+                    <label class="settings-toggle" title="Automatically follow HTTP 3xx responses as redirects.">
+                      <input id="performanceRequestFollowRedirectsInput" type="checkbox" data-performance-request-setting title="Automatically follow HTTP 3xx responses as redirects.">
                       <span>Automatically follow redirects</span>
                     </label>
-                    <label class="field compact-number-field"><span>Maximum number of redirects</span><input id="performanceRequestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-performance-request-setting></label>
-                    <label class="settings-toggle">
-                      <input id="performanceRequestFollowOriginalHttpMethodInput" type="checkbox" data-performance-request-setting>
+                    <label class="field compact-number-field" title="Set the maximum number of redirects PostMeter can follow for this request."><span>Maximum number of redirects</span><input id="performanceRequestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-performance-request-setting title="Set the maximum number of redirects PostMeter can follow for this request."></label>
+                    <label class="settings-toggle" title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                      <input id="performanceRequestFollowOriginalHttpMethodInput" type="checkbox" data-performance-request-setting title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
                       <span>Follow original HTTP method</span>
                     </label>
-                    <label class="settings-toggle">
-                      <input id="performanceRequestFollowAuthorizationHeaderInput" type="checkbox" data-performance-request-setting>
+                    <label class="settings-toggle" title="Retain the Authorization header when a redirect points to a different host.">
+                      <input id="performanceRequestFollowAuthorizationHeaderInput" type="checkbox" data-performance-request-setting title="Retain the Authorization header when a redirect points to a different host.">
                       <span>Follow Authorization header</span>
                     </label>
-                    <label class="settings-toggle">
-                      <input id="performanceRequestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-performance-request-setting>
+                    <label class="settings-toggle" title="Remove the Referer header from redirected requests.">
+                      <input id="performanceRequestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-performance-request-setting title="Remove the Referer header from redirected requests.">
                       <span>Remove referer header on redirect</span>
                     </label>
                   </div>
                 </section>
                 <section class="request-settings-section" aria-labelledby="performanceUrlSettingsTitle">
                   <h3 id="performanceUrlSettingsTitle" class="request-settings-title">URL</h3>
-                  <label class="settings-toggle">
-                    <input id="performanceRequestEncodeUrlAutomaticallyInput" type="checkbox" data-performance-request-setting>
+                  <label class="settings-toggle" title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                    <input id="performanceRequestEncodeUrlAutomaticallyInput" type="checkbox" data-performance-request-setting title="Encode the URL path, query parameters, and authentication fields before sending the request.">
                     <span>Encode URL automatically</span>
                   </label>
                 </section>
                 <section class="request-settings-section" aria-labelledby="performanceTlsHandshakeSettingsTitle">
                   <h3 id="performanceTlsHandshakeSettingsTitle" class="request-settings-title">TLS handshake</h3>
-                  <label class="settings-toggle">
-                    <input id="performanceRequestUseServerCipherSuiteInput" type="checkbox" data-performance-request-setting>
+                  <label class="settings-toggle" title="Use the server's preferred cipher suite order during the TLS handshake.">
+                    <input id="performanceRequestUseServerCipherSuiteInput" type="checkbox" data-performance-request-setting title="Use the server's preferred cipher suite order during the TLS handshake.">
                     <span>Use server cipher suite during handshake</span>
                   </label>
-                  <label class="field"><span>TLS/SSL protocols disabled during handshake</span><input id="performanceRequestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-performance-request-setting></label>
-                  <label class="field"><span>Cipher suite selection</span><textarea id="performanceRequestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-performance-request-setting></textarea></label>
+                  <label class="field" title="Comma-separate TLS or SSL protocol versions to disable during the handshake."><span>TLS/SSL protocols disabled during handshake</span><input id="performanceRequestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-performance-request-setting title="Comma-separate TLS or SSL protocol versions to disable during the handshake."></label>
+                  <label class="field" title="Specify the cipher suite order to use for TLS connections."><span>Cipher suite selection</span><textarea id="performanceRequestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-performance-request-setting title="Specify the cipher suite order to use for TLS connections."></textarea></label>
                 </section>
               </div>
             </div>

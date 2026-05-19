@@ -90,15 +90,35 @@
   bottom: calc(100% + 6px);
 }
 
+.toolbar-menu.toolbar-menu-fixed {
+  position: fixed;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  z-index: 1050;
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
+}
+
+.toolbar-menu.toolbar-menu-fixed.toolbar-menu-open-up {
+  top: 0;
+  bottom: auto;
+}
+
 .toolbar-menu[hidden] {
   display: none;
 }
 
 .request-export-menu-group .toolbar-menu,
-.csv-variables-menu-group .toolbar-menu,
 .result-export-menu-group .toolbar-menu {
   right: 0;
   left: auto;
+}
+
+.csv-variables-menu-group .toolbar-menu {
+  right: auto;
+  left: 0;
 }
 
 .request-export-menu-group > .menu-trigger,
@@ -912,6 +932,7 @@ h2 {
   padding: 14px;
 }
 
+.environment-main-panel,
 .workspace-main-panel {
   overflow-x: hidden;
   overflow-y: auto;
@@ -943,6 +964,11 @@ h2 {
   gap: 14px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
+}
+
+.environment-main-header,
+.workspace-main-header {
+  flex-wrap: wrap;
 }
 
 .request-main-header {
@@ -1039,6 +1065,13 @@ h2 {
   max-width: 620px;
 }
 
+.environment-main-header .environment-actions,
+.workspace-main-header .workspace-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .collection-actions,
 .workspace-actions,
 .runner-actions,
@@ -1121,6 +1154,12 @@ h2 {
 
 #performanceTypeSelect {
   min-height: 36px;
+}
+
+.performance-type-select-field {
+  --performance-type-select-width: auto;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .runner-settings > .csv-variables-menu-group > .menu-trigger,
@@ -1368,6 +1407,19 @@ h2 {
   }
 }
 
+@media (max-width: 900px) {
+  .environment-main-header,
+  .workspace-main-header {
+    align-items: stretch;
+  }
+
+  .environment-main-header .environment-actions,
+  .workspace-main-header .workspace-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+}
+
 .capture-settings-panel .capture-guardrail-disabled {
   color: var(--muted);
   cursor: not-allowed;
@@ -1477,6 +1529,9 @@ h2 {
   border: 0;
   border-radius: 0;
   background: transparent;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .performance-request-section {
@@ -1490,7 +1545,8 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
 }
 
@@ -1519,9 +1575,21 @@ h2 {
   flex-direction: column;
   gap: 6px;
   margin-top: 0;
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 260px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.performance-request-editor > .tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.performance-request-editor > #performanceScriptsTab.active {
+  display: flex;
+  overflow: hidden;
 }
 
 .performance-request-header {
@@ -1616,8 +1684,8 @@ h2 {
 }
 
 .performance-type-select-field select {
-  width: 190px;
-  max-width: min(190px, 100%);
+  width: var(--performance-type-select-width);
+  max-width: 100%;
 }
 
 .performance-results-resize {
@@ -2347,6 +2415,10 @@ h2 {
   grid-auto-rows: max-content;
 }
 
+.environment-table .kv-row {
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.35fr) max-content;
+}
+
 .request-tab-bar {
   display: flex;
   width: 100%;
@@ -2377,6 +2449,7 @@ h2 {
   margin: 0;
   border-right: 1px solid var(--line);
   background: transparent;
+  overflow: hidden;
 }
 
 .request-tab-item:hover {
@@ -2403,6 +2476,7 @@ h2 {
   background: transparent;
   color: var(--muted);
   cursor: default;
+  overflow: hidden;
 }
 
 .request-tab-button.active {
@@ -2416,6 +2490,11 @@ h2 {
 
 .request-tab-method {
   flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--green);
   font-size: var(--ui-font-size-xxs);
   font-weight: 800;

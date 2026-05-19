@@ -411,7 +411,8 @@ const {
 const {
   bindUi: bindRendererUi,
   closeToolbarMenus: closeRendererToolbarMenus,
-  initializeRenderer
+  initializeRenderer,
+  positionToolbarMenu: positionRendererToolbarMenu
 } = PostMeterRendererBootstrap;
 const { createVaultPromptQueue } = PostMeterVaultPromptQueue;
 const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
@@ -1057,6 +1058,7 @@ function bindUi() {
   bindEnvironmentTitleEditor();
   bindRunnerTitleEditor();
   bindPerformanceTitleEditor();
+  bindAuthRefreshDisclosurePlacement();
   if (typeof setContextMenuPeerCloser === 'function') {
     setContextMenuPeerCloser(() => {
       closeToolbarMenus();
@@ -5811,6 +5813,7 @@ function applyTypographyPreferences() {
   document.documentElement.style.setProperty('--ui-font-size', `${appearance.interfaceFontSize}px`);
   document.documentElement.style.setProperty('--editor-font', typographyFontStack(appearance.editorFont, DEFAULT_EDITOR_FONT_STACK));
   document.documentElement.style.setProperty('--editor-font-size', `${appearance.editorFontSize}px`);
+  fitPerformanceTypeSelectToOptions();
   refreshVariableHighlights(document);
 }
 
@@ -8121,7 +8124,7 @@ function setManagedCookieJarToggleState(prefix, managed) {
     input.disabled = managed === true;
     input.title = managed === true
       ? 'Refreshing Auth manages the cookie jar for this request.'
-      : '';
+      : (input.closest('label')?.getAttribute('title') || '');
   }
 }
 
@@ -8138,6 +8141,7 @@ function renderPerformanceTypeTabs(test) {
       select.value = 'diagnosis';
     }
     select.disabled = !test;
+    fitPerformanceTypeSelectToOptions(select);
   }
   for (const button of document.querySelectorAll('.tab[data-tab-group="performance"]')) {
     const isActive = button.dataset.tab === type;
@@ -8155,6 +8159,36 @@ function renderPerformanceTypeTabs(test) {
     panel.classList.toggle('active', isActive);
     panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
   }
+}
+
+function fitPerformanceTypeSelectToOptions(select = $('performanceTypeSelect')) {
+  if (!select || !select.options?.length || typeof document === 'undefined' || typeof getComputedStyle !== 'function') {
+    return;
+  }
+  const style = getComputedStyle(select);
+  const canvas = fitPerformanceTypeSelectToOptions.canvas ||= document.createElement('canvas');
+  let context = null;
+  try {
+    context = canvas.getContext('2d');
+  } catch {
+    context = null;
+  }
+  if (!context) {
+    return;
+  }
+  context.font = style.font || `${style.fontSize} ${style.fontFamily}`;
+  const longestOptionWidth = Array.from(select.options)
+    .reduce((max, option) => Math.max(max, context.measureText(option.textContent.trim()).width), 0);
+  const horizontalPadding = cssPixelValue(style.paddingLeft) + cssPixelValue(style.paddingRight);
+  const horizontalBorder = cssPixelValue(style.borderLeftWidth) + cssPixelValue(style.borderRightWidth);
+  const arrowAllowance = Math.max(28, cssPixelValue(style.fontSize) * 1.35);
+  const width = Math.ceil(longestOptionWidth + horizontalPadding + horizontalBorder + arrowAllowance);
+  select.closest('.performance-type-select-field')?.style.setProperty('--performance-type-select-width', `${width}px`);
+}
+
+function cssPixelValue(value) {
+  const number = Number.parseFloat(value);
+  return Number.isFinite(number) ? number : 0;
 }
 
 function renderPerformanceConfigControls(test) {
@@ -8356,6 +8390,8 @@ function closeCaptureSettingsPanels(options = {}) {
     panel.hidden = true;
     panel.style.left = '';
     panel.style.top = '';
+    panel.style.maxHeight = '';
+    panel.style.overflowY = '';
     const button = panel.id ? document.querySelector(`[aria-controls="${cssEscapeAttributeValue(panel.id)}"]`) : null;
     button?.setAttribute('aria-expanded', 'false');
   }
@@ -8535,6 +8571,8 @@ function closeCaptureSettingsPanel(prefix) {
   panel.hidden = true;
   panel.style.left = '';
   panel.style.top = '';
+  panel.style.maxHeight = '';
+  panel.style.overflowY = '';
   button.setAttribute('aria-expanded', 'false');
 }
 
@@ -8700,15 +8738,19 @@ function positionAuthRefreshPanel(prefix) {
   const buttonRect = button.getBoundingClientRect();
   const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
   const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  panel.style.maxHeight = `${Math.max(160, viewportHeight - margin * 2)}px`;
+  panel.style.overflowY = 'auto';
   const panelWidth = Math.min(panel.offsetWidth || 640, Math.max(0, viewportWidth - margin * 2));
-  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const panelHeight = Math.min(panel.scrollHeight || panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
   const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
   const left = Math.min(Math.max(margin, buttonRect.right - panelWidth), maxLeft);
   const preferredTop = buttonRect.bottom + gap;
   const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
   const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  const availableHeight = Math.max(160, viewportHeight - top - margin);
   panel.style.left = `${left}px`;
   panel.style.top = `${top}px`;
+  panel.style.maxHeight = `${availableHeight}px`;
 }
 
 function toggleAuthRefreshPanel(prefix, event) {
@@ -8911,6 +8953,22 @@ function positionVisibleAuthRefreshPanel(prefix) {
       requestAnimationFrame(() => positionAuthRefreshPanel(prefix));
     } else {
       positionAuthRefreshPanel(prefix);
+    }
+  }
+}
+
+function bindAuthRefreshDisclosurePlacement() {
+  for (const prefix of ['runner', 'performance']) {
+    const panel = $(`${prefix}AuthRefreshPanel`);
+    if (!panel) {
+      continue;
+    }
+    for (const details of panel.querySelectorAll('.auth-refresh-refresh-token, .auth-refresh-advanced')) {
+      if (details.dataset.authRefreshPlacementBound === 'true') {
+        continue;
+      }
+      details.dataset.authRefreshPlacementBound = 'true';
+      details.addEventListener('toggle', () => positionVisibleAuthRefreshPanel(prefix));
     }
   }
 }
@@ -11580,6 +11638,9 @@ function ensurePerformanceResultsStructure() {
     closeToolbarMenus();
     closeCaptureSettingsPanels();
     exportMenu.hidden = !shouldOpen;
+    if (shouldOpen) {
+      positionRendererToolbarMenu?.(exportButton, exportMenu, { windowObject: window });
+    }
     exportButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
   });
   const exportMenu = document.createElement('div');

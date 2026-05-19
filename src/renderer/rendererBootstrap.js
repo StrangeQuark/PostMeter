@@ -910,10 +910,18 @@
   }
 
   function positionToolbarMenu(button, menu, options = {}) {
-    menu.classList?.remove?.('toolbar-menu-open-up');
+    const fixed = shouldUseFixedToolbarMenu(menu);
+    clearToolbarMenuPlacement(menu);
+    if (fixed) {
+      menu.classList?.add?.('toolbar-menu-fixed');
+    }
     const buttonRect = typeof button.getBoundingClientRect === 'function' ? button.getBoundingClientRect() : null;
     const menuRect = typeof menu.getBoundingClientRect === 'function' ? menu.getBoundingClientRect() : null;
     if (!buttonRect || !menuRect) {
+      return;
+    }
+    if (fixed) {
+      positionFixedToolbarMenu(button, menu, options, buttonRect, menuRect);
       return;
     }
     const panel = menu.closest?.('.capture-settings-panel');
@@ -929,6 +937,57 @@
     if (menuRect.height > downwardSpace && upwardSpace > downwardSpace) {
       menu.classList?.add?.('toolbar-menu-open-up');
     }
+  }
+
+  function shouldUseFixedToolbarMenu(menu) {
+    return Boolean(menu.closest?.('.result-export-menu-group'));
+  }
+
+  function clearToolbarMenuPlacement(menu) {
+    menu.classList?.remove?.('toolbar-menu-open-up');
+    menu.classList?.remove?.('toolbar-menu-fixed');
+    if (!menu.style) {
+      return;
+    }
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.right = '';
+    menu.style.bottom = '';
+    menu.style.maxHeight = '';
+    menu.style.overflowY = '';
+  }
+
+  function positionFixedToolbarMenu(_button, menu, options, buttonRect, menuRect) {
+    if (!menu.style) {
+      return;
+    }
+    const margin = 8;
+    const gap = 6;
+    const viewportWidth = Number(options.windowObject?.innerWidth || (typeof window !== 'undefined' ? window.innerWidth : 0) || 1024);
+    const viewportHeight = Number(options.windowObject?.innerHeight || (typeof window !== 'undefined' ? window.innerHeight : 0) || 768);
+    const widthLimit = Math.max(0, viewportWidth - margin * 2);
+    const heightLimit = Math.max(0, viewportHeight - margin * 2);
+    const menuWidth = Math.min(Number(menuRect.width || menu.offsetWidth || 170), widthLimit);
+    const menuHeight = Math.min(Number(menu.scrollHeight || menuRect.height || menu.offsetHeight || 0), heightLimit);
+    const maxLeft = Math.max(margin, viewportWidth - menuWidth - margin);
+    const left = Math.min(Math.max(margin, Number(buttonRect.right || 0) - menuWidth), maxLeft);
+    const preferredTop = Number(buttonRect.bottom || 0) + gap;
+    const downwardSpace = viewportHeight - preferredTop - margin;
+    const upwardSpace = Number(buttonRect.top || 0) - margin - gap;
+    let top = preferredTop;
+    if (menuHeight > downwardSpace && upwardSpace > downwardSpace) {
+      menu.classList?.add?.('toolbar-menu-open-up');
+      top = Number(buttonRect.top || 0) - menuHeight - gap;
+    }
+    const maxTop = Math.max(margin, viewportHeight - menuHeight - margin);
+    top = Math.min(Math.max(margin, top), maxTop);
+    const availableHeight = Math.max(80, viewportHeight - top - margin);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.style.right = 'auto';
+    menu.style.bottom = 'auto';
+    menu.style.maxHeight = `${availableHeight}px`;
+    menu.style.overflowY = 'auto';
   }
 
   function isModalBackdropOpen(doc) {
@@ -951,7 +1010,7 @@
   function closeToolbarMenus(doc = document) {
     for (const menu of doc.querySelectorAll('.toolbar-menu')) {
       menu.hidden = true;
-      menu.classList?.remove?.('toolbar-menu-open-up');
+      clearToolbarMenuPlacement(menu);
     }
     for (const button of doc.querySelectorAll('.menu-trigger')) {
       button.setAttribute('aria-expanded', 'false');
@@ -1008,7 +1067,8 @@
   const exported = {
     bindUi,
     closeToolbarMenus,
-    initializeRenderer
+    initializeRenderer,
+    positionToolbarMenu
   };
 
   if (typeof module !== 'undefined' && module.exports) {

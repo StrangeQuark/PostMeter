@@ -522,6 +522,17 @@
       Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
       'Runner result export menu should expose HTML Report, JSON, and CSV.'
     );
+    $('exportRunnerResultsButton').disabled = false;
+    $('exportRunnerResultsButton').click();
+    await nextPaint();
+    const runnerResultExportRect = $('exportRunnerResultsMenu').getBoundingClientRect();
+    assertUiSmoke(!$('exportRunnerResultsMenu').hidden, 'Runner result export menu should open.');
+    assertUiSmoke(getComputedStyle($('exportRunnerResultsMenu')).position === 'fixed', 'Runner result export menu should render as a fixed overlay.');
+    assertUiSmoke(Number(getComputedStyle($('exportRunnerResultsMenu')).zIndex) >= 1050, 'Runner result export menu should render above clipped panels.');
+    assertUiSmoke(runnerResultExportRect.right <= window.innerWidth + 1, 'Runner result export menu should stay inside the viewport horizontally.');
+    assertUiSmoke(runnerResultExportRect.bottom <= window.innerHeight + 1, 'Runner result export menu should stay inside the viewport vertically.');
+    $('exportRunnerResultsButton').click();
+    $('exportRunnerResultsButton').disabled = true;
     assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
     assertDestructiveButtonsUseDangerStyle();
   }
@@ -3813,6 +3824,11 @@
       assertUiSmoke($('performanceMethodSelect').closest('.performance-request-line'), 'Performance request method should live in the request-style line.');
       assertUiSmoke($('performanceUrlInput').closest('.performance-request-line'), 'Performance request URL should live in the request-style line.');
       assertUiSmoke($('runPerformanceTestButton').closest('.performance-request-line'), 'Performance Run action should live beside the performance request URL.');
+      const performanceRequestEditor = document.querySelector('.performance-request-editor');
+      assertUiSmoke(
+        performanceRequestEditor && parseFloat(getComputedStyle(performanceRequestEditor).minHeight) >= 240,
+        'Performance request editor should keep enough minimum height to remain editable in constrained panes.'
+      );
       assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
       assertUiSmoke($('importPerformanceRequestButton').closest('.performance-request-header'), 'Performance import request action should live with the request section header.');
       assertUiSmoke($('deletePerformanceTestButton').classList.contains('danger-button'), 'Performance delete button should use danger styling.');
@@ -3831,6 +3847,17 @@
         Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
         'Performance result export menu should expose HTML Report, JSON, and CSV.'
       );
+      $('exportPerformanceResultsButton').disabled = false;
+      $('exportPerformanceResultsButton').click();
+      await nextPaint();
+      const performanceResultExportRect = $('exportPerformanceResultsMenu').getBoundingClientRect();
+      assertUiSmoke(!$('exportPerformanceResultsMenu').hidden, 'Performance result export menu should open.');
+      assertUiSmoke(getComputedStyle($('exportPerformanceResultsMenu')).position === 'fixed', 'Performance result export menu should render as a fixed overlay.');
+      assertUiSmoke(Number(getComputedStyle($('exportPerformanceResultsMenu')).zIndex) >= 1050, 'Performance result export menu should render above clipped panels.');
+      assertUiSmoke(performanceResultExportRect.right <= window.innerWidth + 1, 'Performance result export menu should stay inside the viewport horizontally.');
+      assertUiSmoke(performanceResultExportRect.bottom <= window.innerHeight + 1, 'Performance result export menu should stay inside the viewport vertically.');
+      $('exportPerformanceResultsButton').click();
+      $('exportPerformanceResultsButton').disabled = true;
       $('performanceCsvVariablesButton').click();
       assertUiSmoke(!$('performanceCsvVariablesMenu').hidden, 'Performance CSV button should open a dropdown menu.');
       let performanceCsvMenuLabels = Array.from($('performanceCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
@@ -4023,6 +4050,29 @@
       $('performanceBodyInput').value = '{"hello":"performance"}';
       dispatchInput($('performanceBodyInput'));
       $('performanceRequestScriptsTabButton').click();
+      await nextPaint();
+      const performanceRequestSectionRectForScripts = $('performanceRequestSection').getBoundingClientRect();
+      const performanceRequestEditorRectForScripts = document.querySelector('.performance-request-editor')?.getBoundingClientRect();
+      const performanceScriptsTabRect = $('performanceScriptsTab').getBoundingClientRect();
+      const performancePreScriptEditor = $('performancePreRequestScriptInput').closest('.code-editor');
+      const performancePostScriptEditor = $('performanceTestScriptInput').closest('.code-editor');
+      assertUiSmoke(performancePreScriptEditor && performancePostScriptEditor, 'Performance Scripts textareas should use the shared code editor wrapper.');
+      const performancePreScriptRect = performancePreScriptEditor.getBoundingClientRect();
+      const performancePostScriptRect = performancePostScriptEditor.getBoundingClientRect();
+      assertUiSmoke(
+        performanceRequestEditorRectForScripts
+          && Math.abs(performanceRequestEditorRectForScripts.bottom - performanceScriptsTabRect.bottom) <= 2,
+        'Performance Scripts tab should fill the performance request editor instead of sizing to content.'
+      );
+      assertUiSmoke(
+        performanceRequestEditorRectForScripts
+          && performanceRequestEditorRectForScripts.bottom >= performanceRequestSectionRectForScripts.bottom - 14,
+        'Performance request editor should stretch to the bottom of the request section.'
+      );
+      assertUiSmoke(
+        Math.abs(performancePreScriptRect.height - performancePostScriptRect.height) <= 2,
+        `Performance script editors should stay matched in height. pre=${performancePreScriptRect.height} post=${performancePostScriptRect.height}.`
+      );
       $('performancePreRequestScriptInput').value = "pm.environment.set('perfToken', '1');";
       dispatchInput($('performancePreRequestScriptInput'));
       $('performanceTestScriptInput').value = "pm.test('perf status', function () { pm.response.to.have.status(200); });";
@@ -5513,6 +5563,18 @@
           assertUiSmoke(exportedRunnerRequest.format === 'curl', 'Runner-owned request editor Export Request curl menu item should use the curl request format.');
           exportedRunnerRequest = null;
           const runnerRequestTab = openRequestTabs.find((tab) => tab.runnerId === runner.id && tab.requestId === runnerLocalRequest.id);
+          const runnerRequestTabButton = runnerRequestTab
+            ? $('requestTabBar').querySelector(`[data-open-tab-key="${runnerRequestTab.key}"]`)
+            : null;
+          const runnerRequestTabBadge = runnerRequestTabButton?.querySelector('.request-tab-method');
+          assertUiSmoke(runnerRequestTabBadge?.textContent.includes('RUN -'), 'Runner-owned request tabs should include the RUN request badge.');
+          const runnerRequestTabBadgeStyle = runnerRequestTabBadge ? getComputedStyle(runnerRequestTabBadge) : {};
+          assertUiSmoke(
+            runnerRequestTabBadgeStyle.overflow === 'hidden'
+              && runnerRequestTabBadgeStyle.textOverflow === 'ellipsis'
+              && runnerRequestTabBadgeStyle.whiteSpace === 'nowrap',
+            'Runner-owned request tab badges should ellipsize instead of overflowing narrow tabs.'
+          );
           openOpenTabContextMenu(runnerRequestTab);
           const exportMenuItem = Array.from($('contextMenu').querySelectorAll('button'))
             .find((button) => button.textContent.trim() === 'Export');
