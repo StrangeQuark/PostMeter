@@ -28,6 +28,9 @@ const UI_SMOKE_AUTH_HEADER_VALUE_PATTERN = `(?:(?:${UI_SMOKE_AUTH_SCHEME_NAMES})
 const UI_SMOKE_AWS_QUERY_FIELD_PATTERN = String.raw`\b((?:x[-_]?amz[-_]?credential|x[-_]?amz[-_]?signature|x[-_]?amz[-_]?security[-_]?token|aws[-_]?credential|aws[-_]?signature))(\s*[:=]\s*["']?)[^\s&"',;<>}&\])]+`;
 const UI_SMOKE_COOKIE_SAFE_CONTEXT_PATTERN = String.raw`OAuth\s+2\.0\b|token\s+endpoint\b|provider\s+(?:returned|failed|denied|reported)\b|HTTP\s+\d{3}\b|status\s*[:=]?\s*\d{3}\b|error(?:[-_\s]*description)?\s*[:=]|Basic\s+authentication\b|Bearer\s+authentication\b|Digest\s+auth\b|authentication\s+(?:failed|required)\b`;
 const UI_SMOKE_COOKIE_HEADER_SAFE_CONTEXT_BOUNDARY_PATTERN = new RegExp(String.raw`\s+(?=(?:${UI_SMOKE_COOKIE_SAFE_CONTEXT_PATTERN}))`, 'i');
+const NUMPAD_ZOOM_STEP_LEVEL = 0.5;
+const MIN_ZOOM_LEVEL = -6;
+const MAX_ZOOM_LEVEL = 6;
 
 function createMainWindow(app, options = {}) {
   const env = options.env || process.env;
@@ -56,6 +59,7 @@ function createMainWindow(app, options = {}) {
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
+  bindNumpadZoomShortcuts(mainWindow);
   bindSmokeHooks(app, mainWindow, env);
   const handleLoadFailure = bindStartupLoadFailureHooks(app, mainWindow, env);
   const loadPromise = mainWindow.loadURL(rendererUrl);
@@ -74,6 +78,61 @@ function bindNavigationGuards(mainWindow, trustedRendererUrl) {
   mainWindow.webContents.on('will-attach-webview', (event) => {
     event.preventDefault();
   });
+}
+
+function bindNumpadZoomShortcuts(mainWindow) {
+  const webContents = mainWindow?.webContents;
+  if (!webContents || typeof webContents.on !== 'function') {
+    return;
+  }
+  webContents.on('before-input-event', (event, input) => {
+    const shortcut = classifyNumpadZoomShortcut(input);
+    if (!shortcut) {
+      return;
+    }
+    event?.preventDefault?.();
+    applyNumpadZoomShortcut(webContents, shortcut);
+  });
+}
+
+function classifyNumpadZoomShortcut(input = {}) {
+  if (input.type && input.type !== 'keyDown') {
+    return '';
+  }
+  if ((!input.control && !input.meta) || input.alt) {
+    return '';
+  }
+  if (input.code === 'NumpadAdd') {
+    return 'in';
+  }
+  if (input.code === 'NumpadSubtract') {
+    return 'out';
+  }
+  if (input.code === 'Numpad0') {
+    return 'reset';
+  }
+  return '';
+}
+
+function applyNumpadZoomShortcut(webContents, shortcut) {
+  if (!webContents || typeof webContents.setZoomLevel !== 'function') {
+    return;
+  }
+  if (shortcut === 'reset') {
+    webContents.setZoomLevel(0);
+    return;
+  }
+  const currentLevel = Number(webContents.getZoomLevel?.() || 0);
+  webContents.setZoomLevel(nextNumpadZoomLevel(currentLevel, shortcut));
+}
+
+function nextNumpadZoomLevel(currentLevel, shortcut) {
+  const numericLevel = Number.isFinite(Number(currentLevel)) ? Number(currentLevel) : 0;
+  if (shortcut === 'reset') {
+    return 0;
+  }
+  const delta = shortcut === 'in' ? NUMPAD_ZOOM_STEP_LEVEL : -NUMPAD_ZOOM_STEP_LEVEL;
+  return Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, numericLevel + delta));
 }
 
 function isAllowedRendererNavigation(targetUrl, trustedRendererUrl = createAppRendererUrl()) {
@@ -927,9 +986,12 @@ function nativeImageHasVariance(image) {
 
 module.exports = {
   bindNavigationGuards,
+  bindNumpadZoomShortcuts,
   bindStartupLoadFailureHooks,
+  classifyNumpadZoomShortcut,
   createMainWindow,
   expectedDefaultUserDataRoot,
+  nextNumpadZoomLevel,
   captureUiSmokeDomState,
   isAllowedRendererNavigation,
   isPathInside,

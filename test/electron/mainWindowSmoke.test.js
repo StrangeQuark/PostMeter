@@ -5,10 +5,13 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const {
+  bindNumpadZoomShortcuts,
   bindStartupLoadFailureHooks,
   captureUiSmokeDomState,
+  classifyNumpadZoomShortcut,
   expectedDefaultUserDataRoot,
   isPathInside,
+  nextNumpadZoomLevel,
   requiredPreloadApiSurface,
   redactUiSmokeText,
   runStartupSmokeProbe,
@@ -24,6 +27,52 @@ const {
   APP_RENDERER_CSP,
   APP_RENDERER_PATHNAME
 } = require('../../electron/appProtocol');
+
+test('numpad zoom shortcut classifier only handles modified numpad zoom keys', () => {
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, code: 'NumpadAdd', key: '+' }), 'in');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', meta: true, code: 'NumpadSubtract', key: '-' }), 'out');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, code: 'Numpad0', key: '0' }), 'reset');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', code: 'NumpadAdd', key: '+' }), '');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyUp', control: true, code: 'NumpadAdd', key: '+' }), '');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, alt: true, code: 'NumpadAdd', key: '+' }), '');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, code: 'Equal', key: '+' }), '');
+});
+
+test('numpad zoom shortcut binding updates window zoom level', () => {
+  const webContents = new EventEmitter();
+  let zoomLevel = 0;
+  webContents.getZoomLevel = () => zoomLevel;
+  webContents.setZoomLevel = (nextLevel) => {
+    zoomLevel = nextLevel;
+  };
+
+  bindNumpadZoomShortcuts({ webContents });
+
+  let prevented = false;
+  webContents.emit('before-input-event', {
+    preventDefault: () => {
+      prevented = true;
+    }
+  }, { type: 'keyDown', control: true, code: 'NumpadAdd', key: '+' });
+
+  assert.equal(prevented, true);
+  assert.equal(zoomLevel, 0.5);
+
+  webContents.emit('before-input-event', { preventDefault() {} }, { type: 'keyDown', control: true, code: 'NumpadSubtract', key: '-' });
+  assert.equal(zoomLevel, 0);
+
+  webContents.emit('before-input-event', { preventDefault() {} }, { type: 'keyDown', control: true, code: 'Numpad0', key: '0' });
+  assert.equal(zoomLevel, 0);
+});
+
+test('numpad zoom levels clamp to supported bounds', () => {
+  assert.equal(nextNumpadZoomLevel(6, 'in'), 6);
+  assert.equal(nextNumpadZoomLevel(-6, 'out'), -6);
+  assert.equal(nextNumpadZoomLevel(0, 'in'), 0.5);
+  assert.equal(nextNumpadZoomLevel(0, 'out'), -0.5);
+  assert.equal(nextNumpadZoomLevel(3, 'reset'), 0);
+  assert.equal(nextNumpadZoomLevel('not-a-number', 'in'), 0.5);
+});
 
 test('startup smoke probe prevents renderer shutdown from overwriting marker save', async () => {
   let executedScript = '';
