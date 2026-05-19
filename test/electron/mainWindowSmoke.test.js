@@ -32,56 +32,62 @@ const {
   APP_RENDERER_PATHNAME
 } = require('../../electron/appProtocol');
 
+function cmdOrCtrlModifier() {
+  return process.platform === 'darwin' ? { meta: true } : { control: true };
+}
+
 test('numpad zoom shortcut classifier only handles modified numpad zoom keys', () => {
-  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, code: 'NumpadAdd', key: '+' }), 'in');
-  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', meta: true, code: 'NumpadSubtract', key: '-' }), 'out');
-  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, code: 'Numpad0', key: '0' }), 'reset');
+  const commandModifier = cmdOrCtrlModifier();
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', ...commandModifier, code: 'NumpadAdd', key: '+' }), 'in');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', ...commandModifier, code: 'NumpadSubtract', key: '-' }), 'out');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', ...commandModifier, code: 'Numpad0', key: '0' }), 'reset');
   assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', code: 'NumpadAdd', key: '+' }), '');
-  assert.equal(classifyNumpadZoomShortcut({ type: 'keyUp', control: true, code: 'NumpadAdd', key: '+' }), '');
-  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, alt: true, code: 'NumpadAdd', key: '+' }), '');
-  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', control: true, code: 'Equal', key: '+' }), '');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyUp', ...commandModifier, code: 'NumpadAdd', key: '+' }), '');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', ...commandModifier, alt: true, code: 'NumpadAdd', key: '+' }), '');
+  assert.equal(classifyNumpadZoomShortcut({ type: 'keyDown', ...commandModifier, code: 'Equal', key: '+' }), '');
 });
 
 test('custom keyboard shortcut classifier treats normal and numpad keys as shortcut equivalents', () => {
+  const commandModifier = cmdOrCtrlModifier();
   assert.equal(classifyKeyboardShortcutAction({
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'Numpad1',
     key: '1'
   }, { 'new-request': 'CmdOrCtrl+1' }), 'new-request');
   assert.equal(classifyKeyboardShortcutAction({
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'Digit1',
     key: '1'
   }, { 'new-request': 'CmdOrCtrl+1' }), 'new-request');
   assert.equal(classifyKeyboardShortcutAction({
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'NumpadAdd',
     key: '+'
   }, { 'new-request': 'CmdOrCtrl+1', 'zoom-in': 'CmdOrCtrl+=' }), 'zoom-in');
   assert.equal(classifyKeyboardShortcutAction({
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'Minus',
     key: '-'
   }, { 'zoom-out': 'CmdOrCtrl+Minus' }), 'zoom-out');
   assert.equal(classifyKeyboardShortcutAction({
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'KeyT',
     key: 't'
   }), 'new-runner');
   assert.equal(classifyKeyboardShortcutAction({
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'KeyQ',
     key: 'q'
   }), 'quit');
   assert.equal(classifyKeyboardShortcutAction({
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'KeyR',
     key: 'r'
   }), 'reload');
@@ -91,6 +97,7 @@ test('custom keyboard shortcut binding dispatches menu actions for normal and nu
   const webContents = new EventEmitter();
   const dispatched = [];
   let preventCount = 0;
+  const commandModifier = cmdOrCtrlModifier();
 
   bindKeyboardShortcutActions({ webContents }, {
     getShortcuts: () => ({ 'new-request': 'CmdOrCtrl+1' }),
@@ -101,7 +108,7 @@ test('custom keyboard shortcut binding dispatches menu actions for normal and nu
     preventDefault: () => {
       preventCount += 1;
     }
-  }, { type: 'keyDown', control: true, code: 'Numpad1', key: '1' });
+  }, { type: 'keyDown', ...commandModifier, code: 'Numpad1', key: '1' });
 
   assert.equal(preventCount, 1);
   assert.deepEqual(dispatched, ['new-request']);
@@ -112,7 +119,7 @@ test('custom keyboard shortcut binding dispatches menu actions for normal and nu
     }
   }, {
     type: 'keyDown',
-    control: true,
+    ...commandModifier,
     code: 'Digit1',
     key: '1'
   });
@@ -125,6 +132,7 @@ test('custom keyboard shortcut binding skips dispatch while shortcut capture is 
   webContents.__postmeterMenuShortcutsIgnored = true;
   const dispatched = [];
   let prevented = false;
+  const commandModifier = cmdOrCtrlModifier();
 
   bindKeyboardShortcutActions({ webContents }, {
     getShortcuts: () => ({ 'new-request': 'CmdOrCtrl+1' }),
@@ -135,7 +143,7 @@ test('custom keyboard shortcut binding skips dispatch while shortcut capture is 
     preventDefault: () => {
       prevented = true;
     }
-  }, { type: 'keyDown', control: true, code: 'Numpad1', key: '1' });
+  }, { type: 'keyDown', ...commandModifier, code: 'Numpad1', key: '1' });
 
   assert.equal(prevented, false);
   assert.deepEqual(dispatched, []);
@@ -144,6 +152,7 @@ test('custom keyboard shortcut binding skips dispatch while shortcut capture is 
 test('numpad zoom shortcut binding updates window zoom level', () => {
   const webContents = new EventEmitter();
   let zoomLevel = 0;
+  const commandModifier = cmdOrCtrlModifier();
   webContents.getZoomLevel = () => zoomLevel;
   webContents.setZoomLevel = (nextLevel) => {
     zoomLevel = nextLevel;
@@ -156,15 +165,15 @@ test('numpad zoom shortcut binding updates window zoom level', () => {
     preventDefault: () => {
       prevented = true;
     }
-  }, { type: 'keyDown', control: true, code: 'NumpadAdd', key: '+' });
+  }, { type: 'keyDown', ...commandModifier, code: 'NumpadAdd', key: '+' });
 
   assert.equal(prevented, true);
   assert.equal(zoomLevel, 0.5);
 
-  webContents.emit('before-input-event', { preventDefault() {} }, { type: 'keyDown', control: true, code: 'NumpadSubtract', key: '-' });
+  webContents.emit('before-input-event', { preventDefault() {} }, { type: 'keyDown', ...commandModifier, code: 'NumpadSubtract', key: '-' });
   assert.equal(zoomLevel, 0);
 
-  webContents.emit('before-input-event', { preventDefault() {} }, { type: 'keyDown', control: true, code: 'Numpad0', key: '0' });
+  webContents.emit('before-input-event', { preventDefault() {} }, { type: 'keyDown', ...commandModifier, code: 'Numpad0', key: '0' });
   assert.equal(zoomLevel, 0);
 });
 
@@ -338,7 +347,7 @@ test('packaged startup smoke writes failure logs and screenshots when configured
 });
 
 test('UI regression smoke title watcher has enough CI headroom', () => {
-  assert.equal(UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS, 90_000);
+  assert.equal(UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS, 120_000);
 });
 
 test('UI typography smoke title watcher has enough CI headroom', () => {

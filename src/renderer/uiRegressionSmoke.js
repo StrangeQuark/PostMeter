@@ -7041,8 +7041,10 @@
       await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === rightClickOtherRequest.id)?.dirty, 'Active discard setup should save the second request.', 3000, global);
       const rightClickOtherTab = openRequestTabs.find((tab) => tab.requestId === rightClickOtherRequest.id);
       selectRequestTab(activeDiscardTab);
+      await waitForUiSmoke(() => activeRequest()?.id === activeDiscardRequest.id, 'Active discard tab should become active before editing it.', 3000, global);
       $('urlInput').value = 'https://active-discard.example.test/should-not-save';
       dispatchInput($('urlInput'));
+      await waitForUiSmoke(() => openRequestTabs.find((tab) => tab.key === activeDiscardTab.key)?.dirty === true, 'Active discard URL edit should mark the active tab dirty.', 3000, global);
       const requestSaveCallsBeforeActiveDiscard = requestSaveCalls;
       openOpenTabContextMenu(rightClickOtherTab);
       activateContextMenuItem('Close Other Tabs');
