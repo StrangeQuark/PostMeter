@@ -3,6 +3,7 @@ const test = require('node:test');
 const {
   allFolderNames,
   allRequestNames,
+  collapseAllCollectionTreeItems,
   collectionTreeItemHasChildren,
   ensureCollectionTreeCollapseState,
   findFolder,
@@ -47,6 +48,21 @@ test('renderer collection model walks and finds nested requests and folders', ()
   assert.equal(findFolder(collection, 'f2').name, 'Folder 2');
   assert.deepEqual(allRequestNames(collection), ['Root', 'Nested 1', 'Nested 2']);
   assert.deepEqual(allFolderNames(collection), ['Folder 1', 'Folder 2']);
+});
+
+test('renderer collection model collapses every expandable collection and folder', () => {
+  const collection = nestedCollection();
+  collection.id = 'c1';
+  const emptyCollection = { id: 'c2', requests: [], folders: [] };
+  const state = ensureCollectionTreeCollapseState({
+    collapsedCollectionIds: [],
+    collapsedFolderIds: []
+  });
+
+  collapseAllCollectionTreeItems(state, [collection, emptyCollection]);
+
+  assert.deepEqual(Array.from(state.collapsedCollectionIds), ['c1']);
+  assert.deepEqual(Array.from(state.collapsedFolderIds), ['f1', 'f2']);
 });
 
 test('renderer collection model removes nested items and generates unique names', () => {

@@ -199,6 +199,7 @@
 
     bindToolbarMenus(doc, options);
     bindClick(doc, 'newCollectionButton', options.onNewCollection);
+    bindClick(doc, 'collapseCollectionsButton', options.onCollapseCollections);
     bindClick(doc, 'newFolderButton', options.onNewFolder);
     bindClick(doc, 'newRequestButton', options.onNewRequest);
     bindClick(doc, 'newWorkspaceMenuButton', options.onNewWorkspace);
@@ -346,6 +347,16 @@
         moveRovingTabFocus(event, Array.from(doc.querySelectorAll('[data-settings-section]')));
       });
     }
+    doc.addEventListener('keydown', (event) => {
+      if (event.target?.closest?.('[data-shortcut-action]')) {
+        options.onKeyboardShortcutKeydown?.(event);
+      }
+    });
+    doc.addEventListener('click', (event) => {
+      if (event.target?.closest?.('[data-shortcut-reset]')) {
+        options.onResetKeyboardShortcut?.(event);
+      }
+    });
 
     bindChange(doc, 'environmentSelect', () => {
       options.onEnvironmentSelectChange?.(getElement(doc, 'environmentSelect')?.value || 'none');
@@ -422,6 +433,7 @@
     bindChange(doc, 'editorFontSelect', options.onEditorTypographyChange);
     bindChange(doc, 'editorFontSizeInput', options.onEditorTypographyChange);
     bindClick(doc, 'resetEditorTypographyButton', options.onResetEditorTypography);
+    bindClick(doc, 'resetAllKeyboardShortcutsButton', options.onResetAllKeyboardShortcuts);
     bindChange(doc, 'sslCertificateVerificationInput', options.onTlsSettingsChange);
     bindChange(doc, 'caCertificatePathInput', options.onTlsSettingsChange);
     bindClick(doc, 'chooseCaCertificateButton', options.onChooseCaCertificate);

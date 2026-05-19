@@ -1213,10 +1213,10 @@ h2 {
   left: 0;
   z-index: 950;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: 10px 14px;
   align-items: center;
-  width: min(360px, calc(100vw - 32px));
+  width: min(420px, calc(100vw - 32px));
   max-height: min(420px, calc(100vh - 24px));
   overflow: auto;
   padding: 12px;
@@ -1232,6 +1232,11 @@ h2 {
 
 .capture-settings-panel .field {
   min-width: 0;
+}
+
+.capture-settings-panel .compact-number-field input {
+  width: 100%;
+  min-width: min(9ch, 100%);
 }
 
 .capture-settings-panel .checkbox-line {

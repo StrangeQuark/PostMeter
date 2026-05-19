@@ -12,6 +12,7 @@ const { normalizeCsvVariableDataDefaultOff } = require('./csvVariables');
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 const { normalizeCapturePolicy } = require('./resultCapturePolicy');
+const { normalizeKeyboardShortcuts } = require('./keyboardShortcuts');
 const {
   normalizeRequestTlsSettings,
   normalizeTlsSettings
@@ -575,6 +576,7 @@ function normalizeSettings(settings) {
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
     },
+    shortcuts: normalizeKeyboardShortcuts(settings?.shortcuts),
     request: normalizeTlsRequestSettings(settings?.request)
   };
 }

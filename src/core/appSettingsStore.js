@@ -5,6 +5,7 @@ const {
   normalizeSettings,
   normalizeWorkspaceLocalSettings
 } = require('./models');
+const { normalizeShortcutText } = require('./keyboardShortcuts');
 const {
   fsyncDirectory,
   moveFileNoOverwrite,
@@ -16,7 +17,7 @@ const {
 } = require('./workspacePersistence');
 
 const APP_SETTINGS_FORMAT = 'postmeter.settings';
-const APP_SETTINGS_VERSION = 1;
+const APP_SETTINGS_VERSION = 3;
 const DEFAULT_SETTINGS_FILENAME = 'settings.json';
 const DEFAULT_WORKSPACE_SETTINGS_KEY = 'default';
 
@@ -48,7 +49,30 @@ function normalizeAppSettings(value = {}) {
   return {
     format: APP_SETTINGS_FORMAT,
     version: APP_SETTINGS_VERSION,
-    app: appScopedSettings(appSource)
+    app: appScopedSettings(migrateLegacyAppScopedSettings(appSource, version))
+  };
+}
+
+function migrateLegacyAppScopedSettings(settings = {}, version = APP_SETTINGS_VERSION) {
+  const source = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
+  if (version >= APP_SETTINGS_VERSION) {
+    return source;
+  }
+  const shortcuts = source.shortcuts && typeof source.shortcuts === 'object' && !Array.isArray(source.shortcuts)
+    ? { ...source.shortcuts }
+    : null;
+  if (!shortcuts) {
+    return source;
+  }
+  if (normalizeShortcutText(shortcuts['new-runner']) === 'CmdOrCtrl+R') {
+    delete shortcuts['new-runner'];
+  }
+  if (version < 3 && normalizeShortcutText(shortcuts['new-runner']) === 'CmdOrCtrl+Q') {
+    delete shortcuts['new-runner'];
+  }
+  return {
+    ...source,
+    shortcuts
   };
 }
 
@@ -60,6 +84,7 @@ function appScopedSettings(settings = {}) {
     tabs: normalized.tabs,
     modals: normalized.modals,
     updates: normalized.updates,
+    shortcuts: normalized.shortcuts,
     diagnostics: {
       logging: normalized.diagnostics.logging
     },
@@ -101,6 +126,7 @@ function effectiveSettingsForWorkspace(appSettings, workspaceId, fallbackSetting
     tabs: normalizedAppSettings.app.tabs,
     modals: normalizedAppSettings.app.modals,
     updates: normalizedAppSettings.app.updates,
+    shortcuts: normalizedAppSettings.app.shortcuts,
     diagnostics: normalizedAppSettings.app.diagnostics,
     sandbox: normalizedAppSettings.app.sandbox
   });

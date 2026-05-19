@@ -8,6 +8,7 @@ const postmeterApi = {
     versions: () => ipcRenderer.invoke('app:versions'),
     checkForUpdates: (options) => ipcRenderer.invoke('app:check-updates', options),
     openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
+    setMenuShortcutsIgnored: (ignored) => ipcRenderer.invoke('app:set-menu-shortcuts-ignored', ignored === true),
     onMenuAction: (callback) => {
       const allowedStringActions = new Set([
         'new-workspace',

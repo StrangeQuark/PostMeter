@@ -90,13 +90,21 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   }
   assert.match(appMenuSource, /click:\s*\(\)\s*=>\s*sendMenuAction\(action\)/);
   assert.doesNotMatch(appMenuSource, /label:\s*'Save Workspace'/);
-  assert.match(appMenuSource, /actionItem\('Save',\s*'save-active-tab',\s*\{ accelerator: 'CmdOrCtrl\+S' \}\)/);
+  assert.match(appMenuSource, /normalizeKeyboardShortcuts/);
+  assert.match(appMenuSource, /shortcutForAction/);
+  assert.match(appMenuSource, /actionItem\('Save',\s*'save-active-tab',\s*\{ accelerator: acceleratorFor\('save-active-tab'\) \}\)/);
   assert.doesNotMatch(appMenuSource, /role:\s*'close'/);
-  assert.match(appMenuSource, /role:\s*'quit'/);
-  assert.match(appMenuSource, /role:\s*'editMenu'/);
-  assert.match(appMenuSource, /role:\s*'viewMenu'/);
+  assert.match(appMenuSource, /roleActionItem\('Quit',\s*'quit',\s*'quit'\)/);
+  assert.doesNotMatch(appMenuSource, /role:\s*'editMenu'/);
+  assert.match(appMenuSource, /roleActionItem\('Undo',\s*'undo',\s*'undo'\)/);
+  assert.match(appMenuSource, /roleActionItem\('Paste and Match Style',\s*'pasteAndMatchStyle',\s*'paste-and-match-style'\)/);
+  assert.match(appMenuSource, /roleActionItem\('Select All',\s*'selectAll',\s*'select-all'\)/);
+  assert.match(appMenuSource, /label:\s*'View'/);
+  assert.match(appMenuSource, /viewActionItem\('Reload',\s*'reload',\s*\{ accelerator: acceleratorFor\('reload'\) \}\)/);
+  assert.match(appMenuSource, /viewActionItem\('Zoom In',\s*'zoom-in',\s*\{ accelerator: acceleratorFor\('zoom-in'\) \}\)/);
+  assert.match(appMenuSource, /viewActionItem\('Zoom Out',\s*'zoom-out',\s*\{ accelerator: acceleratorFor\('zoom-out'\) \}\)/);
   assert.match(appMenuSource, /label:\s*'Help'/);
-  assert.match(appMenuSource, /actionItem\('Settings',\s*'settings',\s*\{ accelerator: 'CmdOrCtrl\+,' \}\)/);
+  assert.match(appMenuSource, /actionItem\('Settings',\s*'settings',\s*\{ accelerator: acceleratorFor\('settings'\) \}\)/);
   assert.match(appMenuSource, /label:\s*'PostMeter Documentation'/);
   assert.match(appMenuSource, /label:\s*'Report Issue'/);
   assert.match(appMenuSource, /label:\s*'Export Local Diagnostics\.\.\.'[\s\S]*sendMenuAction\('export-diagnostics'\)/);

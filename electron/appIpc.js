@@ -66,6 +66,19 @@ function registerAppIpc(options = {}) {
     return true;
   });
 
+  ipcMain.handle('app:set-menu-shortcuts-ignored', async (event, ignored) => {
+    assertMenuShortcutsIgnoredPayload(ignored);
+    const webContents = event?.sender;
+    if (!webContents) {
+      return false;
+    }
+    webContents.__postmeterMenuShortcutsIgnored = ignored;
+    if (typeof webContents.setIgnoreMenuShortcuts === 'function') {
+      webContents.setIgnoreMenuShortcuts(ignored);
+    }
+    return true;
+  });
+
   ipcMain.handle('clipboard:writeText', async (_event, text) => {
     assertClipboardTextPayload(text);
     if (!clipboard || typeof clipboard.writeText !== 'function') {
@@ -82,6 +95,12 @@ function assertClipboardTextPayload(value) {
   }
   if (value.length > 10 * 1024 * 1024) {
     throw new Error('Invalid IPC payload: clipboard text cannot exceed 10 MB.');
+  }
+}
+
+function assertMenuShortcutsIgnoredPayload(value) {
+  if (typeof value !== 'boolean') {
+    throw new Error('Invalid IPC payload: menu shortcut ignored flag must be a boolean.');
   }
 }
 
@@ -120,6 +139,7 @@ function releaseChannelForVersion(version) {
 
 module.exports = {
   assertClipboardTextPayload,
+  assertMenuShortcutsIgnoredPayload,
   registerAppIpc,
   releaseChannelForVersion,
   safeExternalUrl

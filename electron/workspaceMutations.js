@@ -623,6 +623,7 @@ function mergeWorkspaceSettingsForSave(currentSettings, nextSettings) {
     tabs: mergeObject(current.tabs, next.tabs),
     modals: mergeObject(current.modals, next.modals),
     updates: mergeObject(current.updates, next.updates),
+    shortcuts: mergeObject(current.shortcuts, next.shortcuts),
     request: mergeObject(current.request, next.request)
   };
 }

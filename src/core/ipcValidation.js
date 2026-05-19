@@ -9,6 +9,7 @@ const {
   normalizePerformanceConfig,
   normalizePerformanceSafetyLimits
 } = require('./models');
+const { KEYBOARD_SHORTCUT_ACTION_IDS } = require('./keyboardShortcuts');
 const {
   DIAGNOSIS_TYPE,
   diagnosisEffectiveConcurrency,
@@ -596,6 +597,9 @@ function assertSettingsPayload(value, field) {
     assertSchemaFields('modalSettings', value.modals, `${field}.modals`);
     assertNoUnexpectedFields('modalSettings', value.modals, `${field}.modals`);
   }
+  if (value.shortcuts != null) {
+    assertKeyboardShortcutsPayload(value.shortcuts, `${field}.shortcuts`);
+  }
   if (value.request != null) {
     object(value.request, `${field}.request`);
     assertAllowedObjectFields(value.request, `${field}.request`, [
@@ -648,6 +652,14 @@ function assertSettingsPayload(value, field) {
   }
   if (value.loadTestPolicy != null) {
     fail(`${field}.loadTestPolicy is no longer supported.`);
+  }
+}
+
+function assertKeyboardShortcutsPayload(value, field) {
+  object(value, field);
+  assertAllowedObjectFields(value, field, KEYBOARD_SHORTCUT_ACTION_IDS);
+  for (const actionId of KEYBOARD_SHORTCUT_ACTION_IDS) {
+    optionalString(value[actionId], `${field}.${actionId}`, LIMITS.short);
   }
 }
 

@@ -36,11 +36,65 @@ test('app settings store creates local settings.json without looking like a work
   assert.equal(workspaceSettings.tabs.saveOnForceClose, false);
   assert.equal(workspaceSettings.modals.closeOnBackdropClick, false);
   assert.equal(workspaceSettings.updates.includePrereleases, false);
+  assert.equal(workspaceSettings.shortcuts['new-request'], 'CmdOrCtrl+N');
+  assert.equal(workspaceSettings.shortcuts['new-environment'], 'CmdOrCtrl+E');
+  assert.equal(workspaceSettings.shortcuts['new-runner'], 'CmdOrCtrl+T');
+  assert.equal(workspaceSettings.shortcuts['new-performance-test'], 'CmdOrCtrl+P');
+  assert.equal(workspaceSettings.shortcuts['new-workspace'], 'CmdOrCtrl+W');
+  assert.equal(workspaceSettings.shortcuts.reload, 'CmdOrCtrl+R');
+  assert.equal(workspaceSettings.shortcuts['force-reload'], 'CmdOrCtrl+Shift+R');
+  assert.equal(workspaceSettings.shortcuts['toggle-devtools'], 'CmdOrCtrl+Shift+I');
+  assert.equal(workspaceSettings.shortcuts['zoom-in'], 'CmdOrCtrl+Plus');
+  assert.equal(workspaceSettings.shortcuts['zoom-out'], 'CmdOrCtrl+Minus');
+  assert.equal(workspaceSettings.shortcuts['toggle-fullscreen'], 'F11');
   assert.equal(workspaceSettings.diagnostics.requestResponseLogging.urls, false);
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.sendRequest, true);
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.cookies, true);
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.vault, true);
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.vaultGrants.workspace, false);
+});
+
+test('app settings store migrates legacy default runner shortcut away from reserved shortcuts', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-app-settings-shortcut-migration-'));
+  const settingsPath = path.join(temp, 'settings.json');
+  await fs.writeFile(settingsPath, JSON.stringify({
+    format: APP_SETTINGS_FORMAT,
+    version: 1,
+    app: {
+      shortcuts: {
+        'new-runner': 'CmdOrCtrl+R'
+      }
+    }
+  }));
+  const store = new AppSettingsStore(settingsPath);
+
+  const settings = await store.load();
+  const workspaceSettings = store.settingsForWorkspace('Local Workspace.json');
+
+  assert.equal(settings.version, APP_SETTINGS_VERSION);
+  assert.equal(workspaceSettings.shortcuts['new-runner'], 'CmdOrCtrl+T');
+  assert.equal(workspaceSettings.shortcuts.reload, 'CmdOrCtrl+R');
+});
+
+test('app settings store migrates previous runner default away from Quit', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-app-settings-shortcut-quit-migration-'));
+  const settingsPath = path.join(temp, 'settings.json');
+  await fs.writeFile(settingsPath, JSON.stringify({
+    format: APP_SETTINGS_FORMAT,
+    version: 2,
+    app: {
+      shortcuts: {
+        'new-runner': 'CmdOrCtrl+Q'
+      }
+    }
+  }));
+  const store = new AppSettingsStore(settingsPath);
+
+  await store.load();
+  const workspaceSettings = store.settingsForWorkspace('Local Workspace.json');
+
+  assert.equal(workspaceSettings.shortcuts['new-runner'], 'CmdOrCtrl+T');
+  assert.equal(workspaceSettings.shortcuts.quit, 'CmdOrCtrl+Q');
 });
 
 test('app settings store persists only app-wide settings and merges workspace-local fallbacks', async () => {
@@ -55,6 +109,11 @@ test('app settings store persists only app-wide settings and merges workspace-lo
     tabs: { saveOnForceClose: true },
     modals: { closeOnBackdropClick: true },
     updates: { includePrereleases: true },
+    shortcuts: {
+      'new-request': 'CmdOrCtrl+1',
+      'zoom-in': 'CmdOrCtrl+=',
+      settings: 'CmdOrCtrl+Alt+,'
+    },
     diagnostics: {
       logging: { enabled: true, level: 'debug' },
       requestResponseLogging: { urls: true, headers: true }
@@ -97,6 +156,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(persisted.app.tabs.saveOnForceClose, true);
   assert.equal(persisted.app.modals.closeOnBackdropClick, true);
   assert.equal(persisted.app.updates.includePrereleases, true);
+  assert.equal(persisted.app.shortcuts['new-request'], 'CmdOrCtrl+1');
+  assert.equal(persisted.app.shortcuts['zoom-in'], 'CmdOrCtrl+Plus');
+  assert.equal(persisted.app.shortcuts.settings, 'CmdOrCtrl+Alt+,');
   assert.equal(persisted.app.diagnostics.logging.level, 'debug');
   assert.equal(Object.hasOwn(persisted.app.diagnostics, 'requestResponseLogging'), false);
   assert.equal(Object.hasOwn(persisted.app, 'request'), false);
@@ -135,6 +197,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(workspaceASettings.appearance.editorFontSize, 19);
   assert.equal(workspaceASettings.editor.lineNumbers, false);
   assert.equal(workspaceASettings.editor.variableTooltipHints, false);
+  assert.equal(workspaceASettings.shortcuts['new-request'], 'CmdOrCtrl+1');
+  assert.equal(workspaceASettings.shortcuts['zoom-in'], 'CmdOrCtrl+Plus');
+  assert.equal(workspaceASettings.shortcuts.settings, 'CmdOrCtrl+Alt+,');
   assert.equal(workspaceASettings.diagnostics.requestResponseLogging.urls, true);
   assert.equal(workspaceASettings.request.sslCertificateVerification, false);
   assert.equal(workspaceASettings.request.caCertificatePath, '/tmp/workspace-ca.pem');
@@ -149,6 +214,8 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(workspaceBSettings.editor.lineNumbers, false);
   assert.equal(workspaceBSettings.editor.variableTooltipHints, false);
   assert.equal(workspaceBSettings.tabs.saveOnForceClose, true);
+  assert.equal(workspaceBSettings.shortcuts['new-request'], 'CmdOrCtrl+1');
+  assert.equal(workspaceBSettings.shortcuts['zoom-in'], 'CmdOrCtrl+Plus');
   assert.equal(workspaceBSettings.diagnostics.requestResponseLogging.urls, false);
   assert.equal(workspaceBSettings.request.sslCertificateVerification, false);
   assert.equal(workspaceBSettings.request.caCertificatePath, '');
