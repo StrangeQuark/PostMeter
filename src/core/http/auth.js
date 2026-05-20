@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const net = require('node:net');
 const { resolveEnvironmentValue } = require('../workspace/environmentResolver');
 const {
   API_KEY_LOCATIONS,
@@ -1925,7 +1926,30 @@ function parseTokenUrl(value, label = 'OAuth 2.0 token URL') {
   if (scheme !== 'http' && scheme !== 'https') {
     throw new Error(`${label} must use http or https.`);
   }
+  if (scheme === 'http' && !isLoopbackOAuthUrl(url)) {
+    throw new Error(`${label} must use https unless it targets a loopback address.`);
+  }
   return url;
+}
+
+function isLoopbackOAuthUrl(value) {
+  const url = value instanceof URL ? value : new URL(String(value || ''));
+  const hostname = normalizeOAuthHostname(url.hostname);
+  if (hostname === 'localhost') {
+    return true;
+  }
+  if (net.isIP(hostname) === 4) {
+    return hostname.split('.')[0] === '127';
+  }
+  return hostname === '::1' || hostname === '0:0:0:0:0:0:0:1';
+}
+
+function normalizeOAuthHostname(hostname) {
+  return String(hostname || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
 }
 
 function parseCallbackUrl(value) {
@@ -2350,6 +2374,7 @@ module.exports = {
   buildNtlmType3AuthorizationHeader,
   createOAuthPkceSession,
   exchangeOAuthAuthorizationCode,
+  isLoopbackOAuthUrl,
   maybeRefreshOAuthToken,
   normalizeAuth,
   parseDigestChallenge,

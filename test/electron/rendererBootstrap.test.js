@@ -2874,6 +2874,15 @@ test('renderer supplies explicit collection export format handlers', () => {
   assert.match(rendererSource, /onExportPerformanceTest: \(\) => \{ void exportPerformanceTestFromPicker\(\); \}/);
 });
 
+test('renderer prompts for locked encrypted workspace export keys', () => {
+  const rendererSource = readRendererBundleSourceSync();
+  assert.match(
+    rendererSource,
+    /workspaceItem\.locked === true[\s\S]*promptWorkspaceEncryptionKey\([\s\S]*title: 'Export encrypted workspace'/
+  );
+  assert.match(rendererSource, /exportWorkspaceBoundary\(null, workspaceItem\.id, encryptionKey\)/);
+});
+
 test('renderer exposes first-class runner UI and sends runner payloads through runtime IPC', () => {
   const rendererSource = readRendererBundleSourceSync();
   const bootstrapSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/app/rendererBootstrap.js'), 'utf8');

@@ -3,6 +3,7 @@ const path = require('node:path');
 const {
   createOAuthPkceSession,
   exchangeOAuthAuthorizationCode,
+  isLoopbackOAuthUrl,
   pollOAuthDeviceToken,
   redactOAuthErrorMessage,
   requestOAuthDeviceAuthorization
@@ -334,6 +335,9 @@ function safeOAuthExternalUrl(value) {
   const scheme = parsed.protocol.replace(':', '').toLowerCase();
   if (scheme !== 'http' && scheme !== 'https') {
     throw new Error('OAuth external URL must use http or https.');
+  }
+  if (scheme === 'http' && !isLoopbackOAuthUrl(parsed)) {
+    throw new Error('OAuth external URL must use https unless it targets a loopback address.');
   }
   if (parsed.username || parsed.password) {
     throw new Error('OAuth external URL must not include credentials.');

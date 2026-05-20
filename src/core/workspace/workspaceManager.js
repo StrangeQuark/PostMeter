@@ -6,6 +6,7 @@ const {
   moveFileNoOverwrite,
   pathExists,
   temporaryJsonPath,
+  workspaceForExport,
   writeTextFileAtomic
 } = require('./workspacePersistence');
 const {
@@ -18,6 +19,7 @@ const {
   WorkspaceEncryptionKeyRequiredError,
   assertWorkspaceEncryptionKey,
   decryptWorkspaceEnvelope,
+  encryptWorkspacePayload,
   isEncryptedWorkspaceEnvelope
 } = require('./workspaceEncryption');
 
@@ -136,14 +138,20 @@ class WorkspaceManager {
     return this.currentStore().exportWorkspace(workspace, exportPath);
   }
 
-  async exportWorkspaceById(workspaceId, exportPath) {
+  async exportWorkspaceById(workspaceId, exportPath, options = {}) {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
     if (await this.isWorkspaceEncrypted(workspaceId)) {
-      const rawContent = await fs.readFile(this.absoluteWorkspacePath(workspaceId), 'utf8');
-      await writeTextFileAtomic(exportPath, rawContent, { prefix: 'postmeter-workspace-export' });
+      const encryptionKey = options.encryptionKey || this.encryptionKeyForWorkspace(workspaceId);
+      if (!encryptionKey) {
+        throw new WorkspaceEncryptionKeyRequiredError('Workspace must be unlocked before exporting an encrypted workspace.');
+      }
+      const encryptedWorkspace = JSON.parse(await fs.readFile(this.absoluteWorkspacePath(workspaceId), 'utf8'));
+      const workspace = await decryptWorkspaceEnvelope(encryptedWorkspace, encryptionKey);
+      const exportEnvelope = await encryptWorkspacePayload(workspaceForExport(workspace), encryptionKey);
+      await writeTextFileAtomic(exportPath, JSON.stringify(exportEnvelope, null, 2), { prefix: 'postmeter-workspace-export' });
       return exportPath;
     }
     const store = new WorkspaceStore(this.absoluteWorkspacePath(workspaceId));

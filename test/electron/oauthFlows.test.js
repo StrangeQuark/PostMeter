@@ -19,6 +19,10 @@ test('finds custom OAuth callback arguments conservatively', () => {
 test('OAuth external browser launches reject non-web URLs at the shell boundary', () => {
   assert.equal(safeOAuthExternalUrl('https://auth.example.test/authorize').protocol, 'https:');
   assert.equal(safeOAuthExternalUrl('http://127.0.0.1:12345/oauth/callback').protocol, 'http:');
+  assert.equal(safeOAuthExternalUrl('http://localhost:12345/oauth/callback').protocol, 'http:');
+  assert.equal(safeOAuthExternalUrl('http://[::1]:12345/oauth/callback').protocol, 'http:');
+  assert.throws(() => safeOAuthExternalUrl('http://auth.example.test/authorize'), /must use https unless it targets a loopback address/);
+  assert.throws(() => safeOAuthExternalUrl('http://192.0.2.10/authorize'), /must use https unless it targets a loopback address/);
   assert.throws(() => safeOAuthExternalUrl('javascript:alert(1)'), /must use http or https/);
   assert.throws(() => safeOAuthExternalUrl('file:///tmp/postmeter.html'), /must use http or https/);
   assert.throws(() => safeOAuthExternalUrl('https://token@auth.example.test/authorize'), /must not include credentials/);

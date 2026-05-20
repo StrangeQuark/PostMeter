@@ -71,6 +71,10 @@
   line-height: 1.45;
 }
 
+#workspaceEncryptionConfirmField {
+  margin-top: 12px;
+}
+
 #notificationModalMessage {
   white-space: pre-line;
 }

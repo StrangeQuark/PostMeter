@@ -6,7 +6,10 @@ const test = require('node:test');
 const { CURRENT_SCHEMA_VERSION } = require('../../src/core/workspace/models');
 const { WorkspaceManager } = require('../../src/core/workspace/workspaceManager');
 const { WorkspaceRecoveryError } = require('../../src/core/workspace/workspaceStore');
-const { isEncryptedWorkspaceEnvelope } = require('../../src/core/workspace/workspaceEncryption');
+const {
+  decryptWorkspaceEnvelope,
+  isEncryptedWorkspaceEnvelope
+} = require('../../src/core/workspace/workspaceEncryption');
 
 test('workspace manager creates and describes a default managed workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
@@ -117,6 +120,15 @@ test('workspace manager discovers, unlocks, exports, duplicates, and imports enc
   assert.equal(locked.workspaces[0].encrypted, true);
   assert.equal(locked.workspaces[0].locked, true);
   assert.equal(locked.workspaces[0].requestCount, 0);
+  await assert.rejects(
+    () => lockedManager.exportWorkspaceById(loaded.activeWorkspaceId, path.join(temp, 'locked-export.json')),
+    /unlocked before exporting/
+  );
+  const lockedExportPath = path.join(temp, 'locked-export-with-key.json');
+  await lockedManager.exportWorkspaceById(loaded.activeWorkspaceId, lockedExportPath, { encryptionKey: 'secret1' });
+  const lockedExportedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(await fs.readFile(lockedExportPath, 'utf8')), 'secret1');
+  assert.equal(Object.hasOwn(lockedExportedWorkspace, 'localsettings'), false);
+  assert.equal(lockedExportedWorkspace.collections[0].requests[0].name, 'SSN Request');
 
   const unlocked = await lockedManager.unlockWorkspace(loaded.activeWorkspaceId, 'secret1');
   assert.equal(unlocked.locked, false);
@@ -126,11 +138,18 @@ test('workspace manager discovers, unlocks, exports, duplicates, and imports enc
   const savedEncryptedText = await fs.readFile(loaded.path, 'utf8');
   assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(savedEncryptedText)), true);
   assert.doesNotMatch(savedEncryptedText, /Updated SSN Request|123-45-6789/);
+  const savedEncryptedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(savedEncryptedText), 'secret1');
+  assert.equal(Object.hasOwn(savedEncryptedWorkspace, 'localsettings'), true);
 
   const exportPath = path.join(temp, 'encrypted-export.json');
   await lockedManager.exportWorkspaceById(loaded.activeWorkspaceId, exportPath);
-  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(await fs.readFile(exportPath, 'utf8'))), true);
-  assert.doesNotMatch(await fs.readFile(exportPath, 'utf8'), /Updated SSN Request|123-45-6789/);
+  const exportedText = await fs.readFile(exportPath, 'utf8');
+  const exportedEnvelope = JSON.parse(exportedText);
+  assert.equal(isEncryptedWorkspaceEnvelope(exportedEnvelope), true);
+  assert.doesNotMatch(exportedText, /Updated SSN Request|123-45-6789/);
+  const exportedWorkspace = await decryptWorkspaceEnvelope(exportedEnvelope, 'secret1');
+  assert.equal(Object.hasOwn(exportedWorkspace, 'localsettings'), false);
+  assert.equal(exportedWorkspace.collections[0].requests[0].name, 'Updated SSN Request');
 
   const duplicateId = await lockedManager.duplicateWorkspace(loaded.activeWorkspaceId);
   assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(await fs.readFile(path.join(temp, duplicateId), 'utf8'))), true);
@@ -140,6 +159,9 @@ test('workspace manager discovers, unlocks, exports, duplicates, and imports enc
   const importedId = await lockedManager.importWorkspace(importPath);
   const importedText = await fs.readFile(path.join(temp, importedId), 'utf8');
   assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(importedText)), true);
+  const importedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(importedText), 'secret1');
+  assert.equal(Object.hasOwn(importedWorkspace, 'localsettings'), false);
+  assert.equal(importedWorkspace.collections[0].requests[0].name, 'Updated SSN Request');
 });
 
 test('workspace manager can snapshot and restore a deleted managed workspace for rollback', async () => {

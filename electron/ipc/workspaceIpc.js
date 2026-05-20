@@ -443,13 +443,14 @@ function registerWorkspaceIpc(options = {}) {
     }
   });
 
-  ipcMain.handle('workspace:export', async (_event, nextWorkspace, workspaceId) => {
+  ipcMain.handle('workspace:export', async (_event, nextWorkspace, workspaceId, encryptionKey = '') => {
     if (nextWorkspace) {
       assertWorkspacePayload(nextWorkspace);
     }
     if (workspaceId != null && (typeof workspaceId !== 'string' || !workspaceId.trim())) {
       throw new Error('workspaceId must be a non-empty string when provided.');
     }
+    const exportEncryptionKey = encryptionKey ? validateWorkspaceEncryptionKey(encryptionKey) : '';
     const result = await dialog.showSaveDialog(getMainWindow(), {
       title: 'Export PostMeter Workspace',
       defaultPath: 'postmeter-workspace.postmeter.json',
@@ -460,7 +461,7 @@ function registerWorkspaceIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     const exportedPath = workspaceId
-      ? await getWorkspaceStore().exportWorkspaceById(workspaceId, filePath)
+      ? await getWorkspaceStore().exportWorkspaceById(workspaceId, filePath, { encryptionKey: exportEncryptionKey })
       : await getWorkspaceStore().exportWorkspace(nextWorkspace || getWorkspace(), filePath);
     return fileOperationResult({ cancelled: false, path: exportedPath });
   });

@@ -103,7 +103,7 @@ const postmeterApi = {
     delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
     duplicate: (workspaceId) => ipcRenderer.invoke('workspace:duplicate', workspaceId),
     importWorkspace: (filePath) => ipcRenderer.invoke('workspace:import', optionalFilePath(filePath)),
-    exportWorkspace: (workspace, workspaceId) => ipcRenderer.invoke('workspace:export', workspace, workspaceId),
+    exportWorkspace: (workspace, workspaceId, encryptionKey = '') => ipcRenderer.invoke('workspace:export', workspace, workspaceId, String(encryptionKey || '').slice(0, 1024)),
     onKeyPrompt: (callback) => {
       const listener = (_event, payload) => callback(safeWorkspaceKeyPromptPayload(payload));
       ipcRenderer.on('workspace:key-prompt', listener);

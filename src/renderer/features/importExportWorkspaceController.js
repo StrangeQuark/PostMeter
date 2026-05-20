@@ -210,12 +210,24 @@ async function exportWorkspace(workspaceIdOrItem = null) {
     return null;
   }
   if (workspaceItem.encrypted === true) {
+    const encryptionKey = workspaceItem.locked === true
+      ? await promptWorkspaceEncryptionKey({
+          mode: 'export',
+          title: 'Export encrypted workspace',
+          message: `Enter the key for "${workspaceDisplayName(workspaceItem)}" to export it.`,
+          warning: 'PostMeter uses this key only to create the encrypted export. The workspace remains locked.',
+          confirmLabel: 'Export'
+        })
+      : '';
+    if (workspaceItem.locked === true && !encryptionKey) {
+      return null;
+    }
     try {
       if (workspaceItem.current === true && workspaceItem.locked !== true) {
         await persistWorkspace(false, { scope: 'all' });
       }
       const exportWorkspaceBoundary = window.__postmeterExportWorkspace || window.postmeter.workspace.exportWorkspace;
-      const result = await exportWorkspaceBoundary(null, workspaceItem.id);
+      const result = await exportWorkspaceBoundary(null, workspaceItem.id, encryptionKey);
       if (!result.cancelled) {
         setStatus(`Encrypted workspace exported to ${result.path}.`);
       }
