@@ -15,6 +15,7 @@ const { fsyncDirectory, moveFileNoOverwrite } = require('../src/core/workspacePe
 const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./appProtocol');
 const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('./appIpc');
+const { createAutoUpdateService } = require('./autoUpdateService');
 const { createTrustedIpcMain } = require('./ipcSecurity');
 const { createOAuthFlowController } = require('./oauthFlows');
 const {
@@ -44,6 +45,7 @@ const {
 } = require('./vaultPrompt');
 const {
   assertFileOperationResultPayload,
+  assertAutoUpdateStatusPayload,
   assertOAuthProgressPayload,
 } = require('../src/core/ipcValidation');
 
@@ -58,6 +60,7 @@ const trustedIpcMain = createTrustedIpcMain(ipcMain);
 const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAuthProgress });
 let diagnosticsLogger;
 let runtimeIpcController;
+let autoUpdateService;
 
 registerAppProtocolScheme(protocol);
 
@@ -145,6 +148,14 @@ function refreshApplicationMenu() {
   });
 }
 
+function emitAutoUpdateStatus(status) {
+  assertAutoUpdateStatusPayload(status);
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  mainWindow.webContents.send('updates:status', status);
+}
+
 if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
   app.whenReady()
     .then(runSandboxRuntimeValidation)
@@ -179,6 +190,14 @@ async function startApplication() {
     }
     refreshApplicationMenu();
     createWindow();
+    autoUpdateService = createAutoUpdateService({
+      app,
+      autoUpdater: require('electron-updater').autoUpdater,
+      emitStatus: emitAutoUpdateStatus,
+      getSettings: () => workspace?.settings?.updates || {},
+      recordDiagnosticEvent
+    });
+    autoUpdateService.start();
   } catch (error) {
     await failStartup(error);
   }
@@ -517,7 +536,14 @@ trustedIpcMain.handle('vault:unset-secret', async (_event, key) => {
 });
 
 registerVaultPromptIpc({ ipcMain: trustedIpcMain });
-registerAppIpc({ app, clipboard, ipcMain: trustedIpcMain, recordDiagnosticEvent, shell });
+registerAppIpc({
+  app,
+  clipboard,
+  getAutoUpdateService: () => autoUpdateService,
+  ipcMain: trustedIpcMain,
+  recordDiagnosticEvent,
+  shell
+});
 
 registerOAuthIpc({ ipcMain: trustedIpcMain, oauthFlows, recordDiagnosticEvent });
 
@@ -591,6 +617,7 @@ registerWorkspaceIpc({
   saveLocalSettings,
   saveWorkspace,
   saveWorkspaceSync,
+  onSettingsSaved: () => autoUpdateService?.applySettings?.(),
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;
   },

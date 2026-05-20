@@ -35,7 +35,9 @@ test('app settings store creates local settings.json without looking like a work
   assert.equal(workspaceSettings.editor.lineNumbers, true);
   assert.equal(workspaceSettings.tabs.saveOnForceClose, false);
   assert.equal(workspaceSettings.modals.closeOnBackdropClick, false);
+  assert.equal(workspaceSettings.updates.automaticUpdatesEnabled, false);
   assert.equal(workspaceSettings.updates.includePrereleases, false);
+  assert.equal(workspaceSettings.updates.startupRemindersEnabled, true);
   assert.equal(workspaceSettings.shortcuts['new-request'], 'CmdOrCtrl+N');
   assert.equal(workspaceSettings.shortcuts['new-environment'], 'CmdOrCtrl+E');
   assert.equal(workspaceSettings.shortcuts['new-runner'], 'CmdOrCtrl+T');
@@ -108,7 +110,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
     editor: { lineNumbers: false, variableTooltipHints: false },
     tabs: { saveOnForceClose: true },
     modals: { closeOnBackdropClick: true },
-    updates: { includePrereleases: true },
+    updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false },
     shortcuts: {
       'new-request': 'CmdOrCtrl+1',
       'zoom-in': 'CmdOrCtrl+=',
@@ -155,7 +157,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(persisted.app.editor.variableTooltipHints, false);
   assert.equal(persisted.app.tabs.saveOnForceClose, true);
   assert.equal(persisted.app.modals.closeOnBackdropClick, true);
+  assert.equal(persisted.app.updates.automaticUpdatesEnabled, true);
   assert.equal(persisted.app.updates.includePrereleases, true);
+  assert.equal(persisted.app.updates.startupRemindersEnabled, false);
   assert.equal(persisted.app.shortcuts['new-request'], 'CmdOrCtrl+1');
   assert.equal(persisted.app.shortcuts['zoom-in'], 'CmdOrCtrl+Plus');
   assert.equal(persisted.app.shortcuts.settings, 'CmdOrCtrl+Alt+,');
@@ -200,6 +204,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(workspaceASettings.shortcuts['new-request'], 'CmdOrCtrl+1');
   assert.equal(workspaceASettings.shortcuts['zoom-in'], 'CmdOrCtrl+Plus');
   assert.equal(workspaceASettings.shortcuts.settings, 'CmdOrCtrl+Alt+,');
+  assert.equal(workspaceASettings.updates.automaticUpdatesEnabled, true);
+  assert.equal(workspaceASettings.updates.includePrereleases, true);
+  assert.equal(workspaceASettings.updates.startupRemindersEnabled, false);
   assert.equal(workspaceASettings.diagnostics.requestResponseLogging.urls, true);
   assert.equal(workspaceASettings.request.sslCertificateVerification, false);
   assert.equal(workspaceASettings.request.caCertificatePath, '/tmp/workspace-ca.pem');
@@ -216,6 +223,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(workspaceBSettings.tabs.saveOnForceClose, true);
   assert.equal(workspaceBSettings.shortcuts['new-request'], 'CmdOrCtrl+1');
   assert.equal(workspaceBSettings.shortcuts['zoom-in'], 'CmdOrCtrl+Plus');
+  assert.equal(workspaceBSettings.updates.automaticUpdatesEnabled, true);
+  assert.equal(workspaceBSettings.updates.includePrereleases, true);
+  assert.equal(workspaceBSettings.updates.startupRemindersEnabled, false);
   assert.equal(workspaceBSettings.diagnostics.requestResponseLogging.urls, false);
   assert.equal(workspaceBSettings.request.sslCertificateVerification, false);
   assert.equal(workspaceBSettings.request.caCertificatePath, '');

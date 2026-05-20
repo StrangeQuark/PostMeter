@@ -1,6 +1,8 @@
+const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const YAML = require('yaml');
 const { spawnWithTimeout } = require('./smokeProcess');
 const { findArtifacts, sha256File, UNSUPPORTED_DISTRIBUTABLE_EXTENSIONS } = require('./writeReleaseChecksums');
 
@@ -65,6 +67,7 @@ async function validatePackageMetadata(packageJsonPath) {
   if (!packageJson.build?.protocols?.some((protocol) => (protocol.schemes || []).includes('postmeter'))) {
     throw new Error('package.json must declare the postmeter:// custom protocol.');
   }
+  validatePublishMetadata(build.publish);
   requireBuildTargets(build.linux?.target, ['AppImage', 'deb'], 'Linux');
   requireBuildTargets(build.win?.target, ['nsis'], 'Windows');
   requireBuildTargets(build.mac?.target, ['dmg', 'zip'], 'macOS');
@@ -75,6 +78,14 @@ async function validatePackageMetadata(packageJsonPath) {
     throw new Error('package.json must not declare file associations until release docs and validators cover them.');
   }
   return packageJson;
+}
+
+function validatePublishMetadata(publish) {
+  const publishers = Array.isArray(publish) ? publish : publish ? [publish] : [];
+  const githubPublisher = publishers[0] || {};
+  if (githubPublisher.provider !== 'github' || githubPublisher.owner !== 'StrangeQuark' || githubPublisher.repo !== 'PostMeter') {
+    throw new Error('package.json build.publish must use the canonical StrangeQuark/PostMeter GitHub provider for auto-updates.');
+  }
 }
 
 function requireBuildTargets(actualTargets, expectedTargets, label) {
@@ -152,10 +163,111 @@ async function validateReleaseManifest({
   }
   await validateManifestCoversReleaseArtifacts(releaseDir, manifestArtifacts);
   await validateChecksumsFile(checksumFile, manifestArtifacts);
+  await validateUpdaterMetadata(releaseDir, {
+    expectedVersion: artifactVersion,
+    manifestArtifacts,
+    requiredTypes
+  });
   for (const type of requiredTypes) {
     if (!seenTypes.has(String(type).toLowerCase())) {
       throw new Error(`Missing required release artifact type: ${type}.`);
     }
+  }
+}
+
+async function validateUpdaterMetadata(releaseDir, options = {}) {
+  const {
+    expectedVersion = '',
+    manifestArtifacts = new Map(),
+    requiredTypes = new Set()
+  } = options;
+  const required = new Set([...requiredTypes].map((type) => String(type).toLowerCase()));
+  const expectations = [
+    { file: 'latest.yml', requiredTypes: ['exe'] },
+    { file: 'latest-mac.yml', requiredTypes: ['dmg', 'zip'] },
+    { file: 'latest-linux.yml', requiredTypes: ['appimage', 'deb'] }
+  ];
+  for (const expectation of expectations) {
+    const metadataPath = path.join(releaseDir, expectation.file);
+    const exists = await fileExists(metadataPath);
+    const requiredForRelease = expectation.requiredTypes.some((type) => required.has(type));
+    if (!exists) {
+      if (requiredForRelease) {
+        throw new Error(`Missing electron-updater metadata file: ${expectation.file}.`);
+      }
+      continue;
+    }
+    const metadata = YAML.parse(await fs.readFile(metadataPath, 'utf8'));
+    if (!metadata || typeof metadata !== 'object') {
+      throw new Error(`${expectation.file} must contain updater metadata.`);
+    }
+    if (expectedVersion && String(metadata.version || '') !== expectedVersion) {
+      throw new Error(`${expectation.file} version must be ${expectedVersion}.`);
+    }
+    const entries = updaterMetadataEntries(metadata);
+    if (!entries.length) {
+      throw new Error(`${expectation.file} must list at least one updater artifact.`);
+    }
+    for (const entry of entries) {
+      await validateUpdaterMetadataEntry(releaseDir, expectation.file, entry, manifestArtifacts);
+    }
+  }
+}
+
+function updaterMetadataEntries(metadata = {}) {
+  const entries = [];
+  for (const file of Array.isArray(metadata.files) ? metadata.files : []) {
+    if (file?.url) {
+      entries.push({ file: String(file.url), sha512: file.sha512 || '' });
+    }
+  }
+  if (metadata.path) {
+    entries.push({ file: String(metadata.path), sha512: metadata.sha512 || '' });
+  }
+  const seen = new Set();
+  return entries.filter((entry) => {
+    if (seen.has(entry.file)) {
+      return false;
+    }
+    seen.add(entry.file);
+    return true;
+  });
+}
+
+async function validateUpdaterMetadataEntry(releaseDir, metadataFile, entry, manifestArtifacts) {
+  if (entry.file !== path.basename(entry.file) || /[\\/]/.test(entry.file) || /^[a-z]+:/i.test(entry.file)) {
+    throw new Error(`${metadataFile} updater artifact URLs must be top-level release filenames, got ${entry.file}.`);
+  }
+  if (!manifestArtifacts.has(entry.file)) {
+    throw new Error(`${metadataFile} references artifact ${entry.file}, but release-manifest.json does not list it.`);
+  }
+  if (entry.sha512) {
+    const actual = await sha512FileBase64(path.join(releaseDir, entry.file));
+    if (actual !== entry.sha512) {
+      throw new Error(`${metadataFile} SHA-512 for ${entry.file} does not match the release artifact.`);
+    }
+  }
+}
+
+async function sha512FileBase64(filePath) {
+  const hash = crypto.createHash('sha512');
+  const file = await fs.open(filePath, 'r');
+  try {
+    for await (const chunk of file.createReadStream()) {
+      hash.update(chunk);
+    }
+  } finally {
+    await file.close();
+  }
+  return hash.digest('base64');
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -416,9 +528,11 @@ module.exports = {
   validateLinuxAppImageProtocol,
   ensureExecutableFile,
   requireBuildTargets,
+  sha512FileBase64,
   validatePackageMetadata,
   validateLinuxDebProtocol,
   validateMacZipProtocol,
+  validateUpdaterMetadata,
   macInfoPlistPathFromListing,
   releaseValidationCommandTimeoutMillis,
   runCommand,

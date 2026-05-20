@@ -73,6 +73,8 @@ Configured artifacts:
 
 Only top-level distributable files are included in `SHA256SUMS` and `release-manifest.json`; unpacked app internals such as `win-unpacked/PostMeter.exe` are used only by packaged smoke validators and are rejected if they appear in release metadata. Release validation also fails if any top-level distributable is missing from the manifest or if `SHA256SUMS` does not exactly match the manifest artifact set and hashes.
 
+Automatic update metadata is published with the same GitHub Release. Release validation requires platform updater metadata files (`latest.yml`, `latest-mac.yml`, and `latest-linux.yml` as applicable) for required artifact types, verifies their versions, rejects nested or external artifact URLs, and checks SHA-512 values against the referenced top-level release artifacts. CI, release, and manual native validation upload `latest*.yml` and `*.blockmap` files so packaged opt-in updates can download delta/full installers from GitHub Releases.
+
 Canonical metadata:
 
 - App ID: `com.strangequark.postmeter`
@@ -97,6 +99,7 @@ Release builds are unsigned until maintainer-controlled certificates exist. Wind
 - Dependency audit and Electron runtime-version checks tracked as release-blocking readiness rows.
 - Packaged startup smoke that verifies the trusted `postmeter-app://bundle/src/renderer/index.html` renderer URL, renderer CSP meta policy, full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, workspace create/save/reload, default platform user-data path shape, and isolated user-data path override behavior.
 - Linux/Windows/macOS GitHub Actions source-tree sandbox, packaged build/smoke/protocol jobs with artifact upload and failure log/screenshot upload.
+- Packaged automatic-update wiring with off-by-default Settings opt-in, startup reminders for users who have not opted in, GitHub Releases publish metadata, updater metadata validation, and blockmap artifact retention.
 - Manual no-publish native release validation workflow for pre-production evidence gathering.
 - Windows protocol registration plus ShellExecute launch script and macOS URL scheme metadata plus Launch Services launch validator, including checks that the launched app belongs to the installed Windows artifact or each discovered macOS app bundle under validation and uploaded protocol-validator logs when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set.
 - Electron security, workspace durability, and non-Postman compatibility matrices, including channel-level Electron IPC enumeration, secure custom-protocol app-content loading with CSP/`nosniff`/`no-referrer` headers, main-frame-only preload exposure, trusted main-frame renderer IPC sender validation, collision-resistant atomic workspace/session/vault/export writes, filesystem-discovered managed workspaces, recovery behavior, and large-workspace performance budgets.

@@ -22,7 +22,9 @@ test('app IPC registers stable app channels', () => {
   });
 
   assert.deepEqual([...handlers.keys()].sort(), [
+    'app:auto-update-status',
     'app:check-updates',
+    'app:install-update',
     'app:open-external',
     'app:set-menu-shortcuts-ignored',
     'app:versions',
@@ -32,6 +34,7 @@ test('app IPC registers stable app channels', () => {
   assert.equal(versions.app, '0.0.0-test');
   assert.equal(versions.releaseChannel, 'stable');
   assert.equal(versions.platform, process.platform);
+  assert.equal(versions.packaged, false);
 });
 
 test('app IPC toggles menu shortcut ignore mode for the sender webContents', async () => {
@@ -139,6 +142,72 @@ test('app update checks emit structured diagnostic events', async () => {
   assert.deepEqual(events.map((event) => event.type), ['updates.check.completed']);
   assert.equal(events[0].fields.includePrereleases, true);
   assert.equal(events[0].fields.releaseChannel, 'beta');
+});
+
+test('app IPC exposes automatic update status and install actions', async () => {
+  const handlers = new Map();
+  const calls = [];
+  const service = {
+    status: () => ({
+      status: 'downloaded',
+      automaticUpdatesEnabled: true,
+      includePrereleases: false,
+      version: '9.9.9'
+    }),
+    installUpdate: async () => {
+      calls.push('install');
+      return {
+        status: 'installing',
+        automaticUpdatesEnabled: true,
+        includePrereleases: false,
+        version: '9.9.9'
+      };
+    }
+  };
+  registerAppIpc({
+    app: { getVersion: () => '1.0.0', isPackaged: true },
+    getAutoUpdateService: () => service,
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    shell: { openExternal: async () => true }
+  });
+
+  assert.deepEqual(await handlers.get('app:auto-update-status')(), {
+    status: 'downloaded',
+    automaticUpdatesEnabled: true,
+    includePrereleases: false,
+    version: '9.9.9'
+  });
+  assert.deepEqual(await handlers.get('app:install-update')(), {
+    status: 'installing',
+    automaticUpdatesEnabled: true,
+    includePrereleases: false,
+    version: '9.9.9'
+  });
+  assert.deepEqual(calls, ['install']);
+});
+
+test('app IPC validates automatic update service payloads', async () => {
+  const handlers = new Map();
+  registerAppIpc({
+    app: { getVersion: () => '1.0.0' },
+    getAutoUpdateService: () => ({
+      status: () => ({ status: 'restarting' }),
+      installUpdate: async () => ({ status: 'failed', error: 42 })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    shell: { openExternal: async () => true }
+  });
+
+  assert.throws(() => handlers.get('app:auto-update-status')(), /status.status is not supported/);
+  await assert.rejects(() => handlers.get('app:install-update')(), /status.error must be a string/);
 });
 
 test('app update checks emit sanitized failed diagnostic events', async () => {

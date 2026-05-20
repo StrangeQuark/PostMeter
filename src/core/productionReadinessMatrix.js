@@ -194,10 +194,11 @@ function buildProductionReadinessMatrix() {
       commands: ['npm run production:readiness:validate'],
       evidenceRefs: ['README.md', 'docs/TECH_SPECS.md', 'docs/RELEASE_READINESS.md', 'docs/SECURITY.md']
     }),
-    row('updates.metadata', 'release', 'Release/update metadata points to GitHub Releases without introducing a cloud account gate.', 'implemented', {
+    row('updates.metadata', 'release', 'Release/update metadata and opt-in automatic update wiring point to GitHub Releases without introducing a cloud account gate.', 'implemented', {
       releaseBlocking: true,
-      commands: ['npm run release:manifest', 'npm run release:validate'],
-      evidenceRefs: ['src/core/updateChecker.js', 'scripts/writeReleaseManifest.js', 'package.json']
+      commands: ['npm run release:manifest', 'npm run release:validate', 'npm test'],
+      evidenceRefs: ['electron/autoUpdateService.js', 'src/core/updateChecker.js', 'src/renderer/index.html', 'scripts/writeReleaseManifest.js', 'scripts/validateReleaseArtifacts.js', 'package.json'],
+      notes: 'Automatic downloads and install-on-quit are off by default and require the Settings > Updates opt-in. Users who have not opted in can receive a startup reminder with Update now, Cancel, and Stop reminder choices when GitHub Releases reports a newer version. Release validation keeps electron-updater metadata and blockmap artifacts in the GitHub Release path.'
     }),
     row('performance.local-v1', 'deferred-features', 'Local first-class saved Performance tests are implemented as workspace-owned performanceTests with local execution, IPC, diagnostics boundaries, safety caps, import/export validation, scoped one-click Full Endpoint Diagnosis, and eight-type coverage; distributed/cloud load execution remains deferred.', 'implemented', {
       releaseBlocking: false,

@@ -425,6 +425,8 @@
     bindChange(doc, 'saveOnForceCloseInput', options.onSaveOnForceCloseChange);
     bindChange(doc, 'closeModalsOnBackdropClickInput', options.onCloseModalsOnBackdropClickChange);
     bindChange(doc, 'includePrereleasesInput', options.onIncludePrereleasesChange);
+    bindChange(doc, 'automaticUpdatesInput', options.onAutomaticUpdatesChange);
+    bindChange(doc, 'startupUpdateRemindersInput', options.onStartupUpdateRemindersChange);
     bindChange(doc, 'showEditorLineNumbersInput', options.onShowEditorLineNumbersChange);
     bindChange(doc, 'showVariableTooltipHintsInput', options.onShowVariableTooltipHintsChange);
     bindChange(doc, 'interfaceFontSelect', options.onInterfaceTypographyChange);
@@ -584,6 +586,9 @@
     bindChange(doc, 'csvVariablesContinueWithoutRowsInput', () => options.onCsvVariablesRowModeChange?.('continue'));
     bindClick(doc, 'cancelConfirmActionButton', () => options.onResolveActiveModal?.(false));
     bindClick(doc, 'confirmActionButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'stopUpdateReminderButton', () => options.onResolveActiveModal?.('stop'));
+    bindClick(doc, 'cancelUpdateReminderButton', () => options.onResolveActiveModal?.('cancel'));
+    bindClick(doc, 'updateNowButton', () => options.onResolveActiveModal?.('update'));
     bindClick(doc, 'closeAuthRefreshAutoDetectModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'cancelAuthRefreshAutoDetectButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'confirmAuthRefreshAutoDetectButton', options.onConfirmAuthRefreshAutoDetectModal);

@@ -1626,6 +1626,9 @@ initializeRenderer({
       getVariables: variableHighlightVariablesForTarget
     }).destroy);
     registerCleanup(window.postmeter.app.onMenuAction(handleAppMenuAction));
+    if (window.postmeter.app.onAutoUpdateStatus) {
+      registerCleanup(window.postmeter.app.onAutoUpdateStatus(handleAutoUpdateStatus));
+    }
     registerCleanup(window.postmeter.oauth.onProgress((progress) => {
       if (progress.id === activeOauthFlowId) {
         renderOauthProgress(progress);
@@ -1672,6 +1675,7 @@ initializeRenderer({
     queueUiOauthSmoke();
     queueUiHawkSmoke();
     queueUiAwsSmoke();
+    scheduleStartupUpdateReminder();
     markUiWorkflowStartupStep('after-smoke-queue');
   }
 });
@@ -1767,6 +1771,8 @@ function bindUi() {
     onSaveOnForceCloseChange: () => setSaveOnForceClose($('saveOnForceCloseInput')?.checked === true, { save: true }),
     onCloseModalsOnBackdropClickChange: () => setCloseModalsOnBackdropClick($('closeModalsOnBackdropClickInput')?.checked === true, { save: true }),
     onIncludePrereleasesChange: () => setIncludePrereleases($('includePrereleasesInput')?.checked === true, { save: true }),
+    onAutomaticUpdatesChange: () => setAutomaticUpdatesEnabled($('automaticUpdatesInput')?.checked === true, { save: true }),
+    onStartupUpdateRemindersChange: () => setStartupUpdateRemindersEnabled($('startupUpdateRemindersInput')?.checked === true, { save: true }),
     onShowEditorLineNumbersChange: (event) => {
       const input = event?.currentTarget || $('showEditorLineNumbersInput');
       return setEditorLineNumbers(input?.checked === true, { save: true });
@@ -5785,6 +5791,7 @@ function focusInitialModalElement(modalId) {
     csvVariablesModal: 'csvVariablesSchemaInput',
     htmlReportOptionsModal: 'htmlReportIncludeResultsInput',
     confirmActionModal: 'cancelConfirmActionButton',
+    updateReminderModal: 'cancelUpdateReminderButton',
     authRefreshAutoDetectModal: 'cancelAuthRefreshAutoDetectButton',
     notificationModal: 'closeNotificationModalButton',
     cookiesModal: 'cookiesDomainInput',
@@ -6838,6 +6845,12 @@ function renderSettingsControls() {
   if ($('includePrereleasesInput')) {
     $('includePrereleasesInput').checked = workspace.settings.updates.includePrereleases === true;
   }
+  if ($('automaticUpdatesInput')) {
+    $('automaticUpdatesInput').checked = workspace.settings.updates.automaticUpdatesEnabled === true;
+  }
+  if ($('startupUpdateRemindersInput')) {
+    $('startupUpdateRemindersInput').checked = workspace.settings.updates.startupRemindersEnabled !== false;
+  }
   if ($('showEditorLineNumbersInput')) {
     $('showEditorLineNumbersInput').checked = workspace.settings.editor.lineNumbers !== false;
   }
@@ -7048,7 +7061,11 @@ function duplicateKeyboardShortcutAction(actionId, shortcut) {
 function ensureSettings() {
   workspace.runners = normalizeWorkspaceRunners(workspace.runners);
   workspace.settings ||= {};
-  workspace.settings.updates ||= { includePrereleases: false };
+  workspace.settings.updates = {
+    automaticUpdatesEnabled: workspace.settings.updates?.automaticUpdatesEnabled === true,
+    includePrereleases: workspace.settings.updates?.includePrereleases === true,
+    startupRemindersEnabled: workspace.settings.updates?.startupRemindersEnabled !== false
+  };
   workspace.settings.shortcuts = KEYBOARD_SHORTCUTS.normalizeKeyboardShortcuts
     ? KEYBOARD_SHORTCUTS.normalizeKeyboardShortcuts(workspace.settings.shortcuts)
     : { ...DEFAULT_KEYBOARD_SHORTCUTS, ...(workspace.settings.shortcuts || {}) };
@@ -7759,6 +7776,48 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
   }
   if (options.showStatus !== false) {
     setStatus(`Prerelease update checks ${workspace.settings.updates.includePrereleases ? 'enabled' : 'disabled'}.`);
+  }
+  return true;
+}
+
+async function setAutomaticUpdatesEnabled(enabled, options = {}) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.updates.automaticUpdatesEnabled = enabled === true;
+  renderSettingsControls();
+  if (options.save === true) {
+    return saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false
+        ? ''
+        : options.statusMessage || `Automatic updates ${workspace.settings.updates.automaticUpdatesEnabled ? 'enabled' : 'disabled'}.`,
+      'Automatic update setting save failed',
+      'Update Settings Save Failed'
+    );
+  }
+  if (options.showStatus !== false) {
+    setStatus(options.statusMessage || `Automatic updates ${workspace.settings.updates.automaticUpdatesEnabled ? 'enabled' : 'disabled'}.`);
+  }
+  return true;
+}
+
+async function setStartupUpdateRemindersEnabled(enabled, options = {}) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.updates.startupRemindersEnabled = enabled !== false;
+  renderSettingsControls();
+  if (options.save === true) {
+    return saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false
+        ? ''
+        : options.statusMessage || `Startup update reminders ${workspace.settings.updates.startupRemindersEnabled ? 'enabled' : 'disabled'}.`,
+      'Update reminder setting save failed',
+      'Update Settings Save Failed'
+    );
+  }
+  if (options.showStatus !== false) {
+    setStatus(options.statusMessage || `Startup update reminders ${workspace.settings.updates.startupRemindersEnabled ? 'enabled' : 'disabled'}.`);
   }
   return true;
 }
@@ -21724,6 +21783,105 @@ async function deleteWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
 
 async function checkForUpdates() {
   return rendererWorkflows.checkForUpdates();
+}
+
+function scheduleStartupUpdateReminder() {
+  if (isAutomatedUiSmoke()) {
+    return;
+  }
+  window.setTimeout(() => {
+    void shouldRunStartupUpdateReminder().then((shouldRun) => {
+      if (shouldRun) {
+        return checkForStartupUpdateReminder();
+      }
+      return null;
+    });
+  }, 1500);
+}
+
+async function shouldRunStartupUpdateReminder() {
+  if (typeof window.__postmeterUpdateCheck === 'function') {
+    return true;
+  }
+  try {
+    const versions = await window.postmeter?.app?.versions?.();
+    return versions?.packaged === true;
+  } catch {
+    return false;
+  }
+}
+
+async function checkForStartupUpdateReminder() {
+  ensureSettings();
+  if (workspace.settings.updates.automaticUpdatesEnabled === true || workspace.settings.updates.startupRemindersEnabled === false) {
+    return null;
+  }
+  try {
+    const updateCheck = window.__postmeterUpdateCheck || window.postmeter?.app?.checkForUpdates;
+    if (typeof updateCheck !== 'function') {
+      return null;
+    }
+    const result = await updateCheck({
+      includePrereleases: workspace.settings.updates.includePrereleases === true
+    });
+    if (!result?.updateAvailable) {
+      return result || null;
+    }
+    setStatus(`PostMeter ${result.latestVersion} is available.`);
+    const decision = await updateReminderModal(result);
+    if (decision === 'update') {
+      const openExternal = window.__postmeterOpenExternal || window.postmeter?.app?.openExternal;
+      if (result.releaseUrl && typeof openExternal === 'function') {
+        await openExternal(result.releaseUrl);
+      }
+      return result;
+    }
+    if (decision === 'stop') {
+      await setStartupUpdateRemindersEnabled(false, {
+        save: true,
+        statusMessage: 'Startup update reminders disabled.'
+      });
+    }
+    return result;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Startup update check failed: ${message}`);
+    return null;
+  }
+}
+
+async function updateReminderModal(update = {}) {
+  const version = String(update.latestVersion || update.version || '').trim();
+  const current = String(update.currentVersion || '').trim();
+  $('updateReminderModalTitle').textContent = version ? `PostMeter ${version} is available` : 'Update available';
+  $('updateReminderModalMessage').textContent = [
+    current ? `You are running PostMeter ${current}.` : '',
+    version ? `PostMeter ${version} is available.` : 'A new PostMeter release is available.',
+    'Update now opens GitHub Releases so you can download the installer for your operating system.'
+  ].filter(Boolean).join('\n\n');
+  return await showModal('updateReminderModal', 'cancel');
+}
+
+function handleAutoUpdateStatus(status = {}) {
+  const version = String(status.version || '').trim();
+  if (status.status === 'checking') {
+    setStatus('Checking for automatic updates...');
+  } else if (status.status === 'available') {
+    setStatus(version ? `PostMeter ${version} is available. Downloading update...` : 'Downloading available PostMeter update...');
+  } else if (status.status === 'downloading') {
+    const percent = Number.isFinite(Number(status.percent)) ? Math.round(Number(status.percent)) : 0;
+    setStatus(`Downloading PostMeter update${percent > 0 ? ` (${percent}%)` : ''}...`);
+  } else if (status.status === 'downloaded') {
+    const message = version
+      ? `PostMeter ${version} has been downloaded and will install when PostMeter closes.`
+      : 'A PostMeter update has been downloaded and will install when PostMeter closes.';
+    setStatus(message);
+    notifyUser('Update Downloaded', message);
+  } else if (status.status === 'failed') {
+    const message = String(status.error || 'Automatic update failed.');
+    setStatus(`Automatic update failed: ${message}`);
+    notifyUser('Automatic Update Failed', message);
+  }
 }
 
 async function importCollection() {

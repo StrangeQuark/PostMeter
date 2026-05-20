@@ -36,7 +36,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Store workspace data as plain JSON without local encryption, redaction, or credential-specific export modes.
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
 - Record recent request history.
-- Check GitHub Releases for newer PostMeter versions and prompt before opening release pages. Stable releases are checked by default; prereleases are checked only when the user enables the opt-in setting.
+- Check GitHub Releases for newer PostMeter versions. Manual checks and startup reminders prompt before opening release pages, while an app-wide Settings opt-in enables automatic update download and install-on-quit through packaged release metadata.
 - Save and run local workspace-owned Performance tests separately from distributed/cloud load execution; the legacy Load Test panel, JMeter bridge, worker, policy, and export path have been removed.
 - Open Help > Tutorials to launch guided in-app walkthroughs. The current V1 set covers basic request sending, environment variables, and runner request series. Tutorials are renderer-owned UI guidance only; they are not saved to workspace JSON and do not add runtime/core behavior.
 
@@ -258,7 +258,7 @@ Main process responsibilities:
 - Persist normalized workspace data as plain JSON under Electron `userData/profile/workspace/`, keep app-wide preferences in `profile/settings.json`, and keep workspace-local non-portable trust/privacy settings in managed workspace `localsettings`.
 - Export Runner and Performance results to JSON, CSV, or a self-contained HTML report.
 - Persist request history after sends.
-- Check GitHub Releases for update metadata and open approved release URLs in the external browser. The Help menu owns update checks and the prerelease opt-in checkbox.
+- Check GitHub Releases for update metadata, open approved release URLs in the external browser, and run opt-in automatic update downloads in packaged builds. The Help menu owns manual update checks; Settings > Updates owns automatic updates, startup reminders, and prerelease opt-ins.
 - Own structured local diagnostics, bounded rotated diagnostic logs, and user-selected local diagnostic bundle export. The main process never uploads diagnostics and does not accept renderer-provided upload destinations.
 
 Renderer responsibilities:
@@ -280,7 +280,10 @@ Preload API:
 ```text
 window.postmeter.app.versions()
 window.postmeter.app.checkForUpdates(options)
+window.postmeter.app.autoUpdateStatus()
+window.postmeter.app.installUpdate()
 window.postmeter.app.openExternal(url)
+window.postmeter.app.onAutoUpdateStatus(callback)
 window.postmeter.app.onMenuAction(callback)
 window.postmeter.workspace.load()
 window.postmeter.workspace.save(workspace)
@@ -1045,7 +1048,7 @@ Manual native release validation is configured in `.github/workflows/release-val
 Packaging limitations:
 
 - Release signing and notarization are intentionally deferred until maintainer certificates exist.
-- Artifact upload to GitHub Releases is configured for tag builds, but PostMeter currently prompts users to open GitHub Releases instead of downloading/installing updates itself.
+- Artifact upload to GitHub Releases is configured for tag builds. Electron updater metadata (`latest*.yml`) and blockmaps are preserved for packaged automatic updates; users must opt in before PostMeter downloads updates or installs them on quit.
 
 ## Testing
 
@@ -1079,7 +1082,7 @@ Missing tests:
 
 - Execute and archive successful packaged custom-scheme OAuth redirect validation on native Windows and macOS release runners before promoting packaging rows to `validated`.
 - Replace remaining complex payload-specific IPC shape validation with generated validators from shared schemas.
-- Add signing, notarization, installer execution validation, and update metadata on top of the current unsigned GitHub Releases workflow.
+- Add signing, notarization, and installer execution validation on top of the current unsigned GitHub Releases workflow.
 - Continue monitoring native Windows/macOS packaged OS-sandbox validation in CI and release workflows. Linux's current `bubblewrap` namespace plus dangerous-syscall seccomp policy is accepted for the current Linux claim; a stricter deny-by-default seccomp-BPF allowlist is optional future hardening.
 - Keep `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep green before making or preserving the full Postman script compatibility claim.
 - Continue monitoring obscure browser/export cookie variants against the expanded real-world fixture corpus; remaining cookie work is compatibility hardening, not a known v1 release blocker.

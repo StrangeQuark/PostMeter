@@ -95,6 +95,14 @@
         ]
       }
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "StrangeQuark",
+        "repo": "PostMeter",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "electron/**/*",
       "src/**/*",
@@ -142,6 +150,7 @@
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "@xmldom/xmldom": "^0.9.10",
+    "electron-updater": "^6.8.3",
     "handlebars": "4.7.9",
     "markdown-it": "^14.1.1",
     "node-forge": "^1.4.0",

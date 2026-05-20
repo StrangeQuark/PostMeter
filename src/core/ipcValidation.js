@@ -1521,6 +1521,52 @@ function assertUpdateCheckOptionsPayload(value, field = 'options') {
   assertSchemaFields('updateCheckOptions', value || {}, field);
 }
 
+function assertAutoUpdateStatusPayload(value, field = 'status') {
+  object(value, field);
+  assertAllowedObjectFields(value, field, [
+    'automaticUpdatesEnabled',
+    'bytesPerSecond',
+    'error',
+    'includePrereleases',
+    'percent',
+    'reason',
+    'releaseDate',
+    'releaseName',
+    'source',
+    'status',
+    'total',
+    'transferred',
+    'version'
+  ]);
+  string(value.status, `${field}.status`, LIMITS.short);
+  if (![
+    'available',
+    'checking',
+    'downloaded',
+    'downloading',
+    'failed',
+    'idle',
+    'installing',
+    'not-available',
+    'skipped',
+    'unsupported'
+  ].includes(value.status)) {
+    fail(`${field}.status is not supported.`);
+  }
+  optionalBoolean(value.automaticUpdatesEnabled, `${field}.automaticUpdatesEnabled`);
+  optionalBoolean(value.includePrereleases, `${field}.includePrereleases`);
+  optionalNumber(value.percent, `${field}.percent`);
+  optionalNumber(value.transferred, `${field}.transferred`);
+  optionalNumber(value.total, `${field}.total`);
+  optionalNumber(value.bytesPerSecond, `${field}.bytesPerSecond`);
+  optionalString(value.version, `${field}.version`, LIMITS.short);
+  optionalString(value.releaseName, `${field}.releaseName`, LIMITS.name);
+  optionalString(value.releaseDate, `${field}.releaseDate`, LIMITS.name);
+  optionalString(value.source, `${field}.source`, LIMITS.short);
+  optionalString(value.reason, `${field}.reason`, LIMITS.value);
+  optionalString(value.error, `${field}.error`, LIMITS.value);
+}
+
 function assertExternalUrlPayload(value, field = 'external') {
   assertSchemaFields('externalUrl', { url: value }, field);
 }
@@ -2165,6 +2211,7 @@ module.exports = {
   assertRunnerConfigPayload,
   assertRunnerProgressPayload,
   assertSessionPayload,
+  assertAutoUpdateStatusPayload,
   assertExternalUrlPayload,
   assertFileOperationResultPayload,
   assertResponsePayload,

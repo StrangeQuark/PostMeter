@@ -101,6 +101,43 @@ test('preload exposes menu shortcut ignore toggling through the app API', async 
   });
 });
 
+test('preload exposes automatic update APIs and sanitizes update status events', async () => {
+  const harness = loadPreloadHarness();
+  assert.deepEqual(await harness.api.app.autoUpdateStatus(), {
+    channel: 'app:auto-update-status',
+    args: []
+  });
+  assert.deepEqual(await harness.api.app.installUpdate(), {
+    channel: 'app:install-update',
+    args: []
+  });
+
+  const received = [];
+  const cleanup = harness.api.app.onAutoUpdateStatus((status) => received.push(status));
+  harness.emit('updates:status', {
+    status: 'downloading',
+    automaticUpdatesEnabled: true,
+    includePrereleases: true,
+    version: '9.9.9'.repeat(20),
+    percent: '41.5',
+    transferred: 1024,
+    total: 2048,
+    bytesPerSecond: '512'
+  });
+  harness.emit('updates:status', null);
+  cleanup();
+  harness.emit('updates:status', { status: 'downloaded' });
+
+  assert.equal(received.length, 2);
+  assert.equal(received[0].status, 'downloading');
+  assert.equal(received[0].automaticUpdatesEnabled, true);
+  assert.equal(received[0].includePrereleases, true);
+  assert.equal(received[0].version.length, 64);
+  assert.equal(received[0].percent, 41.5);
+  assert.equal(received[0].bytesPerSecond, 512);
+  assert.equal(received[1].status, 'failed');
+});
+
 function loadPreloadHarness(options = {}) {
   const listeners = new Map();
   const exposed = {};

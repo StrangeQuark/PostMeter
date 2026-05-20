@@ -165,6 +165,24 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.app-auto-update-status",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `app:auto-update-status`: Automatic update status query returns validated service state without accepting renderer update metadata.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/appIpc.js",
+        "electron/preload.js",
+        "electron/autoUpdateService.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/appIpc.test.js",
+        "test/electron/autoUpdateService.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.app-check-updates",
       "area": "IPC channel",
       "target": "renderer-to-main channel `app:check-updates`: Update-check request with validated prerelease options.",
@@ -176,6 +194,24 @@
       ],
       "tests": [
         "test/electron/appIpc.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.app-install-update",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `app:install-update`: Automatic update install request is available only after the main-process update service has downloaded a validated update.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/appIpc.js",
+        "electron/preload.js",
+        "electron/autoUpdateService.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/appIpc.test.js",
+        "test/electron/autoUpdateService.test.js",
         "test/electron/ipcValidation.test.js"
       ],
       "notes": ""
@@ -988,6 +1024,24 @@
       "tests": [
         "test/electron/sessionIpc.test.js",
         "test/electron/sessionStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.updates-status",
+      "area": "IPC channel",
+      "target": "main-to-renderer channel `updates:status`: Automatic update status events are validated in the main process and sanitized again by preload before renderer delivery.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/main.js",
+        "electron/preload.js",
+        "electron/autoUpdateService.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/preloadMenuActions.test.js",
+        "test/electron/autoUpdateService.test.js",
+        "test/electron/ipcValidation.test.js"
       ],
       "notes": ""
     },

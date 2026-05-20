@@ -543,8 +543,11 @@ function requiredPreloadApiSurface() {
   return [
     ['app', 'versions'],
     ['app', 'checkForUpdates'],
+    ['app', 'autoUpdateStatus'],
+    ['app', 'installUpdate'],
     ['app', 'openExternal'],
     ['app', 'setMenuShortcutsIgnored'],
+    ['app', 'onAutoUpdateStatus'],
     ['app', 'onMenuAction'],
     ['session', 'load'],
     ['session', 'save'],

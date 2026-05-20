@@ -792,7 +792,16 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /results:\s*\[[^\]]*'responseNetworkTab'[^\]]*\]/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
+  assert.match(indexSource, /id="automaticUpdatesInput"/);
+  assert.match(indexSource, /id="startupUpdateRemindersInput"/);
   assert.match(indexSource, /id="includePrereleasesInput"/);
+  assert.match(indexSource, /id="updateReminderModal"[^>]+aria-labelledby="updateReminderModalTitle"/);
+  assert.match(indexSource, /id="stopUpdateReminderButton"[^>]*>Stop reminder<\/button>/);
+  assert.match(indexSource, /id="cancelUpdateReminderButton"[^>]*>Cancel<\/button>/);
+  assert.match(indexSource, /id="updateNowButton"[^>]*>Update now<\/button>/);
+  assert.match(rendererSource, /function scheduleStartupUpdateReminder\(\)/);
+  assert.match(rendererSource, /function checkForStartupUpdateReminder\(\)/);
+  assert.match(rendererSource, /function handleAutoUpdateStatus\(status = \{\}\)/);
   assert.doesNotMatch(indexSource, /class="toolbar-group theme-control"/);
   assert.match(indexSource, /role="tablist"[^>]+aria-orientation="vertical"/);
   assert.match(layoutSource, /aria-valuemin/);
@@ -1040,6 +1049,9 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
     ['cancelFolderDestinationButton', createElement()],
     ['confirmActionButton', createElement()],
     ['cancelConfirmActionButton', createElement()],
+    ['stopUpdateReminderButton', createElement()],
+    ['cancelUpdateReminderButton', createElement()],
+    ['updateNowButton', createElement()],
     ['closeAuthRefreshAutoDetectModalButton', createElement()],
     ['cancelAuthRefreshAutoDetectButton', createElement()],
     ['confirmAuthRefreshAutoDetectButton', createElement()],
@@ -1078,6 +1090,9 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('cancelFolderDestinationButton').dispatch('click');
   elements.get('confirmActionButton').dispatch('click');
   elements.get('cancelConfirmActionButton').dispatch('click');
+  elements.get('stopUpdateReminderButton').dispatch('click');
+  elements.get('cancelUpdateReminderButton').dispatch('click');
+  elements.get('updateNowButton').dispatch('click');
   elements.get('closeAuthRefreshAutoDetectModalButton').dispatch('click');
   elements.get('cancelAuthRefreshAutoDetectButton').dispatch('click');
   elements.get('confirmAuthRefreshAutoDetectButton').dispatch('click');
@@ -1085,7 +1100,7 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('closeCookiesModalButton').dispatch('click');
   elements.get('cancelRunnerImportButton').dispatch('click');
 
-  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, null, null, 'auth-auto-detect-confirm', true, true, null]);
+  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, 'stop', 'cancel', 'update', null, null, 'auth-auto-detect-confirm', true, true, null]);
 });
 
 test('renderer bootstrap binds workspace cookie manager controls', () => {
@@ -1552,6 +1567,8 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['showVariableTooltipHintsInput', createElement({ tagName: 'INPUT' })],
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
     ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
+    ['automaticUpdatesInput', createElement({ tagName: 'INPUT' })],
+    ['startupUpdateRemindersInput', createElement({ tagName: 'INPUT' })],
     ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
     ['sslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
     ['caCertificatePathInput', createElement({ tagName: 'INPUT' })],
@@ -1601,6 +1618,8 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     onShowVariableTooltipHintsChange: () => calls.push('variable-tooltip-hints'),
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
     onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
+    onAutomaticUpdatesChange: () => calls.push('automatic-updates'),
+    onStartupUpdateRemindersChange: () => calls.push('startup-update-reminders'),
     onIncludePrereleasesChange: () => calls.push('include-prereleases'),
     onTlsSettingsChange: () => calls.push('tls-settings'),
     onChooseCaCertificate: () => calls.push('choose-ca'),
@@ -1633,6 +1652,8 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   for (const section of ['updates', 'shortcuts', 'scripts', 'certificates', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
     settingsButtons.find((button) => button.dataset.settingsSection === section).dispatch('click');
   }
+  elements.get('automaticUpdatesInput').dispatch('change');
+  elements.get('startupUpdateRemindersInput').dispatch('change');
   elements.get('includePrereleasesInput').dispatch('change');
   elements.get('sslCertificateVerificationInput').dispatch('change');
   elements.get('caCertificatePathInput').dispatch('change');
@@ -1677,6 +1698,8 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'section:files',
     'section:diagnostics',
     'section:appearance',
+    'automatic-updates',
+    'startup-update-reminders',
     'include-prereleases',
     'tls-settings',
     'tls-settings',
