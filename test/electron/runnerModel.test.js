@@ -72,6 +72,13 @@ test('runner model defaults CSV variables off but preserves legacy configured CS
   assert.equal(runnerModel({ csvVariables: { schema: 'name', values: 'alice' } }).csvVariables.enabled, true);
 });
 
+test('runner model defaults stop-on-failure on while preserving explicit opt out', () => {
+  assert.equal(runnerModel().stopOnFailure, true);
+  assert.equal(runnerModel({ stopOnFailure: undefined }).stopOnFailure, true);
+  assert.equal(runnerModel({ stopOnFailure: true }).stopOnFailure, true);
+  assert.equal(runnerModel({ stopOnFailure: false }).stopOnFailure, false);
+});
+
 test('runner model preserves original auth for runner requests using refreshing auth', () => {
   const runner = runnerModel({
     requests: [{

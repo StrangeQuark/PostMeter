@@ -20,8 +20,8 @@ async function main() {
   const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
-    timeoutMillis: 45_000,
-    timeoutMessage: 'Electron UI workflow smoke timed out after 45000 ms.'
+    timeoutMillis: 180_000,
+    timeoutMessage: 'Electron UI workflow smoke timed out after 180000 ms.'
   });
 
   await server.close();

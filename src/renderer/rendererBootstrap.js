@@ -603,7 +603,10 @@
     bindClick(doc, 'allowVaultPromptWorkspaceButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'workspace' }));
     bindClick(doc, 'resetVaultPromptGrantsButton', () => options.onResolveVaultPrompt?.({ granted: false, reset: true, scope: 'request' }));
 
-    doc.addEventListener('click', () => {
+    doc.addEventListener('click', (event) => {
+      if (event.target?.closest?.('#tutorialCoach')) {
+        return;
+      }
       options.onCloseContextMenu?.();
       closeToolbarMenus(doc);
     });

@@ -271,7 +271,7 @@ function normalizeSessionRunner(value) {
     id,
     name: normalizeNonEmptyString(value.name, 'Untitled Runner'),
     environmentId: normalizeEnvironmentId(value.environmentId),
-    stopOnFailure: value.stopOnFailure === true,
+    stopOnFailure: value.stopOnFailure !== false,
     allowEnvironmentMutation: value.allowEnvironmentMutation === true,
     requests: normalizeArray(value.requests, 1000, normalizeSessionRequest)
   };

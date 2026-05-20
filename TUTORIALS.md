@@ -6,9 +6,15 @@ This file is an implementation handoff for future tutorial expansion. It is inte
 
 - Entry point: `Help > Tutorials`.
 - Current tutorials:
-  - `request-basics`: Send a Basic Request.
-  - `environment-variables`: Use Environment Variables.
-  - `runner-basics`: Run a Request Series.
+  - `request`: Request.
+  - `environment-variables`: Environment Variables.
+  - `runner`: Runner.
+  - `performance`: Performance Test.
+  - `workspaces-basics`: Workspaces.
+  - `cookies-basics`: Cookies.
+  - `local-secrets-and-files`: Vault, Packages, and Secrets.
+  - `ssl-certificates`: SSL Certificates.
+- CSV variable and refreshing auth guidance is folded into the Runner and Performance Test tutorials rather than exposed as standalone tutorials.
 - Tutorials are renderer-only guidance. They are not persisted to workspace JSON, settings JSON, session JSON, or run exports.
 - Tutorial steps may create unsaved draft objects so the user can inspect real UI controls without preparing fixture data.
 
@@ -16,6 +22,8 @@ This file is an implementation handoff for future tutorial expansion. It is inte
 
 - `electron/appMenu.js`
   - Adds `actionItem('Tutorials', 'tutorials')` to the Help menu.
+- `electron/mainWindow.js`
+  - Keeps the UI workflow smoke title watcher long enough for the full tutorial catalog walkthrough.
 - `electron/preload.js`
   - Allows the `tutorials` menu action through `app.onMenuAction`.
 - `src/renderer/index.html`
@@ -23,12 +31,16 @@ This file is an implementation handoff for future tutorial expansion. It is inte
   - Adds `#tutorialOverlay`, `#tutorialTargetFrame`, and `#tutorialCoach` outside the modal backdrop.
 - `src/renderer/overlays.css`
   - Styles the tutorials modal, tutorial list/detail layout, target frame, overlay dimming, coach panel, and mobile fallback.
+  - Constrains the tutorial modal to the viewport and lets the tutorial list/detail panes scroll on small app screens.
+  - Keeps the tutorial overlay above modal dialogs so modal-owned steps can highlight real controls.
 - `src/renderer/rendererBootstrap.js`
   - Binds close/start/back/next/end controls to renderer callbacks.
 - `src/renderer/renderer.js`
   - Owns the tutorial definitions, modal rendering, active tutorial state, step navigation, overlay positioning, and context setup helpers.
 - `src/renderer/uiWorkflowSmoke.js`
-  - E2E coverage for all three tutorial entries and first guided overlay startup/shutdown.
+  - E2E coverage for every tutorial entry. Opens the modal, selects each tutorial, starts it, navigates every step, verifies the highlighted target is visible, and finishes.
+- `test/electron/uiWorkflowSmoke.js`
+  - Sets the outer Electron process timeout for the expanded workflow smoke.
 - `test/electron/appMenu.test.js`
   - Verifies Help > Tutorials dispatches `tutorials`.
 - `test/electron/preloadMenuActions.test.js`
@@ -90,6 +102,7 @@ let selectedTutorialId = TUTORIALS[0]?.id || '';
 let activeTutorialId = '';
 let activeTutorialStepIndex = 0;
 let tutorialOverlayPositionHandler = null;
+let tutorialOwnedModalId = '';
 ```
 
 These values are intentionally not part of `rendererState.js` or session persistence. Closing/reloading the app resets tutorial state.
@@ -133,6 +146,8 @@ Optional fields:
 
 - `step.hint`: secondary coach text.
 - `step.beforeStep`: idempotent function called before the step renders.
+- `step.scroll`: set to `false` when the target is already visible and auto-scrolling would move an internal panel to an awkward position.
+- `step.coachPlacement`: optional placement for coach-only steps. Use `top-left` when a step intentionally has no selector and should sit under the app menu area.
 
 ## Current Step Setup Helpers
 
@@ -157,6 +172,37 @@ Optional fields:
 - Switches to Runners mode and opens the runner tab.
 - Does not save the runner.
 
+Additional tutorial helpers now cover the expanded catalog:
+
+- `tutorialEnsureCollectionRequestContext(tabName = 'params')`
+  - Opens a normal collection request context for request, cookie, and SSL certificate tutorials.
+  - Creates an unsaved collection/request only when needed.
+- `tutorialEnsureDraftRequestContext(tabName = 'params')`
+  - Opens an unsaved draft request when the tutorial needs to safely mutate controls such as OAuth fields.
+- `tutorialEnsureRawRequestBodyContext()`
+  - Opens the Body tab and prepares a raw JSON request body so raw-format controls are visible.
+- `tutorialEnsureRequestSettingsOverviewContext()`
+  - Opens the request Settings tab and resets that tab panel to the top before highlighting the visible settings pane.
+- `tutorialEnsureRequestResultsContext(tabName = 'response')`
+  - Opens a collection request context and activates the requested response evidence tab.
+- `tutorialEnsurePerformanceContext()`
+  - Selects or creates an unsaved performance test and opens the Performance panel.
+- `tutorialEnsurePerformanceRequestContext(tabName)` and `tutorialEnsurePerformanceTypeContext(type)`
+  - Open performance request tabs and performance mode panels.
+- `tutorialEnsureRunnerCaptureSettings()`, `tutorialEnsurePerformanceCaptureSettings()`, `tutorialEnsureRunnerAdvancedSettings()`, and `tutorialEnsurePerformanceAdvancedSettings()`
+  - Open floating panels idempotently while tutorial coach clicks are exempt from outside-click dismissal.
+- `tutorialEnsureToolbarMenu(buttonId, menuId)`
+  - Opens toolbar menus idempotently for tutorial-owned toolbar menu steps.
+- `tutorialEnsureRunnerCsvVariablesModal()`, `tutorialEnsureCookiesModal()`, `tutorialEnsureSettingsModal()`, and `tutorialEnsureSettingsSection(section)`
+  - Open tutorial-owned modals and close them automatically when the tutorial ends.
+- `tutorialEnsureCookieDomainInput()`, `tutorialEnsureLocalhostCookieDomain()`, `tutorialEnsureLocalhostCookieEditor()`, `tutorialEnsureCookiesClearMenu()`, and `tutorialEnsureRequestCookieSettingsContext()`
+  - Set up the Cookies tutorial with a localhost domain, sample cookie editor, open Clear menu, and request Settings cookie controls.
+- `tutorialEnsureAuthRefreshPanel(prefix)`, `tutorialEnsureAuthRefreshManageMenu(prefix)`, `tutorialEnsureAuthRefreshDetails(prefix, section)`, and `tutorialEnsureAuthRefreshAutoDetectExample(prefix)`
+  - Open refreshing-auth panels, request action menus, details sections, and a tutorial-owned mock Auto-Detect modal.
+- `tutorialEnsureClientCertificateModal()` and `tutorialEnsureClientCertificateModalFormat(format)`
+  - Open the client certificate editor from Settings and expose PEM/PFX-specific controls for the SSL Certificates tutorial.
+- `tutorialEnsureRequestCertificateSettingsContext()`
+  - Closes the tutorial-owned Settings modal and opens the request Settings tab for request-level SSL certificate controls.
 Future helpers should follow the same rule: create the smallest unsaved context needed to show real controls and avoid writing to disk.
 
 ## Runtime Lifecycle
@@ -214,6 +260,7 @@ End behavior:
 
 ```text
 endTutorial()
+  -> close tutorial-owned modal, toolbar menus, and floating settings panels
   -> hide overlay and target frame
   -> remove resize/scroll listeners
   -> reset active tutorial id/index
@@ -222,9 +269,12 @@ endTutorial()
 ## Overlay Positioning
 
 - `#tutorialTargetFrame` is fixed-positioned around the target's `getBoundingClientRect()` plus padding.
+- Target rectangles are clipped to the viewport and scrollable/hidden ancestor bounds, so highlights do not frame content hidden outside a pane.
 - `box-shadow: 0 0 0 9999px ...` creates the dimmed page outside the target.
 - `#tutorialOverlay` has `pointer-events: none`.
 - `#tutorialCoach` has `pointer-events: auto`, so coach buttons remain clickable.
+- The tutorial overlay is intentionally above modal dialogs so tutorials can highlight CSV, Cookies, and Settings modal controls.
+- Step transitions hide and reposition the frame before showing it, avoiding stale frame animation between distant targets.
 - Coach placement preference:
   - right of target
   - left of target
@@ -253,13 +303,13 @@ Current E2E assertions in `uiWorkflowSmoke.js`:
 
 - `window.PostMeterTutorials` exists.
 - Tutorials modal opens.
-- At least three `.tutorial-list-item` rows exist.
-- The three current tutorial titles render.
-- Each current tutorial renders a useful step list.
-- Starting `request-basics` closes the modal and shows `#tutorialOverlay`.
-- First step highlights a visible target frame.
-- Progress reads `Step 1 of 5`.
-- Ending the tutorial hides the overlay.
+- The full first-class tutorial catalog renders.
+- Each tutorial row can be selected from the modal.
+- Each detail pane renders exactly the tutorial's step list.
+- The modal exposes scrolling when the catalog or selected tutorial is taller than the available app screen.
+- Starting each tutorial closes the Tutorials modal and shows `#tutorialOverlay`.
+- Every step renders the expected progress/title and highlights a visible target frame.
+- Finishing each tutorial hides the overlay before the next tutorial starts.
 
 ## Future Expansion Rules
 

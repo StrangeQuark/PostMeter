@@ -778,28 +778,155 @@
 
   async function assertTutorialsSmoke(runtimeGlobal) {
     assertUiSmoke(runtimeGlobal.PostMeterTutorials, 'Tutorials API should be exposed for UI smoke coverage.');
-    const modalPromise = runtimeGlobal.PostMeterTutorials.openTutorialsModal();
-    await waitForUiSmoke(() => !$('modalBackdrop').hidden && !$('tutorialsModal').hidden, 'Tutorials modal should open from the renderer API.');
-    const tutorialItems = Array.from($('tutorialList').querySelectorAll('.tutorial-list-item'));
-    assertUiSmoke(tutorialItems.length >= 3, 'Tutorials modal should offer at least three basic tutorials.');
-    for (const tutorialTitle of ['Send a Basic Request', 'Use Environment Variables', 'Run a Request Series']) {
-      const item = tutorialItems.find((button) => button.textContent.includes(tutorialTitle));
-      assertUiSmoke(item, `Tutorials modal should include ${tutorialTitle}.`);
-      item.click();
-      assertUiSmoke($('tutorialDetailTitle').textContent === tutorialTitle, `${tutorialTitle} should render in the tutorial detail pane.`);
-      assertUiSmoke($('tutorialDetailSteps').querySelectorAll('li').length >= 4, `${tutorialTitle} should render a useful step list.`);
+    const expectedTutorialIds = [
+      'request',
+      'environment-variables',
+      'runner',
+      'performance',
+      'workspaces-basics',
+      'cookies-basics',
+      'local-secrets-and-files',
+      'ssl-certificates'
+    ];
+    const baselineWorkspace = await runtimeGlobal.postmeter.workspace.load();
+    try {
+      const tutorials = runtimeGlobal.PostMeterTutorials.tutorials;
+      assertUiSmoke(Array.isArray(tutorials), 'Tutorials API should expose the tutorial catalog.');
+      assertUiSmoke(tutorials.length >= expectedTutorialIds.length, 'Tutorials modal should offer the full first-class tutorial catalog.');
+      assertUiSmoke(!tutorials.some((item) => item.id === 'csv-variables'), 'CSV variables should be folded into runner and performance tutorials.');
+      assertUiSmoke(!tutorials.some((item) => item.id === 'refreshing-auth'), 'Refreshing Auth should be folded into runner and performance tutorials.');
+      assertUiSmoke(!tutorials.some((item) => item.id === 'oauth2-pkce'), 'OAuth 2.0 PKCE should not be offered as a standalone tutorial.');
+      assertUiSmoke(!tutorials.some((item) => item.id === 'import-export-basics'), 'Import and Export should not be offered as a standalone tutorial.');
+      const tutorialIds = tutorials.map((item) => item.id);
+      expectedTutorialIds.forEach((tutorialId, index) => {
+        assertUiSmoke(
+          tutorialIds[index] === tutorialId,
+          `Tutorial catalog position ${index + 1} should be ${tutorialId}.`
+        );
+      });
+      for (const tutorialId of expectedTutorialIds) {
+        const tutorial = tutorials.find((item) => item.id === tutorialId);
+        assertUiSmoke(tutorial, `Tutorial catalog should include ${tutorialId}.`);
+        assertUiSmoke(tutorial.steps.length >= 5, `${tutorial.title} should include a useful guided step list.`);
+        await runTutorialThroughUi(runtimeGlobal, tutorial);
+      }
+    } finally {
+      runtimeGlobal.PostMeterTutorials.endTutorial({ silent: true });
+      if (state.activeModalResolver) {
+        resolveActiveModal(state.activeModalCancelValue, { flushNotifications: false });
+      }
+      applyLoadedWorkspace(baselineWorkspace, { focus: 'request' });
+      renderAll();
     }
-    tutorialItems.find((button) => button.textContent.includes('Send a Basic Request')).click();
+  }
+
+  async function runTutorialThroughUi(runtimeGlobal, tutorial) {
+    const modalPromise = runtimeGlobal.PostMeterTutorials.openTutorialsModal();
+    await waitForUiSmoke(() => !$('modalBackdrop').hidden && !$('tutorialsModal').hidden, `${tutorial.title} should open from the Tutorials modal.`);
+    const item = $(`tutorialList`).querySelector(`[data-tutorial-id="${cssAttributeValue(tutorial.id)}"]`);
+    assertUiSmoke(item, `Tutorials modal should include ${tutorial.title}.`);
+    item.click();
+    assertUiSmoke($('tutorialDetailTitle').textContent === tutorial.title, `${tutorial.title} should render in the tutorial detail pane.`);
+    assertUiSmoke($('tutorialDetailSteps').querySelectorAll('li').length === tutorial.steps.length, `${tutorial.title} should render every step in the detail pane.`);
+    if (tutorial.id === 'request') {
+      const detailPane = document.querySelector('.tutorial-detail');
+      assertUiSmoke(
+        $('tutorialList').scrollHeight > $('tutorialList').clientHeight
+          || detailPane?.scrollHeight > detailPane?.clientHeight
+          || $('tutorialsModal').scrollHeight > $('tutorialsModal').clientHeight,
+        'Tutorials modal should expose scrolling when the catalog or selected tutorial does not fit.'
+      );
+    }
     $('startTutorialButton').click();
-    await waitForUiSmoke(() => $('modalBackdrop').hidden && !$('tutorialOverlay').hidden, 'Starting a tutorial should close the modal and show the overlay.');
-    await waitForUiSmoke(() => !$('tutorialTargetFrame').hidden && $('tutorialCoachTitle').textContent === 'Start from New', 'Tutorial overlay should highlight the first target.');
-    const state = runtimeGlobal.PostMeterTutorials.activeState();
-    assertUiSmoke(state.activeTutorialId === 'request-basics', 'Starting the default tutorial should activate request basics.');
-    assertUiSmoke(state.activeTutorialStepIndex === 0, 'Tutorial should start on the first step.');
-    assertUiSmoke($('tutorialCoachProgress').textContent === 'Step 1 of 5', 'Tutorial overlay should display step progress.');
-    $('endTutorialButton').click();
-    await waitForUiSmoke(() => $('tutorialOverlay').hidden, 'Ending a tutorial should hide the overlay.');
     await modalPromise;
+    await waitForUiSmoke(() => $('tutorialsModal').hidden && !$('tutorialOverlay').hidden, `${tutorial.title} should close the Tutorials modal and show the overlay.`);
+    for (let index = 0; index < tutorial.steps.length; index += 1) {
+      await assertTutorialStepVisible(runtimeGlobal, tutorial, index);
+      const preservedAuthRefreshPrefix = authRefreshPanelPreservePrefix(tutorial.steps[index], tutorial.steps[index + 1]);
+      $('nextTutorialStepButton').click();
+      if (preservedAuthRefreshPrefix) {
+        assertUiSmoke(
+          !$(`${preservedAuthRefreshPrefix}AuthRefreshPanel`).hidden,
+          `${tutorial.title} should keep the ${preservedAuthRefreshPrefix} Refreshing Auth panel open while advancing between auth-refresh panel steps.`
+        );
+      }
+    }
+    await waitForUiSmoke(() => $('tutorialOverlay').hidden, `${tutorial.title} should hide the overlay after finishing.`);
+  }
+
+  function authRefreshPanelPreservePrefix(currentStep = {}, nextStep = {}) {
+    const current = authRefreshStepPrefix(currentStep);
+    const next = authRefreshStepPrefix(nextStep);
+    return current && current === next ? current : '';
+  }
+
+  function authRefreshStepPrefix(step = {}) {
+    const selector = String(step?.selector || '');
+    if (selector === '#authRefreshAutoDetectModal') {
+      return '';
+    }
+    const match = selector.match(/^#(runner|performance)AuthRefresh/);
+    if (match && selector === `#${match[1]}AuthRefreshButton`) {
+      return '';
+    }
+    return match ? match[1] : '';
+  }
+
+  async function assertTutorialStepVisible(runtimeGlobal, tutorial, index) {
+    const step = tutorial.steps[index];
+    await waitForUiSmoke(
+      () => {
+        const active = runtimeGlobal.PostMeterTutorials.activeState();
+        return active.activeTutorialId === tutorial.id
+          && active.activeTutorialStepIndex === index
+          && !$('tutorialOverlay').hidden
+          && $('tutorialCoachTitle').textContent === step.title
+          && $('tutorialCoachProgress').textContent === `Step ${index + 1} of ${tutorial.steps.length}`;
+      },
+      `${tutorial.title} step ${index + 1} should render the expected coach copy.`,
+      3000,
+      runtimeGlobal
+    );
+    if (step.selector) {
+      await waitForUiSmoke(
+        () => {
+          const target = document.querySelector(step.selector);
+          const targetRect = target?.getBoundingClientRect?.();
+          const frameRect = $('tutorialTargetFrame')?.getBoundingClientRect?.();
+          return target
+            && targetRect
+            && targetRect.width > 0
+            && targetRect.height > 0
+            && !$('tutorialTargetFrame').hidden
+            && frameRect
+            && frameRect.width >= 20
+            && frameRect.height >= 20;
+        },
+        `${tutorial.title} step ${index + 1} should highlight a visible target for selector ${step.selector}.`,
+        3000,
+        runtimeGlobal
+      );
+    } else {
+      assertUiSmoke($('tutorialTargetFrame').hidden, `${tutorial.title} step ${index + 1} should not show a target frame.`);
+    }
+    assertUiSmoke(!$('tutorialCoach').hidden, `${tutorial.title} step ${index + 1} should keep the coach visible.`);
+    if (step.coachPlacement === 'top-left') {
+      const coachRect = $('tutorialCoach').getBoundingClientRect();
+      assertUiSmoke(coachRect.left <= 20 && coachRect.top <= 20, `${tutorial.title} step ${index + 1} should place the coach at the top left.`);
+    }
+    assertUiSmoke(!$('nextTutorialStepButton').disabled, `${tutorial.title} step ${index + 1} should keep tutorial navigation available.`);
+    assertUiSmoke(document.activeElement === $('nextTutorialStepButton'), `${tutorial.title} step ${index + 1} should keep focus on the tutorial Next button.`);
+    if (tutorial.id === 'request' && step.title === 'Review request settings') {
+      const settingsPanel = $('requestSettingsTab');
+      const frameRect = $('tutorialTargetFrame').getBoundingClientRect();
+      const panelRect = settingsPanel.getBoundingClientRect();
+      const targetRect = document.querySelector(step.selector)?.getBoundingClientRect?.();
+      assertUiSmoke(settingsPanel.scrollTop === 0, 'Request settings overview step should keep the settings panel scrolled to the top.');
+      assertUiSmoke(
+        frameRect.top >= panelRect.top - 8 && frameRect.bottom <= panelRect.bottom + 8,
+        `Request settings overview step should keep the highlight inside the visible settings panel. Frame ${Math.round(frameRect.top)}-${Math.round(frameRect.bottom)}, panel ${Math.round(panelRect.top)}-${Math.round(panelRect.bottom)}, target ${Math.round(targetRect?.top || 0)}-${Math.round(targetRect?.bottom || 0)}.`
+      );
+    }
   }
 
   function setPerformanceNumber(type, kind, name, value) {

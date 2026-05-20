@@ -278,7 +278,7 @@ function bindSmokeHooks(app, mainWindow, env) {
       prefix: 'PostMeter UI Workflow:',
       passTitle: 'PostMeter UI Workflow:PASS',
       timeoutMessage: 'PostMeter UI workflow smoke timed out.',
-      timeoutMillis: 15_000
+      timeoutMillis: 120_000
     });
   }
   if (isUiRegressionSmoke) {
