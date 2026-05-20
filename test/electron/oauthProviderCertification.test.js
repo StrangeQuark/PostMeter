@@ -12,7 +12,7 @@ const {
   runMockOAuthCertification,
   validateLiveOAuthEvidence,
   validateOAuthProviderCertificationMatrix
-} = require('../../src/core/oauthProviderCertification');
+} = require('../../src/core/diagnostics-release/oauthProviderCertification');
 const {
   liveCertificationStatusFromInputs,
   resolveEvidencePath

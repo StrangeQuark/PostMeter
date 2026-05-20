@@ -6,10 +6,14 @@ const path = require('node:path');
 const { WAIVER_ENV, withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
 const { spawnWithTimeout } = require('./smokeProcess');
 const {
+  packagedAppResourcePath,
+  packagedStartupSmokeNodePath
+} = require('../electron/packaging/packagedResourceManifest');
+const {
   redactRequestResponseAliasesInText,
   redactTransportReferences
-} = require('../src/core/diagnostics');
-const { postMeterWorkspaceDirectory } = require('../src/core/workspacePersistence');
+} = require('../src/core/diagnostics-release/diagnostics');
+const { postMeterWorkspaceDirectory } = require('../src/core/workspace/workspacePersistence');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MAIN_PROCESS_SMOKE_ENV = 'POSTMETER_PACKAGED_SMOKE_MAIN_PROCESS';
@@ -520,7 +524,7 @@ function packagedSmokeLaunchMode(env = process.env, platform = process.platform)
 
 function packagedSmokeLaunchArgs(executable, options = {}) {
   if (options.mode === 'node-main-process') {
-    return [packagedAppResourcePath(executable, ['electron', 'packagedStartupSmokeNode.js'])];
+    return [packagedStartupSmokeNodePath(executable)];
   }
   const args = ['--disable-gpu'];
   if (options.artifactDirectory) {
@@ -535,15 +539,6 @@ function packagedSmokeLaunchArgs(executable, options = {}) {
 
 function packagedSmokeStdioMode(platform = process.platform, mode = packagedSmokeLaunchMode(process.env, platform)) {
   return platform === 'win32' && mode !== 'node-main-process' ? 'ignore' : undefined;
-}
-
-function packagedAppResourcePath(executable, relativeParts = []) {
-  const resourcesPath = path.join(path.dirname(path.resolve(executable)), 'resources');
-  const appAsar = path.join(resourcesPath, 'app.asar');
-  const appRoot = require('node:fs').existsSync(appAsar)
-    ? appAsar
-    : path.join(resourcesPath, 'app');
-  return path.join(appRoot, ...relativeParts);
 }
 
 function smokeSafeLabel(label) {

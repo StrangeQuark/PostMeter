@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   runPerformanceCalibration,
   summarizeCalibrationStages
-} = require('../../src/core/performanceCalibration');
+} = require('../../src/core/runtime/performanceCalibration');
 
 function fastProfile(overrides = {}) {
   return {

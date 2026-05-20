@@ -4,12 +4,12 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
-const { performanceTestModel } = require('../../src/core/models');
-const { assertPerformanceTestPayload } = require('../../src/core/ipcValidation');
-const { AUTH_TYPE_VALUES } = require('../../src/core/payloadSchemas');
-const { createPerformancePlan, runPerformanceTest } = require('../../src/core/performanceRunner');
-const { createRuntimeResultStore } = require('../../src/core/runtimeResultStore');
+const { resolveEnvironmentValue } = require('../../src/core/workspace/environmentResolver');
+const { performanceTestModel } = require('../../src/core/workspace/models');
+const { assertPerformanceTestPayload } = require('../../src/core/contracts/ipcValidation');
+const { AUTH_TYPE_VALUES } = require('../../src/core/contracts/payloadSchemas');
+const { createPerformancePlan, runPerformanceTest } = require('../../src/core/runtime/performanceRunner');
+const { createRuntimeResultStore } = require('../../src/core/runtime/runtimeResultStore');
 
 const PERFORMANCE_TYPES = ['diagnosis', 'latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
 

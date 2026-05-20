@@ -1,0 +1,16 @@
+[
+  "shell/head-and-topbar.html",
+  "shell/sidebar-and-workspace-open.html",
+  "panels/collection.html",
+  "panels/folder.html",
+  "panels/request.html",
+  "panels/environment-workspace.html",
+  "panels/runner.html",
+  "panels/performance.html",
+  "panels/results-and-main-close.html",
+  "modals/settings.html",
+  "modals/workflow.html",
+  "modals/input-security.html",
+  "overlays/context-and-tutorial.html",
+  "scripts.html"
+]

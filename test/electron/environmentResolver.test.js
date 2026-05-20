@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
+const { resolveEnvironmentValue } = require('../../src/core/workspace/environmentResolver');
 
 test('resolves enabled environment variables and leaves unknown tokens unchanged', () => {
   const environment = {

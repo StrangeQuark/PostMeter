@@ -3,8 +3,8 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { registerExportIpc } = require('../../electron/exportIpc');
-const { performanceTestModel } = require('../../src/core/models');
+const { registerExportIpc } = require('../../electron/ipc/exportIpc');
+const { performanceTestModel } = require('../../src/core/workspace/models');
 
 test('picker-first export opens save dialogs from lightweight metadata', async () => {
   const handlers = new Map();

@@ -2,52 +2,52 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
-const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
-const { WorkspaceManager } = require('../src/core/workspaceManager');
-const { AppSettingsStore } = require('../src/core/appSettingsStore');
-const { normalizeWorkspaceLocalSettings } = require('../src/core/models');
-const { EncryptedVaultStore } = require('../src/core/vaultStore');
+const { WorkspaceRecoveryError } = require('../src/core/workspace/workspaceStore');
+const { WorkspaceManager } = require('../src/core/workspace/workspaceManager');
+const { AppSettingsStore } = require('../src/core/workspace/appSettingsStore');
+const { normalizeWorkspaceLocalSettings } = require('../src/core/workspace/models');
+const { EncryptedVaultStore } = require('../src/core/sandbox/vaultStore');
 const {
   LocalDiagnosticsLogger,
   redactText
-} = require('../src/core/diagnostics');
-const { fsyncDirectory, moveFileNoOverwrite } = require('../src/core/workspacePersistence');
-const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./appProtocol');
-const { installApplicationMenu } = require('./appMenu');
-const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('./appIpc');
-const { createAutoUpdateService } = require('./autoUpdateService');
-const { createTrustedIpcMain } = require('./ipcSecurity');
-const { createOAuthFlowController } = require('./oauthFlows');
+} = require('../src/core/diagnostics-release/diagnostics');
+const { fsyncDirectory, moveFileNoOverwrite } = require('../src/core/workspace/workspacePersistence');
+const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./app-shell/appProtocol');
+const { installApplicationMenu } = require('./app-shell/appMenu');
+const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('./ipc/appIpc');
+const { createAutoUpdateService } = require('./services/autoUpdateService');
+const { createTrustedIpcMain } = require('./security/ipcSecurity');
+const { createOAuthFlowController } = require('./services/oauthFlows');
 const {
   applyWindowShortcutAction,
   createMainWindow,
   writeStartupSmokeFailureArtifacts
-} = require('./mainWindow');
+} = require('./app-shell/mainWindow');
 const {
   startupFailureDiagnosticEvent,
   workspaceRecoveryDiagnosticEvent
-} = require('./mainDiagnostics');
-const { registerSessionIpc } = require('./sessionIpc');
-const { SessionStore, defaultSessionPath } = require('./sessionStore');
-const { registerRuntimeIpc } = require('./runtimeIpc');
-const { cleanupRuntimeResultStoreSync } = require('../src/core/runtimeResultStore');
-const { registerSandboxPackageIpc } = require('./sandboxPackageIpc');
-const { registerDiagnosticsIpc } = require('./diagnosticsIpc');
-const { registerExportIpc } = require('./exportIpc');
-const { registerWorkspaceIpc } = require('./workspaceIpc');
-const { registerRequestIpc } = require('./requestIpc');
-const { registerOAuthIpc } = require('./oauthIpc');
+} = require('./app-shell/mainDiagnostics');
+const { registerSessionIpc } = require('./ipc/sessionIpc');
+const { SessionStore, defaultSessionPath } = require('./services/sessionStore');
+const { registerRuntimeIpc } = require('./ipc/runtimeIpc');
+const { cleanupRuntimeResultStoreSync } = require('../src/core/runtime/runtimeResultStore');
+const { registerSandboxPackageIpc } = require('./ipc/sandboxPackageIpc');
+const { registerDiagnosticsIpc } = require('./ipc/diagnosticsIpc');
+const { registerExportIpc } = require('./ipc/exportIpc');
+const { registerWorkspaceIpc } = require('./ipc/workspaceIpc');
+const { registerRequestIpc } = require('./ipc/requestIpc');
+const { registerOAuthIpc } = require('./ipc/oauthIpc');
 const {
   applyVaultPromptDecisionToWorkspace,
   createVaultPrompt,
   registerVaultPromptIpc,
   workspaceIdForVaultPromptDecision
-} = require('./vaultPrompt');
+} = require('./ipc/vaultPrompt');
 const {
   assertFileOperationResultPayload,
   assertAutoUpdateStatusPayload,
   assertOAuthProgressPayload,
-} = require('../src/core/ipcValidation');
+} = require('../src/core/contracts/ipcValidation');
 
 let mainWindow;
 let sessionStore;
@@ -90,7 +90,7 @@ if (process.env.POSTMETER_STARTUP_SMOKE === '1') {
 
 async function runSandboxRuntimeValidation() {
   try {
-    const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
+    const { validateSandboxRuntime } = require('../src/core/sandbox/sandboxRuntimeValidation');
     await validateSandboxRuntime();
     console.log('PostMeter packaged sandbox runtime validation passed.');
     app.exit(0);
@@ -110,7 +110,7 @@ async function runSandboxRuntimeValidation() {
 
 function createWindow() {
   mainWindow = createMainWindow(app, {
-    preloadPath: path.join(__dirname, 'preload.js'),
+    preloadPath: path.join(__dirname, 'app-shell', 'preload.js'),
     getKeyboardShortcuts: () => workspace?.settings?.shortcuts || {},
     sendShortcutAction: sendMenuAction
   });

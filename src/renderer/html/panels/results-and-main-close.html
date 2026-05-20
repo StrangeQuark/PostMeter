@@ -1,0 +1,66 @@
+      <section class="results">
+        <div class="tabs" role="tablist" aria-label="Result sections" data-tab-group="results">
+          <button id="resultsResponseTabButton" class="tab active" type="button" role="tab" data-tab-group="results" data-tab="response" aria-selected="true" aria-controls="responseTab">Response</button>
+          <button id="resultsHeadersTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="responseHeaders" aria-selected="false" aria-controls="responseHeadersTab">Headers</button>
+          <button id="resultsCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="responseCookies" aria-selected="false" aria-controls="responseCookiesTab">Cookies</button>
+          <button id="resultsNetworkTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="responseNetwork" aria-selected="false" aria-controls="responseNetworkTab">Network</button>
+          <button id="resultsTestResultsTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="testResults" aria-selected="false" aria-controls="testResultsTab">Test Results <span id="testResultsTabCount" class="tab-count" hidden></span></button>
+          <button id="resultsVisualizerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="visualizer" aria-selected="false" aria-controls="visualizerTab">Visualizer</button>
+        </div>
+
+        <div id="responseTab" class="tab-panel active" role="tabpanel" aria-labelledby="resultsResponseTabButton">
+          <div class="metrics" role="status" aria-live="polite">
+            <span>Status <strong id="responseStatus">-</strong></span>
+            <span>Time <strong id="responseTime">-</strong></span>
+            <span>Size <strong id="responseSize">-</strong></span>
+          </div>
+          <div id="finalUrl" class="final-url" aria-label="Final URL">-</div>
+          <div class="response-editor-panel">
+            <textarea id="responseBody" readonly spellcheck="false" aria-label="Response body" data-code-editor data-code-language="text"></textarea>
+          </div>
+        </div>
+
+        <div id="responseHeadersTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsHeadersTabButton">
+          <textarea id="responseHeaders" readonly spellcheck="false" aria-label="Response headers" data-code-editor data-code-language="headers"></textarea>
+        </div>
+
+        <div id="responseCookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsCookiesTabButton">
+          <textarea id="responseCookies" readonly spellcheck="false" aria-label="Response cookies" data-code-editor data-code-language="headers"></textarea>
+        </div>
+
+        <div id="responseNetworkTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsNetworkTabButton">
+          <textarea id="responseNetwork" readonly spellcheck="false" aria-label="Network and TLS diagnostics" data-code-editor data-code-language="text"></textarea>
+        </div>
+
+        <div id="testResultsTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsTestResultsTabButton">
+          <div id="testResultsSummary" class="test-results-summary" role="status" aria-live="polite">No test results yet.</div>
+          <div class="script-results-grid">
+            <section class="script-results-section" aria-labelledby="preRequestResultsTitle">
+              <div class="script-results-header">
+                <h3 id="preRequestResultsTitle">Pre-request</h3>
+                <span id="preRequestResultsSummary" class="script-results-count">No tests</span>
+              </div>
+              <div id="preRequestTestResults" class="test-result-list" aria-live="polite">
+                <p class="test-result-empty">No test results yet.</p>
+              </div>
+            </section>
+            <section class="script-results-section" aria-labelledby="postRequestResultsTitle">
+              <div class="script-results-header">
+                <h3 id="postRequestResultsTitle">Post-request</h3>
+                <span id="postRequestResultsSummary" class="script-results-count">No tests</span>
+              </div>
+              <div id="postRequestTestResults" class="test-result-list" aria-live="polite">
+                <p class="test-result-empty">No test results yet.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div id="visualizerTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsVisualizerTabButton">
+          <iframe id="visualizerFrame" class="visualizer-frame" sandbox="allow-scripts" title="Response visualizer"></iframe>
+        </div>
+
+      </section>
+    </section>
+  </main>
+

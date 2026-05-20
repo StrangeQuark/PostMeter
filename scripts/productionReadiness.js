@@ -7,7 +7,7 @@ const {
   productionReadinessBlockers,
   productionReadinessSummary,
   validateProductionReadinessMatrix
-} = require('../src/core/productionReadinessMatrix');
+} = require('../src/core/diagnostics-release/productionReadinessMatrix');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MATRIX_PATH = path.join(PROJECT_ROOT, 'docs', 'production-readiness-matrix.json');

@@ -6,8 +6,8 @@ const {
   normalizeVaultPromptDecision,
   registerVaultPromptIpc,
   workspaceIdForVaultPromptDecision
-} = require('../../electron/vaultPrompt');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
+} = require('../../electron/ipc/vaultPrompt');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
 
 test('normalizes and persists metadata-only vault prompt grant decisions', async () => {
   const workspace = {

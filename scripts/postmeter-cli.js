@@ -2,11 +2,11 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
-const { assertExportFormat } = require('../src/core/ipcValidation');
-const { resultHtmlReportToHtml } = require('../src/core/resultHtmlReport');
-const { setVariable } = require('../src/core/variableScope');
-const { WorkspaceStore, looksLikeNativeWorkspace, migrate, normalizeWorkspace } = require('../src/core/workspaceStore');
+const { collectionRunResultToCsv, runCollection } = require('../src/core/runtime/collectionRunner');
+const { assertExportFormat } = require('../src/core/contracts/ipcValidation');
+const { resultHtmlReportToHtml } = require('../src/core/import-export/resultHtmlReport');
+const { setVariable } = require('../src/core/workspace/variableScope');
+const { WorkspaceStore, looksLikeNativeWorkspace, migrate, normalizeWorkspace } = require('../src/core/workspace/workspaceStore');
 
 async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);

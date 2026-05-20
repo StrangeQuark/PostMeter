@@ -16,8 +16,8 @@ const {
   shouldRequestClientCredentialsToken,
   shouldRequestPasswordCredentialsToken,
   validateAuth
-} = require('../../src/core/auth');
-const { sendRequest } = require('../../src/core/httpClient');
+} = require('../../src/core/http/auth');
+const { sendRequest } = require('../../src/core/http/httpClient');
 
 const DIGEST_ALGORITHM_OPTIONS = [
   'MD5',

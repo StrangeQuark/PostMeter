@@ -5,7 +5,7 @@ const path = require('node:path');
 const {
   buildMatrix,
   validateMatrix
-} = require('../src/core/productionSupportMatrices');
+} = require('../src/core/diagnostics-release/productionSupportMatrices');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MATRIX_FILES = Object.freeze({

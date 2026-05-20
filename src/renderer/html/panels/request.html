@@ -1,0 +1,892 @@
+      <section id="requestEditorPanel" class="panel request-panel" role="tabpanel">
+        <div class="request-main-header">
+          <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
+          <div class="request-actions">
+            <button id="saveRequestButton" type="button">Save Request</button>
+            <div class="toolbar-group menu-group request-export-menu-group" aria-label="Export request">
+              <button id="exportRequestPanelButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Export Request</button>
+              <div id="exportRequestPanelMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRequestPanelButton" hidden>
+                <button id="exportRequestPanelPostmeterButton" type="button" role="menuitem">PostMeter</button>
+                <button id="exportRequestPanelCurlButton" type="button" role="menuitem">curl</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="request-line">
+          <select id="methodSelect" aria-label="HTTP method">
+            <option class="method-get">GET</option>
+            <option class="method-post">POST</option>
+            <option class="method-put">PUT</option>
+            <option class="method-patch">PATCH</option>
+            <option class="method-delete">DELETE</option>
+            <option class="method-head">HEAD</option>
+            <option class="method-options">OPTIONS</option>
+          </select>
+          <input id="urlInput" placeholder="https://api.example.com/resource" aria-label="Request URL">
+          <button id="sendButton" class="primary">Send</button>
+        </div>
+        <div id="validationLabel" class="validation" role="status" aria-live="polite" aria-atomic="true"></div>
+
+        <div class="tabs" role="tablist" aria-label="Request editor sections" data-tab-group="request">
+          <button id="requestParamsTabButton" class="tab active" type="button" role="tab" data-tab-group="request" data-tab="params" aria-selected="true" aria-controls="paramsTab">Params</button>
+          <button id="requestHeadersTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="headers" aria-selected="false" aria-controls="headersTab">Headers</button>
+          <button id="requestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="auth" aria-selected="false" aria-controls="authTab">Auth</button>
+          <button id="requestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="body" aria-selected="false" aria-controls="bodyTab">Body</button>
+          <button id="requestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="scripts" aria-selected="false" aria-controls="scriptsTab">Scripts</button>
+          <button id="requestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="collectionVariables" aria-selected="false" aria-controls="collectionVariablesTab">Variables</button>
+          <button id="requestSettingsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="requestSettings" aria-selected="false" aria-controls="requestSettingsTab">Settings</button>
+          <button id="requestDocsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="docs" aria-selected="false" aria-controls="docsTab">Docs</button>
+        </div>
+
+        <div id="paramsTab" class="tab-panel active" role="tabpanel" aria-labelledby="requestParamsTabButton">
+          <div class="table-actions">
+            <button id="addParamButton">Add Param</button>
+          </div>
+          <div id="paramsTable" class="kv-table"></div>
+        </div>
+
+        <div id="headersTab" class="tab-panel" role="tabpanel" aria-labelledby="requestHeadersTabButton">
+          <div class="table-actions">
+            <button id="addHeaderButton">Add Header</button>
+            <label id="sendPostMeterTokenField" class="inline-toggle headers-auto-toggle" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
+              <input id="sendPostMeterTokenInput" type="checkbox" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
+              <span>PostMeter token</span>
+            </label>
+            <label id="showGeneratedHeadersField" class="inline-toggle headers-auto-toggle">
+              <input id="showGeneratedHeadersInput" type="checkbox">
+              <span id="showGeneratedHeadersLabel">Show auto-generated headers</span>
+            </label>
+          </div>
+          <div id="headersTable" class="kv-table"></div>
+        </div>
+
+        <div id="authTab" class="tab-panel" role="tabpanel" aria-labelledby="requestAuthTabButton">
+          <div class="auth-grid">
+            <label class="field">
+              <span>Auth Type</span>
+              <select id="authTypeSelect">
+                <option value="none">No Auth</option>
+                <option value="basic">Basic Auth</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="jwtBearer">JWT Bearer</option>
+                <option value="digest">Digest Auth</option>
+                <option value="oauth1">OAuth 1.0</option>
+                <option value="oauth2">OAuth 2.0</option>
+                <option value="hawk">Hawk Authentication</option>
+                <option value="aws">AWS Signature</option>
+                <option value="ntlm">NTLM Authentication</option>
+                <option value="apiKey">API Key</option>
+                <option value="akamaiEdgeGrid">Akamai EdgeGrid</option>
+                <option value="asap">ASAP (Atlassian)</option>
+              </select>
+            </label>
+
+            <div class="auth-section" data-auth-section="bearer">
+              <label class="field">
+                <span>Token</span>
+                <input id="authBearerTokenInput" type="text" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="basic">
+              <label class="field">
+                <span>Username</span>
+                <input id="authBasicUsernameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input id="authBasicPasswordInput" type="text" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="apiKey">
+              <label class="field">
+                <span>Location</span>
+                <select id="authApiKeyLocationSelect">
+                  <option value="header">Header</option>
+                  <option value="query">Query Param</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Name</span>
+                <input id="authApiKeyNameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Value</span>
+                <input id="authApiKeyValueInput" type="text" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="cookie">
+              <label class="field">
+                <span>Cookie</span>
+                <input id="authCookieValueInput" type="text" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="oauth2" data-oauth2-grant-type="authorizationCode">
+              <div class="auth-subsection-title auth-wide">Current Token</div>
+              <label class="field">
+                <span>Token</span>
+                <select id="authOauthCurrentTokenSelect">
+                  <option value="">Available Tokens</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Token</span>
+                <input id="authOauthAccessTokenInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Header Prefix</span>
+                <input id="authOauthHeaderPrefixInput" type="text" autocomplete="off">
+                <input id="authOauthTokenTypeSelect" type="hidden" value="Bearer">
+              </label>
+              <input id="authOauthRefreshTokenInput" type="hidden">
+              <label class="checkbox-line auth-wide">
+                <input id="authOauthAutoRefreshTokenInput" type="checkbox">
+                <span>Auto-refresh Token</span>
+              </label>
+              <label class="checkbox-line auth-wide">
+                <input id="authOauthShareTokenInput" type="checkbox">
+                <span>Share Token</span>
+              </label>
+              <label class="field">
+                <span>Add authorization data to</span>
+                <select id="authOauthAddAuthDataToSelect">
+                  <option value="header">Request Headers</option>
+                  <option value="query">Request URL</option>
+                </select>
+              </label>
+              <div class="auth-subsection-title auth-wide">Configure New Token</div>
+              <label class="field">
+                <span>Token Name</span>
+                <input id="authOauthTokenNameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Grant type</span>
+                <select id="authOauthGrantTypeSelect">
+                  <option value="authorizationCode">Authorization Code</option>
+                  <option value="authorizationCodePkce">Authorization Code (With PKCE)</option>
+                  <option value="implicit">Implicit</option>
+                  <option value="passwordCredentials">Password Credentials</option>
+                  <option value="clientCredentials">Client Credentials</option>
+                </select>
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                <span>Callback URL</span>
+                <input id="authOauthCallbackUrlInput" autocomplete="off">
+              </label>
+              <label class="checkbox-line" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                <input id="authOauthAuthorizeUsingBrowserInput" type="checkbox">
+                <span>Authorize using browser</span>
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                <span>Auth URL</span>
+                <input id="authOauthAuthorizationUrlInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                <span>Access Token URL</span>
+                <input id="authOauthTokenUrlInput" autocomplete="off">
+              </label>
+              <input id="authOauthDeviceAuthorizationUrlInput" type="hidden">
+              <input id="authOauthRedirectStrategySelect" type="hidden" value="loopback">
+              <label class="field">
+                <span>Client ID</span>
+                <input id="authOauthClientIdInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                <span>Client Secret</span>
+                <input id="authOauthClientSecretInput" type="text" autocomplete="off">
+              </label>
+              <label class="field" data-oauth2-grant-field="passwordCredentials">
+                <span>Username</span>
+                <input id="authOauthUsernameInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth2-grant-field="passwordCredentials">
+                <span>Password</span>
+                <input id="authOauthPasswordInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Scope</span>
+                <input id="authOauthScopesInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                <span>State</span>
+                <input id="authOauthStateInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCodePkce">
+                <span>Code Challenge Method</span>
+                <select id="authOauthCodeChallengeMethodSelect">
+                  <option value="S256">SHA-256</option>
+                  <option value="plain">Plain</option>
+                </select>
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCodePkce">
+                <span>Code Verifier</span>
+                <input id="authOauthCodeVerifierInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                <span>Client Authentication</span>
+                <select id="authOauthClientAuthenticationSelect">
+                  <option value="basic">Send as Basic Auth header</option>
+                  <option value="body">Send client credentials in body</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field auth-wide">
+                    <span>Refresh Token URL</span>
+                    <input id="authOauthRefreshTokenUrlInput" autocomplete="off">
+                  </label>
+                  <div class="auth-wide oauth2-param-table">
+                    <div class="auth-param-title">Auth Request</div>
+                    <div class="auth-param-row auth-param-head"><span>Key</span><span>Value</span></div>
+                    <div class="auth-param-row">
+                      <input id="authOauthAuthRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                      <input id="authOauthAuthRequestParamValueInput" autocomplete="off" placeholder="Value">
+                    </div>
+                  </div>
+                  <div class="auth-wide oauth2-param-table">
+                    <div class="auth-param-title">Token Request</div>
+                    <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
+                    <div class="auth-param-row auth-param-row-send-in">
+                      <input id="authOauthTokenRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                      <input id="authOauthTokenRequestParamValueInput" autocomplete="off" placeholder="Value">
+                      <select id="authOauthTokenRequestParamSendInSelect">
+                        <option value="body">Body</option>
+                        <option value="header">Header</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="auth-wide oauth2-param-table">
+                    <div class="auth-param-title">Refresh Request</div>
+                    <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
+                    <div class="auth-param-row auth-param-row-send-in">
+                      <input id="authOauthRefreshRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                      <input id="authOauthRefreshRequestParamValueInput" autocomplete="off" placeholder="Value">
+                      <select id="authOauthRefreshRequestParamSendInSelect">
+                        <option value="body">Body</option>
+                        <option value="header">Header</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button id="clearOauthCookiesButton" type="button">Clear cookies</button>
+                </div>
+              </details>
+              <div class="oauth-actions">
+                <button id="startPkceFlowButton" type="button">Get New Access Token</button>
+              </div>
+              <div id="oauthProgressPanel" class="oauth-progress" role="status" aria-live="polite" aria-atomic="true" hidden>
+                <div class="oauth-progress-title">OAuth progress</div>
+                <div id="oauthProgressStatus" class="oauth-progress-status">Idle</div>
+                <div id="oauthProgressDetail" class="oauth-progress-detail"></div>
+              </div>
+              <input id="authOauthUserCodeInput" type="hidden">
+              <input id="authOauthVerificationUriInput" type="hidden">
+            </div>
+
+            <div class="auth-section" data-auth-section="oauth1">
+              <label class="field">
+                <span>Signature Method</span>
+                <select id="authOauth1SignatureMethodSelect">
+                  <option value="HMAC-SHA1">HMAC-SHA1</option>
+                  <option value="HMAC-SHA256">HMAC-SHA256</option>
+                  <option value="HMAC-SHA512">HMAC-SHA512</option>
+                  <option value="RSA-SHA1">RSA-SHA1</option>
+                  <option value="RSA-SHA256">RSA-SHA256</option>
+                  <option value="RSA-SHA512">RSA-SHA512</option>
+                  <option value="PLAINTEXT">PLAINTEXT</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Consumer Key</span>
+                <input id="authOauth1ConsumerKeyInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth1-mode="shared">
+                <span>Consumer Secret</span>
+                <input id="authOauth1ConsumerSecretInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Access Token</span>
+                <input id="authOauth1TokenInput" autocomplete="off">
+              </label>
+              <label class="field" data-oauth1-mode="shared">
+                <span>Token Secret</span>
+                <input id="authOauth1TokenSecretInput" type="text" autocomplete="off">
+              </label>
+              <label class="field auth-wide" data-oauth1-mode="rsa">
+                <span>Private Key</span>
+                <textarea id="authOauth1PrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <label class="field">
+                <span>Add authorization data to</span>
+                <select id="authOauth1AddAuthDataToSelect">
+                  <option value="header">Request Headers</option>
+                  <option value="queryOrBody">Request Body / Request URL</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Callback URL</span>
+                    <input id="authOauth1CallbackInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Verifier</span>
+                    <input id="authOauth1VerifierInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Timestamp</span>
+                    <input id="authOauth1TimestampInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authOauth1NonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Version</span>
+                    <input id="authOauth1VersionInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Realm</span>
+                    <input id="authOauth1RealmInput" autocomplete="off">
+                  </label>
+                  <label class="checkbox-line auth-wide">
+                    <input id="authOauth1IncludeBodyHashInput" type="checkbox">
+                    <span>Include body hash</span>
+                  </label>
+                  <label class="checkbox-line auth-wide">
+                    <input id="authOauth1AddEmptyParamsToSignInput" type="checkbox">
+                    <span>Add empty parameters to signature</span>
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="clientCertificate">
+              <label class="field">
+                <span>PFX/P12 Bundle Path</span>
+                <input id="authClientPfxPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>PEM Certificate Path</span>
+                <input id="authClientCertPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>PEM Key Path</span>
+                <input id="authClientKeyPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>CA Certificate Path</span>
+                <input id="authClientCaPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Passphrase</span>
+                <input id="authClientPassphraseInput" type="text" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="digest">
+              <label class="field">
+                <span>Username</span>
+                <input id="authDigestUsernameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input id="authDigestPasswordInput" type="text" autocomplete="off">
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="checkbox-line auth-wide" title="PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.">
+                    <input id="authDigestDisableRetryingRequestInput" type="checkbox" title="PostMeter normally retries once after a Digest challenge and uses values from the server response. Disable retry sends only the configured Digest values.">
+                    <span>Disable retry</span>
+                  </label>
+                  <label class="field">
+                    <span>Realm</span>
+                    <input id="authDigestRealmInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authDigestNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Algorithm</span>
+                    <select id="authDigestAlgorithmSelect">
+                      <option value="MD5">MD5</option>
+                      <option value="MD5-sess">MD5-sess</option>
+                      <option value="SHA-256">SHA-256</option>
+                      <option value="SHA-256-sess">SHA-256-sess</option>
+                      <option value="SHA-512-256">SHA-512-256</option>
+                      <option value="SHA-512-256-sess">SHA-512-256-sess</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>qop</span>
+                    <input id="authDigestQopInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce Count</span>
+                    <input id="authDigestNonceCountInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Client Nonce</span>
+                    <input id="authDigestClientNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Opaque</span>
+                    <input id="authDigestOpaqueInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="hawk">
+              <label class="field">
+                <span>Hawk Auth ID</span>
+                <input id="authHawkAuthIdInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Hawk Auth Key</span>
+                <input id="authHawkAuthKeyInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Algorithm</span>
+                <select id="authHawkAlgorithmSelect">
+                  <option value="sha256">SHA-256</option>
+                  <option value="sha1">SHA-1</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>User</span>
+                    <input id="authHawkUserInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authHawkNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>ext</span>
+                    <input id="authHawkExtraDataInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>app</span>
+                    <input id="authHawkAppInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>dlg</span>
+                    <input id="authHawkDelegationInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Timestamp</span>
+                    <input id="authHawkTimestampInput" autocomplete="off">
+                  </label>
+                  <label class="checkbox-line auth-wide">
+                    <input id="authHawkIncludePayloadHashInput" type="checkbox">
+                    <span>Include payload hash</span>
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="aws">
+              <label class="field">
+                <span>AccessKey</span>
+                <input id="authAwsAccessKeyInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>SecretKey</span>
+                <input id="authAwsSecretKeyInput" type="text" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Add authorization data to</span>
+                <select id="authAwsAddAuthDataToSelect">
+                  <option value="header">Request Headers</option>
+                  <option value="query">Request URL</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>AWS Region</span>
+                    <input id="authAwsRegionInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Service Name</span>
+                    <input id="authAwsServiceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Session Token</span>
+                    <input id="authAwsSessionTokenInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="ntlm">
+              <label class="field">
+                <span>Username</span>
+                <input id="authNtlmUsernameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input id="authNtlmPasswordInput" type="text" autocomplete="off">
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="checkbox-line auth-wide" title="PostMeter normally retries once after an NTLM challenge and uses values from the server response. Disable retry sends only the initial NTLM request.">
+                    <input id="authNtlmDisableRetryingRequestInput" type="checkbox" title="PostMeter normally retries once after an NTLM challenge and uses values from the server response. Disable retry sends only the initial NTLM request.">
+                    <span>Disable retry</span>
+                  </label>
+                  <label class="field">
+                    <span>Domain</span>
+                    <input id="authNtlmDomainInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Workstation</span>
+                    <input id="authNtlmWorkstationInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="akamaiEdgeGrid">
+              <label class="field">
+                <span>Access Token</span>
+                <input id="authAkamaiAccessTokenInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Client Token</span>
+                <input id="authAkamaiClientTokenInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Client Secret</span>
+                <input id="authAkamaiClientSecretInput" type="text" autocomplete="off">
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Nonce</span>
+                    <input id="authAkamaiNonceInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Timestamp</span>
+                    <input id="authAkamaiTimestampInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Base URL</span>
+                    <input id="authAkamaiBaseUrlInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Headers to Sign</span>
+                    <input id="authAkamaiHeadersToSignInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Max Body Size</span>
+                    <input id="authAkamaiMaxBodySizeInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="asap">
+              <label class="field">
+                <span>Algorithm</span>
+                <select id="authAsapAlgorithmSelect">
+                  <option value="RS256">RS256</option>
+                  <option value="RS384">RS384</option>
+                  <option value="RS512">RS512</option>
+                  <option value="PS256">PS256</option>
+                  <option value="PS384">PS384</option>
+                  <option value="PS512">PS512</option>
+                  <option value="ES256">ES256</option>
+                  <option value="ES384">ES384</option>
+                  <option value="ES512">ES512</option>
+                </select>
+              </label>
+              <label class="field auth-wide">
+                <span>Issuer</span>
+                <input id="authAsapIssuerInput" autocomplete="off">
+              </label>
+              <label class="field auth-wide">
+                <span>Audience</span>
+                <input id="authAsapAudienceInput" autocomplete="off">
+              </label>
+              <label class="field auth-wide">
+                <span>Key ID</span>
+                <input id="authAsapKeyIdInput" autocomplete="off">
+              </label>
+              <label class="field auth-wide">
+                <span>Private key</span>
+                <textarea id="authAsapPrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Subject</span>
+                    <input id="authAsapSubjectInput" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide">
+                    <span>Additional claims</span>
+                    <textarea id="authAsapAdditionalClaimsInput" autocomplete="off" spellcheck="false"></textarea>
+                  </label>
+                  <label class="field">
+                    <span>Expiry</span>
+                    <input id="authAsapExpiresInInput" autocomplete="off">
+                  </label>
+                </div>
+              </details>
+            </div>
+
+            <div class="auth-section" data-auth-section="jwtBearer" data-jwt-algorithm-kind="secret">
+              <label class="field">
+                <span>Algorithm</span>
+                <select id="authJwtAlgorithmSelect">
+                  <option value="HS256">HS256</option>
+                  <option value="HS384">HS384</option>
+                  <option value="HS512">HS512</option>
+                  <option value="RS256">RS256</option>
+                  <option value="RS384">RS384</option>
+                  <option value="RS512">RS512</option>
+                  <option value="PS256">PS256</option>
+                  <option value="PS384">PS384</option>
+                  <option value="PS512">PS512</option>
+                  <option value="ES256">ES256</option>
+                  <option value="ES384">ES384</option>
+                  <option value="ES512">ES512</option>
+                </select>
+              </label>
+              <label class="field" data-jwt-mode="secret">
+                <span>Secret</span>
+                <input id="authJwtSecretInput" type="text" autocomplete="off">
+              </label>
+              <label class="checkbox-line" data-jwt-mode="secret">
+                <input id="authJwtSecretBase64EncodedInput" type="checkbox">
+                <span>Secret Base64 encoded</span>
+              </label>
+              <label class="field auth-wide" data-jwt-mode="private">
+                <span>Private Key</span>
+                <textarea id="authJwtPrivateKeyInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <label class="field auth-wide">
+                <span>Payload</span>
+                <textarea id="authJwtPayloadInput" autocomplete="off" spellcheck="false"></textarea>
+              </label>
+              <label class="field">
+                <span>Add JWT token to</span>
+                <select id="authJwtAddTokenToSelect">
+                  <option value="header">Request Header</option>
+                  <option value="query">Query Param</option>
+                </select>
+              </label>
+              <details class="auth-advanced auth-wide">
+                <summary>Advanced</summary>
+                <div class="auth-advanced-grid">
+                  <label class="field">
+                    <span>Request header prefix</span>
+                    <input id="authJwtHeaderPrefixInput" autocomplete="off">
+                  </label>
+                  <label class="field auth-wide">
+                    <span>JWT headers</span>
+                    <textarea id="authJwtHeadersInput" autocomplete="off" spellcheck="false"></textarea>
+                  </label>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+
+        <div id="bodyTab" class="tab-panel" role="tabpanel" aria-labelledby="requestBodyTabButton">
+          <div class="body-editor-controls">
+            <label class="field compact">
+              <span>Body Type</span>
+              <select id="bodyTypeSelect">
+                <option value="NONE">None</option>
+                <option value="FORM_DATA">Form data</option>
+                <option value="URLENCODED">x-www-form-urlencoded</option>
+                <option value="RAW">Raw</option>
+                <option value="BINARY">Binary</option>
+                <option value="GRAPHQL">GraphQL</option>
+              </select>
+            </label>
+            <label id="bodyRawFormatField" class="field compact">
+              <span>Raw Format</span>
+              <select id="bodyRawFormatSelect">
+                <option value="text">Text</option>
+                <option value="javascript">JavaScript</option>
+                <option value="json">JSON</option>
+                <option value="html">HTML</option>
+                <option value="xml">XML</option>
+              </select>
+            </label>
+            <label id="graphqlOperationNameField" class="field compact graphql-operation-field" hidden>
+              <span>Operation Name</span>
+              <input id="graphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
+            </label>
+            <button id="beautifyBodyButton" class="body-beautify-button" type="button" hidden>Beautify</button>
+          </div>
+          <div id="bodyNonePanel" class="body-mode-panel empty-state">No request body</div>
+          <div id="bodyRawPanel" class="body-mode-panel">
+            <textarea id="bodyInput" spellcheck="false" placeholder="Request body" aria-label="Request body" data-code-editor data-code-language="text"></textarea>
+          </div>
+          <div id="bodyFormDataPanel" class="body-mode-panel">
+            <div class="table-actions">
+              <button id="addFormDataBodyRowButton" type="button">Add Form Field</button>
+            </div>
+            <div id="formDataBodyTable" class="body-pairs-table"></div>
+          </div>
+          <div id="bodyUrlencodedPanel" class="body-mode-panel">
+            <div class="table-actions">
+              <button id="addUrlencodedBodyRowButton" type="button">Add Encoded Field</button>
+            </div>
+            <div id="urlencodedBodyTable" class="body-pairs-table"></div>
+          </div>
+          <div id="bodyBinaryPanel" class="body-mode-panel">
+            <div class="binary-body-grid">
+              <label class="field">
+                <span>File Source</span>
+                <input id="binaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
+              </label>
+            </div>
+          </div>
+          <div id="bodyGraphqlPanel" class="body-mode-panel">
+            <div class="graphql-body-grid">
+              <label class="field graphql-query-field">
+                <span>Query</span>
+                <textarea id="graphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="GraphQL query" data-code-editor data-code-language="graphql"></textarea>
+              </label>
+              <label class="field graphql-variables-field">
+                <span>Variables</span>
+                <textarea id="graphqlVariablesInput" spellcheck="false" placeholder="{&#10;  &quot;id&quot;: &quot;{{userId}}&quot;&#10;}" aria-label="GraphQL variables" data-code-editor data-code-language="json"></textarea>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="scriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestScriptsTabButton">
+          <div class="script-grid">
+            <label class="field script-field">
+              <span>Pre-request Script</span>
+              <textarea id="preRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+            <label class="field script-field">
+              <span>Post-request Script</span>
+              <textarea id="testScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div id="collectionVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestVariablesTabButton">
+          <div class="environment-actions variable-actions">
+            <button id="addRequestVariableButton">Add Variable</button>
+          </div>
+          <div id="requestVariablesTable" class="kv-table"></div>
+          <div id="variablePreview" class="variable-preview">No variables</div>
+        </div>
+
+        <div id="requestSettingsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestSettingsTabButton">
+          <div class="request-settings-grid">
+            <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
+              <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
+              <label id="requestSslCertificateVerificationField" class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+                <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+                <span>Enable SSL certificate verification</span>
+              </label>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestCookiesSettingsTitle">
+              <h3 id="requestCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
+              <div class="cookie-jar-options">
+                <label class="field inline" title="Send matching cookies from the cookie jar with this request.">
+                  <input id="requestCookieJarEnabledInput" type="checkbox" title="Send matching cookies from the cookie jar with this request.">
+                  <span>Use cookie jar for this request</span>
+                </label>
+                <label class="field inline" title="Save Set-Cookie values from this response into the cookie jar.">
+                  <input id="requestCookieJarStoreInput" type="checkbox" title="Save Set-Cookie values from this response into the cookie jar.">
+                  <span>Store response cookies</span>
+                </label>
+                <label class="field inline" title="Limit the cookie manager view to cookies matching the current request host.">
+                  <input id="filterCookiesToRequestHostInput" type="checkbox" title="Limit the cookie manager view to cookies matching the current request host.">
+                  <span>Active host only</span>
+                </label>
+                <button id="openRequestCookiesButton" type="button" title="Open the shared cookie manager.">Open Cookies</button>
+              </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestProtocolSettingsTitle">
+              <h3 id="requestProtocolSettingsTitle" class="request-settings-title">Protocol</h3>
+              <div class="request-settings-columns">
+                <label class="field" title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version."><span>HTTP version</span><select id="requestHttpVersionSelect" data-request-setting title="Choose the HTTP protocol version for this request. Auto lets the runtime choose the best available version.">
+                  <option value="auto">Auto</option>
+                  <option value="http1">HTTP/1.x</option>
+                  <option value="http2">HTTP/2</option>
+                </select></label>
+                <label class="settings-toggle" title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                  <input id="requestStrictHttpParserInput" type="checkbox" data-request-setting title="Reject responses with invalid HTTP headers instead of accepting lenient parsing.">
+                  <span>Enable strict HTTP parser</span>
+                </label>
+              </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestRedirectSettingsTitle">
+              <h3 id="requestRedirectSettingsTitle" class="request-settings-title">Redirects</h3>
+              <div class="request-settings-columns">
+                <label class="settings-toggle" title="Automatically follow HTTP 3xx responses as redirects.">
+                  <input id="requestFollowRedirectsInput" type="checkbox" data-request-setting title="Automatically follow HTTP 3xx responses as redirects.">
+                  <span>Automatically follow redirects</span>
+                </label>
+                <label class="field compact-number-field" title="Set the maximum number of redirects PostMeter can follow for this request."><span>Maximum number of redirects</span><input id="requestMaxRedirectsInput" type="number" min="0" max="100" step="1" data-request-setting title="Set the maximum number of redirects PostMeter can follow for this request."></label>
+                <label class="settings-toggle" title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                  <input id="requestFollowOriginalHttpMethodInput" type="checkbox" data-request-setting title="Keep the original HTTP method when redirecting instead of switching redirected requests to GET.">
+                  <span>Follow original HTTP method</span>
+                </label>
+                <label class="settings-toggle" title="Retain the Authorization header when a redirect points to a different host.">
+                  <input id="requestFollowAuthorizationHeaderInput" type="checkbox" data-request-setting title="Retain the Authorization header when a redirect points to a different host.">
+                  <span>Follow Authorization header</span>
+                </label>
+                <label class="settings-toggle" title="Remove the Referer header from redirected requests.">
+                  <input id="requestRemoveRefererHeaderOnRedirectInput" type="checkbox" data-request-setting title="Remove the Referer header from redirected requests.">
+                  <span>Remove referer header on redirect</span>
+                </label>
+              </div>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestUrlSettingsTitle">
+              <h3 id="requestUrlSettingsTitle" class="request-settings-title">URL</h3>
+              <label class="settings-toggle" title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                <input id="requestEncodeUrlAutomaticallyInput" type="checkbox" data-request-setting title="Encode the URL path, query parameters, and authentication fields before sending the request.">
+                <span>Encode URL automatically</span>
+              </label>
+            </section>
+            <section class="request-settings-section" aria-labelledby="requestTlsHandshakeSettingsTitle">
+              <h3 id="requestTlsHandshakeSettingsTitle" class="request-settings-title">TLS handshake</h3>
+              <label class="settings-toggle" title="Use the server's preferred cipher suite order during the TLS handshake.">
+                <input id="requestUseServerCipherSuiteInput" type="checkbox" data-request-setting title="Use the server's preferred cipher suite order during the TLS handshake.">
+                <span>Use server cipher suite during handshake</span>
+              </label>
+              <label class="field" title="Comma-separate TLS or SSL protocol versions to disable during the handshake."><span>TLS/SSL protocols disabled during handshake</span><input id="requestDisabledTlsProtocolsInput" type="text" placeholder="TLSv1, TLSv1.1" data-request-setting title="Comma-separate TLS or SSL protocol versions to disable during the handshake."></label>
+              <label class="field" title="Specify the cipher suite order to use for TLS connections."><span>Cipher suite selection</span><textarea id="requestCipherSuiteSelectionInput" spellcheck="false" placeholder="Enter cipher suites" data-request-setting title="Specify the cipher suite order to use for TLS connections."></textarea></label>
+            </section>
+          </div>
+        </div>
+
+        <div id="docsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestDocsTabButton">
+          <div class="markdown-pane" data-markdown-pane="requestDocs">
+            <div class="markdown-pane-actions">
+              <button id="docsSaveButton" class="primary" type="button" hidden>Save</button>
+              <button id="docsCancelButton" type="button" hidden>Cancel</button>
+            </div>
+            <div id="docsPreview" class="markdown-renderer markdown-body" tabindex="0" aria-label="Request docs"></div>
+            <div id="docsEditorShell" class="markdown-editor-shell" hidden>
+              <textarea id="docsInput" class="docs-input" spellcheck="false" placeholder="Use markdown to describe what this request is for" aria-label="Request docs Markdown source" data-code-editor data-code-language="markdown"></textarea>
+            </div>
+          </div>
+        </div>
+
+      </section>
+

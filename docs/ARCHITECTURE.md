@@ -14,53 +14,68 @@ The main rule is that product behavior belongs in the lowest layer that can own 
 
 Renderer files are loaded directly from `src/renderer/index.html`.
 
-- `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save, collection export selection, runner request import, in-app Tutorials, history clearing, and draggable sidebar-tree placement.
-- `cookieModel.js` owns renderer-side cookie validation, Postman cookie metadata import, and thin adapters over the shared core cookie model.
-- `contextMenu.js` owns renderer context-menu display and positioning.
-- `layoutControls.js` owns resizable pane wiring and persisted layout CSS variables.
-- `collectionModel.js` owns pure collection/folder/request tree traversal and mutation helpers used by the renderer.
-- `requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair tables, cookie panel rendering, and variable preview/editor helpers.
-- `rendererState.js` owns renderer state defaults plus shared active-tab, modal, and dirty-state helpers.
-- `requestTabs.js` owns generic request/environment/workspace/runner tab-bar rendering from tab descriptors, including shrink-before-scroll sizing and hover/active close buttons.
-- `requestTabState.js` owns request/environment/workspace/runner tab lifecycle, selection, dirty handling, sequential close/discard flows, force-close behavior, and the 128-open-tab cap.
-- `rendererBootstrap.js` owns renderer startup/theme bootstrap, toolbar-menu helpers, and DOM event registration driven by injected callbacks.
-- `sessionPersistence.js` owns renderer-side session serialization/restoration for open tabs, active panels, active selection, drafts, dirty editor state, workspace order, and the no-tab empty-pane restore state for environments, workspaces, and runners.
-- `rendererWorkflows.js` owns request send, runner, OAuth, workspace import/export/save workflows, collection-export selection flows, non-destructive workspace import handling, and script-mutation application.
-- `responseFormatting.js` owns renderer-side response body formatting for JSON, XML, and HTML display.
-- `runResultFormatting.js` owns renderer-side text formatting for runner and OAuth progress/result displays.
-- `uiSmokeCommon.js` owns shared test-only UI smoke helpers such as queueing, waits, DOM dispatch helpers, assertions, and snapshot capture.
-- `uiWorkflowSmoke.js`, `uiRegressionSmoke.js`, `uiTypographySmoke.js`, `uiSnapshotSmoke.js`, and `uiOauthSmoke.js` each own one Electron UI smoke suite instead of sharing a single renderer test harness file.
-- `uiSmoke.js` is the stable test-only queue/entry-point layer. Production code should only call the `queueUi*Smoke` entry points.
-- `theme.css` owns design tokens, method colors, and light/dark/system theme variables.
-- `base.css` owns element defaults and common control states.
-- `chrome.css` owns application chrome, sidebar, tree, drag/drop insertion bars, workspace framing, runner framing, and request-tab layout rules.
-- `editorPanels.css` owns request, response, auth, cookie, docs, and editor component rules.
-- `overlays.css` owns modal, context-menu, and guided tutorial overlay presentation.
-- `styles.css` is the renderer stylesheet entry point and imports the modular CSS slices.
+- `html/` contains the source partials for `index.html`. `npm run renderer:html:write` regenerates the runtime HTML, and `npm run renderer:html:check` fails when the generated entry point is stale. Keep script order changes in `html/scripts.html` and regenerate `index.html`.
+- `renderer.js` is the renderer shell/orchestrator. It owns shared constants, the `TUTORIALS` materialization boundary, and startup composition only; product behavior should stay in focused modules loaded before it.
+- `app/rendererStartup.js`, `app/appMenuAndTabs.js`, `app/workspaceLifecycle.js`, and `app/editorCollectors.js` own startup utilities, menu/tab orchestration, workspace load/save rendering, and form-state collection.
+- `features/settingsController.js`, `features/workspaceSidebarController.js`, `features/authRefreshController.js`, `features/performanceController.js`, `features/runnerController.js`, `features/diagnosticsWorkspaceController.js`, `features/runtimeResultsController.js`, and `features/importExportWorkspaceController.js` own larger renderer feature workflows that previously lived inline in the shell.
+- `ui/titleEditors.js`, `ui/modalController.js`, `ui/localFilePickerController.js`, and `ui/requestEditorController.js` own DOM interaction surfaces that are shared across workflows but are still renderer-only.
+- `features/entityDisplay.js` owns renderer entity/file display-name helpers behind injected active-state accessors, so tabs, import/export, workspace chrome, and tree labels do not need to duplicate naming rules inside the renderer shell.
+- `features/tutorialCatalog.js` owns static guided tutorial definitions, and `features/tutorialController.js` owns live modal state, tutorial navigation, and overlay positioning.
+- `ui/rendererUiUtilities.js` owns small renderer UI utility behavior such as byte labels, notification payload normalization, and automated UI-smoke query detection.
+- `models/cookieModel.js` owns renderer-side cookie validation, Postman cookie metadata import, and thin adapters over the shared core cookie model.
+- `models/collectionModel.js` owns pure collection/folder/request tree traversal and mutation helpers used by the renderer.
+- `models/performanceTestModel.js` and `models/authRefreshAutoDetectModel.js` keep performance and auth-refresh normalization out of the shell.
+- `ui/contextMenu.js` owns renderer context-menu display and positioning.
+- `ui/layoutControls.js` owns resizable pane wiring and persisted layout CSS variables.
+- `ui/requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair tables, cookie panel rendering, and variable preview/editor helpers.
+- `ui/requestTabs.js` owns generic request/environment/workspace/runner tab-bar rendering from tab descriptors, including shrink-before-scroll sizing and hover/active close buttons.
+- `ui/codeEditor.js`, `ui/variableAutocomplete.js`, and `ui/variableHighlighter.js` own editor-specific interactions.
+- `app/rendererState.js` owns renderer state defaults plus shared active-tab, modal, and dirty-state helpers.
+- `app/requestTabState.js` owns request/environment/workspace/runner tab lifecycle, selection, dirty handling, sequential close/discard flows, force-close behavior, and the 128-open-tab cap.
+- `app/rendererBootstrap.js` owns renderer startup/theme bootstrap, toolbar-menu helpers, and DOM event registration driven by injected callbacks.
+- `app/sessionPersistence.js` owns renderer-side session serialization/restoration for open tabs, active panels, active selection, drafts, dirty editor state, workspace order, and the no-tab empty-pane restore state for environments, workspaces, and runners.
+- `app/rendererWorkflows.js` owns request send, runner, OAuth, workspace import/export/save workflows, collection-export selection flows, non-destructive workspace import handling, and script-mutation application.
+- `formatting/responseFormatting.js` owns renderer-side response body formatting for JSON, XML, and HTML display.
+- `formatting/runResultFormatting.js` owns renderer-side text formatting for runner and OAuth progress/result displays.
+- `formatting/markdownRenderer.js` owns markdown preview rendering over the checked-in vendor markdown bundle.
+- `smoke/uiSmokeCommon.js` owns shared test-only UI smoke helpers such as queueing, waits, DOM dispatch helpers, assertions, and snapshot capture.
+- `smoke/uiWorkflowSmoke.js`, `smoke/uiRegressionSmoke.js`, `smoke/uiTypographySmoke.js`, `smoke/uiSnapshotSmoke.js`, `smoke/uiOauthSmoke.js`, `smoke/uiHawkSmoke.js`, and `smoke/uiAwsSmoke.js` each own one Electron UI smoke suite.
+- `smoke/uiSmoke.js` is the stable test-only queue/entry-point layer. Production code should only call the `queueUi*Smoke` entry points.
+- `styles/theme.css` owns design tokens, method colors, and light/dark/system theme variables.
+- `styles/base.css` owns element defaults and common control states.
+- `styles/chrome.css` owns application chrome, sidebar, tree, drag/drop insertion bars, workspace framing, runner framing, and request-tab layout rules.
+- `styles/editorPanels.css` owns request, response, auth, cookie, docs, and editor component rules.
+- `styles/overlays.css` owns modal, context-menu, and guided tutorial overlay presentation.
+- `styles/styles.css` is the renderer stylesheet entry point and imports the modular CSS slices.
 
 Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the same time. The planned behavior-preserving renderer split is complete enough that new work should usually extend the existing helper modules instead of growing `renderer.js` again.
 
 ## Electron Main Process
 
-`electron/main.js` is the app shell and IPC registration entry point. Main-process business helpers should move out of this file when they can be tested without launching Electron.
+`electron/main.js` is the packaged app entry point. It should stay focused on lifecycle wiring and module registration.
 
-- `appMenu.js` owns the application menu template and installation.
-- `appProtocol.js` owns the secure standard `postmeter-app://bundle` renderer asset protocol, including the narrow bundle allowlist, CSP/`nosniff`/`no-referrer` response headers, and least-privileged protocol registration used instead of loading the UI with `file://`.
-- `appIpc.js` owns app version, update check, and credential-free allowed external-link IPC channels.
-- `fileDialogs.js` owns shared dialog filters, default extensions, and filename normalization.
-- `ipcSecurity.js` owns trusted main-frame renderer IPC sender validation against the `postmeter-app://bundle/src/renderer/index.html` main-frame URL. Production IPC registration wraps every renderer-to-main channel so messages from missing sender-frame metadata, navigated, external, subframe, or unexpected sender frames are rejected before handler logic.
-- `mainWindow.js` owns BrowserWindow creation, custom-protocol renderer loading, navigation/window-open/webview/permission denial, startup/package smoke probes, and UI-smoke/snapshot window hooks.
-- `oauthIpc.js` owns OAuth IPC channel registration and payload validation.
-- `oauthFlows.js` owns OAuth authorization-code/device-code orchestration, callback routing, protocol registration, credential-free http/https shell-launch validation, and expected `postmeter://oauth/callback` route matching.
-- `requestIpc.js` owns single-request validation/send IPC and persistence of response-side workspace mutations.
-- `runtimeIpc.js` owns collection-run IPC channels, cancellation maps, progress events, and result exports.
-- `sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
-- `sessionStore.js` owns persisted UI session state in Electron `userData/profile/session.json`; default managed workspaces live under `userData/profile/workspace/`, and app settings live in `userData/profile/settings.json`.
-- `workspaceIpc.js` owns workspace import/export/duplicate, collection import/export, environment import/export, runner-definition import/export, standalone request import/export/preview, workspace save/load, and the refreshed managed-workspace payloads returned after workspace import or duplication.
-- `workspaceMutations.js` owns workspace updates after request sends and collection runs.
-- `vaultPrompt.js` owns metadata-only vault prompt IPC, renderer/dialog fallback decisions, prompt-response sender binding, and scoped vault-grant persistence helpers. `vaultPromptQueue.js` serializes renderer prompt UI so concurrent script vault calls cannot overwrite active prompt state. `requestIpc.js` and `runtimeIpc.js` pass the prompt broker into the shared scripted lifecycle so single-request sends, collection runs, and nested request executions all use the same request/collection/workspace-scoped prompt path.
+- `app-shell/appMenu.js` owns the application menu template and installation.
+- `app-shell/appProtocol.js` owns the secure standard `postmeter-app://bundle` renderer asset protocol, including the narrow bundle allowlist, CSP/`nosniff`/`no-referrer` response headers, and least-privileged protocol registration used instead of loading the UI with `file://`.
+- `app-shell/rendererAssetManifest.js` owns the app-protocol renderer contract: CSP, trusted query keys, icon path, and allowed browser-safe core assets.
+- `app-shell/fileDialogs.js` owns shared dialog filters, default extensions, and filename normalization.
+- `app-shell/mainWindow.js` owns BrowserWindow creation, custom-protocol renderer loading, navigation/window-open/webview/permission denial, startup/package smoke probes, and UI-smoke/snapshot window hooks.
+- `ipc/appIpc.js` owns app version, update check, and credential-free allowed external-link IPC channels.
+- `ipc/oauthIpc.js` owns OAuth IPC channel registration and payload validation.
+- `ipc/requestIpc.js` owns single-request validation/send IPC and persistence of response-side workspace mutations.
+- `ipc/runtimeIpc.js` owns collection-run IPC channels, cancellation maps, progress events, and result exports.
+- `ipc/sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
+- `ipc/workspaceIpc.js` owns workspace import/export/duplicate, collection import/export, environment import/export, runner-definition import/export, standalone request import/export/preview, workspace save/load, and the refreshed managed-workspace payloads returned after workspace import or duplication.
+- `ipc/vaultPrompt.js` owns metadata-only vault prompt IPC, renderer/dialog fallback decisions, prompt-response sender binding, and scoped vault-grant persistence helpers. `src/renderer/ui/vaultPromptQueue.js` serializes renderer prompt UI so concurrent script vault calls cannot overwrite active prompt state. `requestIpc.js` and `runtimeIpc.js` pass the prompt broker into the shared scripted lifecycle so single-request sends, collection runs, and nested request executions all use the same request/collection/workspace-scoped prompt path.
+- `services/oauthFlows.js` owns OAuth authorization-code/device-code orchestration, callback routing, protocol registration, credential-free http/https shell-launch validation, and expected `postmeter://oauth/callback` route matching.
+- `services/sessionStore.js` owns persisted UI session state in Electron `userData/profile/session.json`; default managed workspaces live under `userData/profile/workspace/`, and app settings live in `userData/profile/settings.json`.
+- `services/workspaceMutations.js` owns workspace updates after request sends and collection runs.
+- `services/autoUpdateService.js` owns packaged update-check orchestration.
+- `security/ipcSecurity.js` owns trusted main-frame renderer IPC sender validation against the `postmeter-app://bundle/src/renderer/index.html` main-frame URL. Production IPC registration wraps every renderer-to-main channel so messages from missing sender-frame metadata, navigated, external, subframe, or unexpected sender frames are rejected before handler logic.
+- `packaging/packagedResourceManifest.js` owns packaged validation helper paths.
 
 Further extraction should be demand-driven. `electron/main.js` is already reduced to app lifecycle, workspace/session-store wiring, and module registration, so more splitting should only happen when those responsibilities materially grow again.
+
+`electron/domains/` provides lazy ownership shims for new code: `app-shell`, `ipc`, `services`, `security`, and `packaging`.
 
 IPC channel names and preload APIs are compatibility contracts. Refactors must preserve them unless a migration is explicitly planned. The source-owned Electron security matrix enumerates every channel, and the matrix validator plus focused tests fail if source channels and documented channel rows diverge.
 
@@ -68,27 +83,29 @@ IPC channel names and preload APIs are compatibility contracts. Refactors must p
 
 Core modules must not depend on Electron or renderer globals.
 
-- `scriptedRequestLifecycle.js` owns the shared pre-request/send/test pipeline used by both single-request and collection-run execution. It also sanitizes primary-request client-certificate auth mutations so scripts can select reviewed certificate bindings by `certificateId` but cannot inject direct local certificate, key, PFX/P12, CA, or passphrase fields before parent transport execution.
-- `requestScriptRunner.js` adapts the shared scripted-request lifecycle for single-request execution and returns the response plus runtime variable mutations.
-- `collectionRunner.js` sequences collection requests and layers runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle. It also adapts first-class workspace runners by executing runner-owned request copies in runner order while preserving the same script/cookie/vault/package lifecycle.
-- `httpClient.js` prepares and sends HTTP requests.
-- `pfxCertificate.js` owns parent-side PFX/P12 bundle extraction and encrypted PEM private-key normalization into in-memory PEM buffers for HTTP and gRPC client-certificate transports. It uses regular-file, byte-capped descriptor reads plus the reviewed `node-forge` PKCS#12/PEM parser in the parent process, and does not shell out or write decrypted PEM material to temp files.
-- `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker. gRPC mTLS supports PEM cert/key material and the shared parent-side PFX/P12 extraction path used by HTTP client-certificate requests, with configured certificate bindings failing closed instead of falling back to script-mutated direct paths.
-- `productionReadinessMatrix.js` and `productionSupportMatrices.js` own release-readiness, Electron-security, workspace-durability, and non-Postman compatibility dashboards. Generated JSON lives in `docs/`.
+Core implementations live under `contracts/`, `http/`, `workspace/`, `import-export/`, `runtime/`, `sandbox/`, and `diagnostics-release/`. `src/core/domains/` provides lazy ownership shims for grouped imports: `http`, `workspace`, `import-export`, `runtime`, `security-sandbox`, `diagnostics-release`, and `ipc`.
+
+- `runtime/scriptedRequestLifecycle.js` owns the shared pre-request/send/test pipeline used by both single-request and collection-run execution. It also sanitizes primary-request client-certificate auth mutations so scripts can select reviewed certificate bindings by `certificateId` but cannot inject direct local certificate, key, PFX/P12, CA, or passphrase fields before parent transport execution.
+- `runtime/requestScriptRunner.js` adapts the shared scripted-request lifecycle for single-request execution and returns the response plus runtime variable mutations.
+- `runtime/collectionRunner.js` sequences collection requests and layers runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle. It also adapts first-class workspace runners by executing runner-owned request copies in runner order while preserving the same script/cookie/vault/package lifecycle.
+- `http/httpClient.js` prepares and sends HTTP requests.
+- `http/pfxCertificate.js` owns parent-side PFX/P12 bundle extraction and encrypted PEM private-key normalization into in-memory PEM buffers for HTTP and gRPC client-certificate transports. It uses regular-file, byte-capped descriptor reads plus the reviewed `node-forge` PKCS#12/PEM parser in the parent process, and does not shell out or write decrypted PEM material to temp files.
+- `http/grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker. gRPC mTLS supports PEM cert/key material and the shared parent-side PFX/P12 extraction path used by HTTP client-certificate requests, with configured certificate bindings failing closed instead of falling back to script-mutated direct paths.
+- `diagnostics-release/productionReadinessMatrix.js` and `diagnostics-release/productionSupportMatrices.js` own release-readiness, Electron-security, workspace-durability, and non-Postman compatibility dashboards. Generated JSON lives in `docs/`.
 - `docs/SANDBOX_CONTRACT.md` is the source of truth for script sandbox compatibility, security boundaries, broker behavior, side-effect transactions, and future high-volume execution scripting scope. The current claim-gated Postman script parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces.
-- `authModel.js` and `cookieModel.js` own shared runtime-neutral model defaults and normalization used by both core and renderer modules.
-- `payloadSchemas.js` owns shared field schemas, enum sets, and basic string-length limits consumed by IPC validation and shared normalization helpers.
-- `collectionFormats.js` is the stable public import/export boundary for collection format handling.
-- `environmentFormats.js` and `runnerFormats.js` are the stable native import/export boundaries for environment and runner-definition JSON handling. Environment export also supports Postman environment JSON for interoperability.
-- `openApiFormats.js` and `curlFormats.js` each own one import/export family instead of sharing a single god module.
-- `collectionFormatUtils.js` owns the small set of cross-format helpers such as URL parsing, JSON/XML escaping, shell splitting/quoting, and request flattening.
-- `collectionImportRegistry.js` owns collection import detection/dispatch and format-specific export dispatch without changing the `WorkspaceStore` API.
-- `scriptRuntime.js`, `sandboxPackageCache.js`, `postmanBuiltinPackages.js`, `postmanSandboxBootcodeBundle.js`, `visualizerHandlebarsBundle.js`, `scriptSandbox.js`, `scriptWorker.js`, and `osSandbox.js` implement the constrained Postman-style script environment, reviewed package-cache policy, version-pinned Postman package bundle, isolated Handlebars visualizer runtime, worker transport, broker boundary, and OS sandbox launcher layer.
-- `models.js`, `payloadSchemas.js`, and `ipcValidation.js` define normalized payload shape and validation contracts, including schema-12 `workspace.runners` data and runner-owned request payloads.
-- `workspacePersistence.js` owns workspace-path defaults, workspace normalization, structured-content parsing, and JSON persistence helpers.
-- `importedCollectionIds.js` owns imported collection/folder/request/certificate ID regeneration.
-- `workspaceStore.js` owns high-level workspace orchestration and file-facing service methods.
-- `workspaceMigrations.js` owns workspace schema migration, including the schema-12 default `runners: []` migration for older workspaces.
+- `http/authModel.js` and `http/cookieModel.js` own shared runtime-neutral model defaults and normalization used by both core and renderer modules.
+- `contracts/payloadSchemas.js` owns shared field schemas, enum sets, and basic string-length limits consumed by IPC validation and shared normalization helpers.
+- `import-export/collectionFormats.js` is the stable public import/export boundary for collection format handling.
+- `import-export/environmentFormats.js` and `import-export/runnerFormats.js` are the stable native import/export boundaries for environment and runner-definition JSON handling. Environment export also supports Postman environment JSON for interoperability.
+- `import-export/openApiFormats.js` and `import-export/curlFormats.js` each own one import/export family instead of sharing a single god module.
+- `import-export/collectionFormatUtils.js` owns the small set of cross-format helpers such as URL parsing, JSON/XML escaping, shell splitting/quoting, and request flattening.
+- `import-export/collectionImportRegistry.js` owns collection import detection/dispatch and format-specific export dispatch without changing the `WorkspaceStore` API.
+- `sandbox/scriptRuntime.js`, `sandbox/sandboxPackageCache.js`, `sandbox/postmanBuiltinPackages.js`, `sandbox/postmanSandboxBootcodeBundle.js`, `sandbox/visualizerHandlebarsBundle.js`, `sandbox/scriptSandbox.js`, `sandbox/scriptWorker.js`, and `sandbox/osSandbox.js` implement the constrained Postman-style script environment, reviewed package-cache policy, version-pinned Postman package bundle, isolated Handlebars visualizer runtime, worker transport, broker boundary, and OS sandbox launcher layer.
+- `workspace/models.js`, `contracts/payloadSchemas.js`, and `contracts/ipcValidation.js` define normalized payload shape and validation contracts, including schema-12 `workspace.runners` data and runner-owned request payloads.
+- `workspace/workspacePersistence.js` owns workspace-path defaults, workspace normalization, structured-content parsing, and JSON persistence helpers.
+- `import-export/importedCollectionIds.js` owns imported collection/folder/request/certificate ID regeneration.
+- `workspace/workspaceStore.js` owns high-level workspace orchestration and file-facing service methods.
+- `workspace/workspaceMigrations.js` owns workspace schema migration, including the schema-12 default `runners: []` migration for older workspaces.
 
 ## Sidebar, Tabs, Workspace-Owned Runners, And Performance
 

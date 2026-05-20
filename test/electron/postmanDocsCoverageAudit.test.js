@@ -6,7 +6,7 @@ const {
   resolveDocsCoverage,
   validateCommittedDocsCoverageAudit,
   validateDocsCoverageAudit
-} = require('../../src/core/postmanDocsCoverageAudit');
+} = require('../../src/core/diagnostics-release/postmanDocsCoverageAudit');
 
 test('validates the committed official Postman docs coverage audit', async () => {
   const result = await validateCommittedDocsCoverageAudit();

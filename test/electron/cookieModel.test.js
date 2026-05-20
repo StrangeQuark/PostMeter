@@ -6,7 +6,7 @@ const {
   isExpiredCookie,
   newWorkspaceCookie,
   normalizeCookies
-} = require('../../src/core/cookieModel');
+} = require('../../src/core/http/cookieModel');
 
 test('shared cookie model creates new workspace cookies with renderer-compatible defaults', () => {
   assert.deepEqual(newWorkspaceCookie({ domain: '.Example.Test.' }, { createId: () => 'cookie-id' }), {

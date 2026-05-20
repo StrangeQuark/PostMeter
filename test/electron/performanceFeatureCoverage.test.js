@@ -37,8 +37,7 @@ test('Performance implementation keeps focused model runtime renderer and releas
 test('Performance docs keep the eight local V1 types and positive/negative scenarios visible', async () => {
   const techSpecs = await readProjectFile('docs/TECH_SPECS.md');
   const compatibility = await readProjectFile('docs/COMPATIBILITY.md');
-  const nextSteps = await readProjectFile('NEXT_STEPS.MD');
-  const combined = `${techSpecs}\n${compatibility}\n${nextSteps}`;
+  const combined = `${techSpecs}\n${compatibility}`;
 
   for (const type of PERFORMANCE_TYPES) {
     assert.match(combined, new RegExp(escapeRegExp(type), 'i'), `Missing Performance type ${type}.`);
@@ -58,21 +57,19 @@ test('Performance docs track model, UI, import/export, safety, and environment g
     await readProjectFile('README.md'),
     await readProjectFile('docs/TECH_SPECS.md'),
     await readProjectFile('docs/ARCHITECTURE.md'),
-    await readProjectFile('docs/COMPATIBILITY.md'),
-    await readProjectFile('docs/RELEASE_READINESS.md'),
-    await readProjectFile('NEXT_STEPS.MD')
+    await readProjectFile('docs/COMPATIBILITY.md')
   ].join('\n');
   const requiredPhrases = [
-    'request-copy isolation from Collections',
-    'Manual request entry',
-    'Environment copy-vs-mutate behavior',
+    'Imported request copies remain isolated from source collection requests',
+    'manual request entry directly in the Performance pane',
+    'temporary environment copy',
     'Import/export validation',
-    'Safety cap rejection and cancellation',
-    'Empty pane',
-    'New dropdown',
-    'sidebar placement',
-    'dirty tab behavior',
-    'save/discard semantics'
+    'supports cancellation',
+    'empty-pane semantics',
+    'top-level `New` menu',
+    'sidebar places Performance',
+    'dirty close',
+    'save, discard'
   ];
 
   for (const phrase of requiredPhrases) {

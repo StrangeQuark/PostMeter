@@ -7,7 +7,7 @@ const {
   validateCommittedParityMatrix,
   validateCommittedProductionClaim,
   writeParityMatrix
-} = require('../src/core/postmanParityHarness');
+} = require('../src/core/diagnostics-release/postmanParityHarness');
 
 async function main() {
   const command = process.argv[2] || 'validate';

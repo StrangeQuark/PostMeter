@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { renderRequestTabs } = require('../../src/renderer/requestTabs');
+const { renderRequestTabs } = require('../../src/renderer/ui/requestTabs');
 
 test('opened request tabs expose panel relationships without nesting close buttons in tab roles', () => {
   const doc = createFakeDocument(['requestTabBar', 'requestEditorPanel']);

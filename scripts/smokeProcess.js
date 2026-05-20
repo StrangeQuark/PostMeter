@@ -4,7 +4,7 @@ const path = require('node:path');
 const {
   redactRequestResponseAliasesInText,
   redactTransportReferences
-} = require('../src/core/diagnostics');
+} = require('../src/core/diagnostics-release/diagnostics');
 
 const DEFAULT_KILL_GRACE_MILLIS = 2_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024;

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { collectionModel, environmentModel, requestModel, runnerModel, workspaceModel } = require('../../src/core/models');
+const { collectionModel, environmentModel, requestModel, runnerModel, workspaceModel } = require('../../src/core/workspace/models');
 const {
   applyEnvironmentSaveToWorkspace,
   applyFolderSaveToWorkspace,
@@ -14,7 +14,7 @@ const {
   mergeCookieJarByDelta,
   mergeVariableScopeByDelta,
   updateWorkspaceRequestAuth
-} = require('../../electron/workspaceMutations');
+} = require('../../electron/services/workspaceMutations');
 
 test('finds and updates requests within nested workspace collections', () => {
   const request = requestModel({ id: 'r1', name: 'Nested', auth: { type: 'none' } });

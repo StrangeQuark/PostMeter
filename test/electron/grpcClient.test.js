@@ -9,12 +9,12 @@ const protoLoader = require('@grpc/proto-loader');
 const {
   extractPfxForGrpc,
   invokeGrpcRequest
-} = require('../../src/core/grpcClient');
-const { DEFAULT_MAX_PFX_BYTES } = require('../../src/core/pfxCertificate');
+} = require('../../src/core/http/grpcClient');
+const { DEFAULT_MAX_PFX_BYTES } = require('../../src/core/http/pfxCertificate');
 const {
   createScriptedRequestState,
   runScriptedRequestLifecycle
-} = require('../../src/core/scriptedRequestLifecycle');
+} = require('../../src/core/runtime/scriptedRequestLifecycle');
 
 const TEST_PROTO = `
 syntax = "proto3";

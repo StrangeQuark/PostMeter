@@ -36,8 +36,8 @@ const {
   assertWorkspaceSettingsSavePayload,
   assertWorkspaceSettingsSaveResultPayload,
   assertWorkspacePayload
-} = require('../../src/core/ipcValidation');
-const { payloadSchemas } = require('../../src/core/payloadSchemas');
+} = require('../../src/core/contracts/ipcValidation');
+const { payloadSchemas } = require('../../src/core/contracts/payloadSchemas');
 
 test('accepts structurally valid IPC payloads', () => {
   assert.doesNotThrow(() => assertRequestPayload({

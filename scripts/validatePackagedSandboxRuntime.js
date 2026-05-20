@@ -4,6 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
 const { redactSmokeOutputText, spawnWithTimeout } = require('./smokeProcess');
+const {
+  packagedAppResourcePath,
+  packagedSandboxRuntimeCliPath
+} = require('../electron/packaging/packagedResourceManifest');
 
 const DEFAULT_TIMEOUT_MILLIS = 60_000;
 const WINDOWS_TIMEOUT_MILLIS = 120_000;
@@ -145,21 +149,12 @@ function packagedSandboxLaunchEnv(source = process.env, platform = process.platf
 
 function packagedSandboxLaunchArgs(appPath, platform = process.platform) {
   return packagedSandboxLaunchMode(platform) === 'node-main-process'
-    ? [packagedAppResourcePath(appPath, ['electron', 'packagedSandboxRuntimeCli.js'])]
+    ? [packagedSandboxRuntimeCliPath(appPath)]
     : [];
 }
 
 function packagedSandboxStdioMode(platform = process.platform, mode = packagedSandboxLaunchMode(platform)) {
   return platform === 'win32' && mode !== 'node-main-process' ? 'ignore' : undefined;
-}
-
-function packagedAppResourcePath(executable, relativeParts = []) {
-  const resourcesPath = path.join(path.dirname(path.resolve(executable)), 'resources');
-  const appAsar = path.join(resourcesPath, 'app.asar');
-  const appRoot = fs.existsSync(appAsar)
-    ? appAsar
-    : path.join(resourcesPath, 'app');
-  return path.join(appRoot, ...relativeParts);
 }
 
 module.exports = {

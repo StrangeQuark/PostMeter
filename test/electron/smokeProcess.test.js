@@ -15,7 +15,7 @@ const {
   defaultValidationTimeoutMillis: defaultSourceSandboxTimeoutMillis,
   redactForOutput: redactSourceSandboxOutput
 } = require('../../scripts/validateSandboxRuntime');
-const { scriptBoundaryWorkerTimeoutMillis } = require('../../src/core/sandboxRuntimeValidation');
+const { scriptBoundaryWorkerTimeoutMillis } = require('../../src/core/sandbox/sandboxRuntimeValidation');
 
 test('smoke process helper captures successful child stdout and stderr', async () => {
   const result = await spawnWithTimeout(process.execPath, [
@@ -291,7 +291,7 @@ test('sandbox validators use larger Windows budgets and node-mode packaged launc
   assert.equal(packagedSandboxLaunchEnv({ NODE_OPTIONS: '--inspect' }, 'win32').ELECTRON_RUN_AS_NODE, '1');
   assert.equal(packagedSandboxLaunchEnv({ ELECTRON_RUN_AS_NODE: '1' }, 'linux').ELECTRON_RUN_AS_NODE, undefined);
   assert.deepEqual(packagedSandboxLaunchArgs(executable, 'win32'), [
-    packagedAppResourcePath(executable, ['electron', 'packagedSandboxRuntimeCli.js'])
+    packagedAppResourcePath(executable, ['electron', 'packaging', 'packagedSandboxRuntimeCli.js'])
   ]);
   assert.deepEqual(packagedSandboxLaunchArgs(executable, 'linux'), []);
   assert.equal(packagedSandboxStdioMode('win32', 'app-main-process'), 'ignore');

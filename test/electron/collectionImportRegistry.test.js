@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   exportCollectionByFormat,
   importCollectionFromContent
-} = require('../../src/core/collectionImportRegistry');
+} = require('../../src/core/import-export/collectionImportRegistry');
 
 test('collection import registry prefers native workspace imports before generic structured handlers', () => {
   const collection = importCollectionFromContent(JSON.stringify({

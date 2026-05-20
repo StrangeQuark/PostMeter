@@ -5,11 +5,11 @@ const zlib = require('node:zlib');
 const {
   fetchSandboxPackageForReview,
   parseSandboxPackageSpecifier
-} = require('../../src/core/sandboxPackageFetcher');
+} = require('../../src/core/sandbox/sandboxPackageFetcher');
 const {
   scriptPackageBundleIntegrity,
   scriptPackageIntegrity
-} = require('../../src/core/sandboxPackageCache');
+} = require('../../src/core/sandbox/sandboxPackageCache');
 
 test('fetches an exact npm package into a reviewed cache entry without script-time network access', async () => {
   const source = 'const lodash = require("lodash"); const value = require("./lib/value"); module.exports = { ok: () => lodash.camelCase(value.label) };';

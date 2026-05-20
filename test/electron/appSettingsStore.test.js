@@ -8,7 +8,7 @@ const {
   APP_SETTINGS_VERSION,
   AppSettingsStore,
   defaultSettingsPath
-} = require('../../src/core/appSettingsStore');
+} = require('../../src/core/workspace/appSettingsStore');
 
 test('app settings store creates local settings.json without looking like a workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-app-settings-'));

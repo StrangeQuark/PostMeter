@@ -5,15 +5,15 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   normalizeCapturePolicy
-} = require('../../src/core/resultCapturePolicy');
+} = require('../../src/core/workspace/resultCapturePolicy');
 const {
   cleanupRuntimeResultStore,
   createRuntimeResultStore,
   estimateRuntimeResultStoreSize
-} = require('../../src/core/runtimeResultStore');
+} = require('../../src/core/runtime/runtimeResultStore');
 const {
   runRunner
-} = require('../../src/core/collectionRunner');
+} = require('../../src/core/runtime/collectionRunner');
 
 test('capture policy keeps current defaults for small runs and applies high-volume guardrails', () => {
   const small = normalizeCapturePolicy({}, 'runner', { plannedRequests: 100 });

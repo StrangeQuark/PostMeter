@@ -1,13 +1,13 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { collectionModel, requestModel } = require('../../src/core/models');
-const { MockStateStore, handleLocalMockRequest } = require('../../src/core/localMockServer');
-const { runPostmanScript, scriptPackageIntegrity } = require('../../src/core/scriptRuntime');
-const { runPostmanScriptIsolated } = require('../../src/core/scriptSandbox');
+const { collectionModel, requestModel } = require('../../src/core/workspace/models');
+const { MockStateStore, handleLocalMockRequest } = require('../../src/core/runtime/localMockServer');
+const { runPostmanScript, scriptPackageIntegrity } = require('../../src/core/sandbox/scriptRuntime');
+const { runPostmanScriptIsolated } = require('../../src/core/sandbox/scriptSandbox');
 const {
   createScriptedRequestState,
   runScriptedRequestLifecycle
-} = require('../../src/core/scriptedRequestLifecycle');
+} = require('../../src/core/runtime/scriptedRequestLifecycle');
 
 test('blocks prototype and constructor escapes from script-visible objects', async () => {
   const execution = await runPostmanScriptIsolated(`

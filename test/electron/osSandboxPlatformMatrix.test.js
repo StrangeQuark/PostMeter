@@ -4,11 +4,11 @@ const {
   validateCommittedOsSandboxPlatformClaim,
   validateCommittedOsSandboxPlatformMatrix,
   validateOsSandboxPlatformClaim
-} = require('../../src/core/osSandboxPlatformHarness');
+} = require('../../src/core/sandbox/osSandboxPlatformHarness');
 const {
   PLATFORM_OS_SANDBOX_CLAIM,
   buildOsSandboxPlatformMatrix
-} = require('../../src/core/osSandboxPlatformMatrix');
+} = require('../../src/core/sandbox/osSandboxPlatformMatrix');
 
 test('validates the committed OS sandbox platform matrix', async () => {
   const result = await validateCommittedOsSandboxPlatformMatrix();

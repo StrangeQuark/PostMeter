@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const vm = require('node:vm');
-const { resultHtmlReportToHtml } = require('../../src/core/resultHtmlReport');
+const { resultHtmlReportToHtml } = require('../../src/core/import-export/resultHtmlReport');
 
 test('result HTML report renders polished runner sections and escapes response data', async () => {
   let sourceCalls = 0;

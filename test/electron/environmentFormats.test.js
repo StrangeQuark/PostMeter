@@ -6,7 +6,7 @@ const {
   exportEnvironmentToJson,
   importEnvironmentDocument,
   importEnvironmentFromText
-} = require('../../src/core/environmentFormats');
+} = require('../../src/core/import-export/environmentFormats');
 
 test('exports and imports native environment documents with schema validation', () => {
   const environment = {

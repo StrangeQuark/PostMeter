@@ -5,7 +5,7 @@ const {
   cloneRequestForPerformanceTest,
   newPerformanceTestObject,
   normalizePerformanceTest
-} = require('../../src/renderer/performanceTestModel');
+} = require('../../src/renderer/models/performanceTestModel');
 
 test('renderer performance model uses the same eight V1 types and defaults as the workspace model', () => {
   assert.deepEqual(PERFORMANCE_TEST_TYPES, [

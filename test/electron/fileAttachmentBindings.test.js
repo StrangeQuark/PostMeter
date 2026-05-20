@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { fileBindingStatusRows } = require('../../src/core/fileAttachmentBindings');
+const { fileBindingStatusRows } = require('../../src/core/http/fileAttachmentBindings');
 
 test('file binding status rows include collection runner and performance Postman body file references', () => {
   const workspace = {

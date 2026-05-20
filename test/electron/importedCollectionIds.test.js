@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { regenerateCollectionIds } = require('../../src/core/importedCollectionIds');
+const { regenerateCollectionIds } = require('../../src/core/import-export/importedCollectionIds');
 
 test('imported collection id regeneration rewrites nested collection, folder, request, and certificate ids', () => {
   const collection = {

@@ -6,8 +6,8 @@ const {
   exportRunnerToJson,
   importRunnerDocument,
   importRunnerFromText
-} = require('../../src/core/runnerFormats');
-const { runnerModel } = require('../../src/core/models');
+} = require('../../src/core/import-export/runnerFormats');
+const { runnerModel } = require('../../src/core/workspace/models');
 
 test('exports and imports native runner documents with schema validation', () => {
   const runner = {

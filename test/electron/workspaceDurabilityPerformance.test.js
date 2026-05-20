@@ -4,10 +4,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const test = require('node:test');
-const { runCollection } = require('../../src/core/collectionRunner');
-const { collectionModel, requestModel, walkRequests } = require('../../src/core/models');
-const { findRequest, walkCollectionRequests } = require('../../src/renderer/collectionModel');
-const { WorkspaceStore } = require('../../src/core/workspaceStore');
+const { runCollection } = require('../../src/core/runtime/collectionRunner');
+const { collectionModel, requestModel, walkRequests } = require('../../src/core/workspace/models');
+const { findRequest, walkCollectionRequests } = require('../../src/renderer/models/collectionModel');
+const { WorkspaceStore } = require('../../src/core/workspace/workspaceStore');
 
 const LARGE_WORKSPACE_BUDGETS = Object.freeze({
   workspaceSaveMillis: 2500,

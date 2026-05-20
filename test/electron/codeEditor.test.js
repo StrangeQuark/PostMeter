@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const VariableHighlighter = require('../../src/renderer/variableHighlighter');
+const VariableHighlighter = require('../../src/renderer/ui/variableHighlighter');
 const {
   codeEditorLineNumbersEnabled,
   editTextForKey,
@@ -8,7 +8,7 @@ const {
   lineNumbersForText,
   setLineNumbersEnabled,
   normalizeLanguage
-} = require('../../src/renderer/codeEditor');
+} = require('../../src/renderer/ui/codeEditor');
 
 test('code editor Tab inserts indentation instead of yielding focus', () => {
   const value = '{\n  "a"';

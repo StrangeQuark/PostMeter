@@ -13,7 +13,7 @@
         "The audited postman-sandbox bootcode exposes the bundled package specifiers and Browserify module shims recorded in this artifact."
       ],
       "postmeterEvidence": [
-        "src/core/postmanSandboxBootcodeBundle.js",
+        "src/core/sandbox/postmanSandboxBootcodeBundle.js",
         "test/electron/scriptRuntime.test.js",
         "test/electron/postmanSandboxAdversarial.test.js"
       ]

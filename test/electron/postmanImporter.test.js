@@ -2,10 +2,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { importCollectionFromContent } = require('../../src/core/collectionImportRegistry');
-const { runCollection } = require('../../src/core/collectionRunner');
-const { walkRequests } = require('../../src/core/models');
-const { exportPostmanCollection, importPostmanCollection } = require('../../src/core/postmanImporter');
+const { importCollectionFromContent } = require('../../src/core/import-export/collectionImportRegistry');
+const { runCollection } = require('../../src/core/runtime/collectionRunner');
+const { walkRequests } = require('../../src/core/workspace/models');
+const { exportPostmanCollection, importPostmanCollection } = require('../../src/core/import-export/postmanImporter');
 
 test('imports common Postman auth helpers with collection and folder inheritance', () => {
   const collection = importPostmanCollection({

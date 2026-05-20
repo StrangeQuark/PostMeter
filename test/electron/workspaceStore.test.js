@@ -3,14 +3,14 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { CURRENT_SCHEMA_VERSION, normalizeSettings } = require('../../src/core/models');
-const { moveFileNoOverwrite, temporaryJsonPath, writeTextFileAtomic } = require('../../src/core/workspacePersistence');
+const { CURRENT_SCHEMA_VERSION, normalizeSettings } = require('../../src/core/workspace/models');
+const { moveFileNoOverwrite, temporaryJsonPath, writeTextFileAtomic } = require('../../src/core/workspace/workspacePersistence');
 const {
   WorkspaceRecoveryError,
   WorkspaceStore,
   defaultWorkspacePath,
   looksLikeNativeWorkspace
-} = require('../../src/core/workspaceStore');
+} = require('../../src/core/workspace/workspaceStore');
 
 test('creates a default current-schema workspace when no file exists', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));

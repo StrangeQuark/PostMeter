@@ -7,7 +7,7 @@ const {
   liveOAuthCertificationStatus,
   runMockOAuthCertification,
   validateOAuthProviderCertificationMatrix
-} = require('../src/core/oauthProviderCertification');
+} = require('../src/core/diagnostics-release/oauthProviderCertification');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MATRIX_PATH = path.join(PROJECT_ROOT, 'docs', 'oauth-provider-certification-matrix.json');

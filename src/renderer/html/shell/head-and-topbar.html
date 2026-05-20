@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self' about: data:; child-src 'self' about: data:; connect-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; worker-src 'none'; media-src 'none';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PostMeter</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-wrap">
+      <div class="brand">PostMeter</div>
+    </div>
+    <div class="toolbar-group menu-group" aria-label="Create">
+      <button id="newMenuButton" class="primary menu-trigger" aria-haspopup="menu" aria-expanded="false">New</button>
+      <div id="newMenu" class="toolbar-menu" role="menu" aria-labelledby="newMenuButton" hidden>
+        <button id="newRequestButton" role="menuitem">Request</button>
+        <button id="newCollectionButton" role="menuitem">Collection</button>
+        <button id="newFolderButton" role="menuitem">Folder</button>
+        <button id="newEnvironmentMenuButton" role="menuitem">Environment</button>
+        <button id="newRunnerMenuButton" role="menuitem">Runner</button>
+        <button id="newPerformanceTestMenuButton" role="menuitem">Performance Test</button>
+        <button id="newWorkspaceMenuButton" role="menuitem">Workspace</button>
+      </div>
+    </div>
+    <div class="toolbar-group menu-group" aria-label="Import">
+      <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
+      <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
+        <button id="importRequestButton" role="menuitem">Request</button>
+        <button id="importCollectionButton" role="menuitem">Collection</button>
+        <button id="importEnvironmentButton" role="menuitem">Environment</button>
+        <button id="importRunnerButton" role="menuitem">Runner</button>
+        <button id="importPerformanceTestButton" role="menuitem">Performance Test</button>
+        <button id="importWorkspaceButton" role="menuitem">Workspace</button>
+      </div>
+    </div>
+    <div class="toolbar-group menu-group" aria-label="Export">
+      <button id="exportMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Export</button>
+      <div id="exportMenu" class="toolbar-menu" role="menu" aria-labelledby="exportMenuButton" hidden>
+        <div class="toolbar-submenu-row" role="none">
+          <button id="exportRequestParentButton" role="menuitem" aria-haspopup="menu">Request</button>
+          <div class="toolbar-submenu" role="menu" aria-label="Request export types">
+            <button id="exportRequestButton" role="menuitem">PostMeter</button>
+            <button id="exportRequestCurlButton" role="menuitem">curl</button>
+          </div>
+        </div>
+        <div class="toolbar-submenu-row" role="none">
+          <button id="exportCollectionParentButton" role="menuitem" aria-haspopup="menu">Collection</button>
+          <div class="toolbar-submenu" role="menu" aria-label="Collection export types">
+            <button id="exportCollectionButton" role="menuitem">PostMeter</button>
+            <button id="exportPostmanButton" role="menuitem">Postman</button>
+            <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
+            <button id="exportCurlButton" role="menuitem">curl</button>
+          </div>
+        </div>
+        <div class="toolbar-submenu-row" role="none">
+          <button id="exportEnvironmentParentButton" role="menuitem" aria-haspopup="menu">Environment</button>
+          <div class="toolbar-submenu" role="menu" aria-label="Environment export types">
+            <button id="exportEnvironmentButton" role="menuitem">PostMeter</button>
+            <button id="exportPostmanEnvironmentButton" role="menuitem">Postman</button>
+          </div>
+        </div>
+        <button id="exportRunnerDefinitionButton" role="menuitem">Runner</button>
+        <button id="exportPerformanceTestMenuButton" role="menuitem">Performance Test</button>
+        <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
+      </div>
+    </div>
+    <div class="environment-control">
+      <button id="openCookiesButton" type="button">Cookies</button>
+      <select id="environmentSelect" aria-label="Environment"></select>
+    </div>
+  </header>

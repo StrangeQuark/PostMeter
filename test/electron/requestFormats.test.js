@@ -4,7 +4,7 @@ const {
   exportRequestByFormat,
   exportRequestToJson,
   importRequestFromText
-} = require('../../src/core/requestFormats');
+} = require('../../src/core/import-export/requestFormats');
 
 test('exports and imports a single PostMeter request envelope', () => {
   const original = {

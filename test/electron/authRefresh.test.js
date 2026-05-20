@@ -8,7 +8,7 @@ const {
   normalizeAuthRefreshConfig,
   requestWithAutoRefreshAuth,
   refreshExpiresAtMillis
-} = require('../../src/core/authRefresh');
+} = require('../../src/core/http/authRefresh');
 
 test('normalizes auth refresh config and nested refresh request', () => {
   const normalized = normalizeAuthRefreshConfig({

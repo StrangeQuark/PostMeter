@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { registerSessionIpc } = require('../../electron/sessionIpc');
-const { MAX_OPEN_TABS } = require('../../src/core/sessionState');
+const { registerSessionIpc } = require('../../electron/ipc/sessionIpc');
+const { MAX_OPEN_TABS } = require('../../src/core/workspace/sessionState');
 
 test('session IPC registers stable load/save channels', async () => {
   const handlers = new Map();

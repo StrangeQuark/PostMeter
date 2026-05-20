@@ -6,7 +6,7 @@ const {
   findOAuthCallbackArg,
   OAUTH_CUSTOM_SCHEME,
   safeOAuthExternalUrl
-} = require('../../electron/oauthFlows');
+} = require('../../electron/services/oauthFlows');
 
 test('finds custom OAuth callback arguments conservatively', () => {
   assert.equal(findOAuthCallbackArg(['--flag', `${OAUTH_CUSTOM_SCHEME}://oauth/callback?state=abc`]), 'postmeter://oauth/callback?state=abc');

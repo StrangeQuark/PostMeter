@@ -53,7 +53,7 @@
       ],
       "postmeterEvidence": [
         "test/electron/grpcClient.test.js",
-        "src/core/grpcClient.js"
+        "src/core/http/grpcClient.js"
       ]
     },
     "grpc.pm.message": {
@@ -123,10 +123,10 @@
         "test/electron/httpClient.test.js",
         "test/electron/scriptedRequestLifecycle.test.js",
         "test/electron/scriptSandbox.test.js",
-        "src/core/grpcClient.js",
-        "src/core/httpClient.js",
-        "src/core/pfxCertificate.js",
-        "src/core/scriptedRequestLifecycle.js"
+        "src/core/http/grpcClient.js",
+        "src/core/http/httpClient.js",
+        "src/core/http/pfxCertificate.js",
+        "src/core/runtime/scriptedRequestLifecycle.js"
       ]
   },
   "observed": {

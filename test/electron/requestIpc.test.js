@@ -6,9 +6,9 @@ const {
   environmentModel,
   requestModel,
   workspaceModel
-} = require('../../src/core/models');
-const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
-const { registerRequestIpc } = require('../../electron/requestIpc');
+} = require('../../src/core/workspace/models');
+const { runRequestWithScripts } = require('../../src/core/runtime/requestScriptRunner');
+const { registerRequestIpc } = require('../../electron/ipc/requestIpc');
 
 test('request IPC registers stable request channels', () => {
   const handlers = new Map();

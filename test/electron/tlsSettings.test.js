@@ -7,7 +7,7 @@ const {
   normalizeTlsSettings,
   resolveHttpTlsPolicy,
   resolveTlsSettingsSecrets
-} = require('../../src/core/tlsSettings');
+} = require('../../src/core/http/tlsSettings');
 
 test('resolves managed client-certificate passphrases from the workspace vault', async () => {
   const requestedKeys = [];

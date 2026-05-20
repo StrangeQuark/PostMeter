@@ -3,9 +3,9 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { CURRENT_SCHEMA_VERSION } = require('../../src/core/models');
-const { WorkspaceManager } = require('../../src/core/workspaceManager');
-const { WorkspaceRecoveryError } = require('../../src/core/workspaceStore');
+const { CURRENT_SCHEMA_VERSION } = require('../../src/core/workspace/models');
+const { WorkspaceManager } = require('../../src/core/workspace/workspaceManager');
+const { WorkspaceRecoveryError } = require('../../src/core/workspace/workspaceStore');
 
 test('workspace manager creates and describes a default managed workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));

@@ -13,7 +13,7 @@ const {
   payloadSchemas,
   schemaEnum,
   TYPOGRAPHY_FONT_VALUES
-} = require('../../src/core/payloadSchemas');
+} = require('../../src/core/contracts/payloadSchemas');
 
 test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(PAYLOAD_SCHEMA_VERSION, 1);

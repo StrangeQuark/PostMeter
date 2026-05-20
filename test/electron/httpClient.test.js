@@ -10,7 +10,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
 const zlib = require('node:zlib');
-const { buildUrl, loadClientCertificateOptions, sendRequest, validateRequest } = require('../../src/core/httpClient');
+const { buildUrl, loadClientCertificateOptions, sendRequest, validateRequest } = require('../../src/core/http/httpClient');
 
 const execFileAsync = promisify(execFile);
 

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createVaultPromptQueue } = require('../../src/renderer/vaultPromptQueue');
+const { createVaultPromptQueue } = require('../../src/renderer/ui/vaultPromptQueue');
 
 test('renderer vault prompt queue serializes concurrent prompt requests', async () => {
   const started = [];

@@ -5,7 +5,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { CURRENT_SCHEMA_VERSION } = require('../../src/core/models');
+const { CURRENT_SCHEMA_VERSION } = require('../../src/core/workspace/models');
 const { cliShouldRequireNodePermission, cliTlsSettings, loadCollectionInput, parseArgs } = require('../../scripts/postmeter-cli');
 
 test('requires Node permission flags for CLI script workers on supported Node baselines', () => {

@@ -1,0 +1,48 @@
+      <section id="environmentMainPanel" class="panel environment-main-panel" role="tabpanel" hidden>
+        <div class="environment-main-header">
+          <div>
+            <div id="environmentMainTitle" class="environment-main-title editable-title" tabindex="0" aria-label="Environment name">Select an environment</div>
+          </div>
+          <div class="environment-actions">
+            <button id="addVariableButton" type="button">Add Variable</button>
+            <button id="setEnvironmentButton" type="button">Set Environment</button>
+            <button id="saveEnvironmentButton" type="button">Save Environment</button>
+            <button id="deleteEnvironmentButton" class="danger-button" type="button">Delete Environment</button>
+          </div>
+        </div>
+        <div id="environmentTable" class="kv-table environment-table"></div>
+      </section>
+
+      <section id="environmentEmptyPanel" class="panel request-empty-panel environment-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon environment-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Create a new environment</h2>
+          <button id="emptyCreateEnvironmentButton" type="button" class="primary">New Environment</button>
+        </div>
+      </section>
+
+      <section id="workspaceMainPanel" class="panel workspace-main-panel" role="tabpanel" hidden>
+        <div class="workspace-main-header">
+          <div>
+            <div id="workspaceMainTitle" class="workspace-main-title editable-title" tabindex="0" aria-label="Workspace name">Local Workspace</div>
+          </div>
+          <div class="workspace-actions">
+            <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
+            <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
+            <button id="deleteWorkspacePanelButton" class="danger-button" type="button">Delete Workspace</button>
+          </div>
+        </div>
+        <div id="workspaceSummary" class="workspace-summary workspace-main-summary"></div>
+      </section>
+
+      <section id="workspaceEmptyPanel" class="panel request-empty-panel workspace-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon workspace-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Select a workspace</h2>
+        </div>
+      </section>
+

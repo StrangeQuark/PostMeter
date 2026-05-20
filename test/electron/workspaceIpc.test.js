@@ -8,17 +8,17 @@ const {
   selectedOpenFilePath,
   selectedSaveFilePath,
   validateDialogFilePath
-} = require('../../electron/fileDialogs');
-const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
-const { normalizeSettings, normalizeWorkspaceLocalSettings } = require('../../src/core/models');
+} = require('../../electron/app-shell/fileDialogs');
+const { registerWorkspaceIpc } = require('../../electron/ipc/workspaceIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
+const { normalizeSettings, normalizeWorkspaceLocalSettings } = require('../../src/core/workspace/models');
 
 test('file dialog helpers validate selected paths before IPC file operations', () => {
   assert.deepEqual(collectionImportFilters(), [
     { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'sh'] },
     { name: 'All Files', extensions: ['*'] }
   ]);
-  assert.deepEqual(require('../../electron/fileDialogs').requestImportFilters(), [
+  assert.deepEqual(require('../../electron/app-shell/fileDialogs').requestImportFilters(), [
     { name: 'Requests', extensions: ['json', 'sh', 'txt'] },
     { name: 'All Files', extensions: ['*'] }
   ]);

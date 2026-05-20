@@ -90,7 +90,7 @@ When `POSTMETER_DATA_PATH` is set, PostMeter uses that file as the startup works
 
 Request, workspace, collection, environment, runner, and performance exports can include auth fields, variables, cookies, file references, scripts, and certificate passphrases. Review exports before sharing them.
 
-Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOOTING.md) and [Release Readiness](docs/RELEASE_READINESS.md) for the detailed privacy and validation model.
+Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOOTING.md) and [Security](docs/SECURITY.md) for the detailed privacy and validation model.
 
 ## Documentation
 
@@ -99,9 +99,7 @@ Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOO
 | [docs/TECH_SPECS.md](docs/TECH_SPECS.md) | Full product and implementation reference. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Import/export, scripting, auth, and compatibility boundaries. |
-| [TUTORIALS.md](TUTORIALS.md) | Internal implementation notes for the in-app Tutorials system. |
 | [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Request-script sandbox behavior and security contract. |
-| [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Release gates, validation policy, and readiness status. |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security boundaries and vulnerability reporting. |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | OAuth setup, diagnostics, vault prompts, and recovery notes. |
 | [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) | OAuth provider certification workflow. |
@@ -111,4 +109,4 @@ Generated validation matrices live in `docs/*.json`, including Postman parity, d
 
 ## Notes
 
-Release builds are currently unsigned. See [Release Readiness](docs/RELEASE_READINESS.md) for the current release validation state.
+Release builds are currently unsigned. Run `npm run check` before publishing release artifacts.

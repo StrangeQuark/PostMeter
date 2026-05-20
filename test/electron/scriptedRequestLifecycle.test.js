@@ -4,8 +4,8 @@ const {
   createScriptedRequestState,
   emptyScriptResult,
   runScriptedRequestLifecycle
-} = require('../../src/core/scriptedRequestLifecycle');
-const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
+} = require('../../src/core/runtime/scriptedRequestLifecycle');
+const { runRequestWithScripts } = require('../../src/core/runtime/requestScriptRunner');
 
 test('runs the shared scripted request lifecycle and applies script mutations across both phases', async () => {
   const environment = {

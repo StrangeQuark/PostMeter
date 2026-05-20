@@ -11,7 +11,7 @@ const {
   clearSavedFolderTabDirtyState,
   clearSavedRequestDirtyState,
   createRendererState
-} = require('../../src/renderer/rendererState');
+} = require('../../src/renderer/app/rendererState');
 
 test('renderer state builds active tab keys from the current ids', () => {
   const state = createRendererState();

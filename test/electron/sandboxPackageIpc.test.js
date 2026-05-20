@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { registerSandboxPackageIpc } = require('../../electron/sandboxPackageIpc');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
+const { registerSandboxPackageIpc } = require('../../electron/ipc/sandboxPackageIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
 
 test('sandbox package IPC registers parent-side package fetch channel', async () => {
   const handlers = new Map();
