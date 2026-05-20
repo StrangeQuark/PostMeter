@@ -48,7 +48,9 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.scripts.tests.limit, 'body');
   assert.equal(payloadSchemas.fields.scriptRunResult.error.limit, 'value');
   assert.equal(payloadSchemas.fields.scriptTestResult.name.limit, 'name');
+  assert.equal(payloadSchemas.fields.updateCheckOptions.automaticUpdatesEnabled.type, 'boolean');
   assert.equal(payloadSchemas.fields.updateCheckOptions.includePrereleases.type, 'boolean');
+  assert.equal(payloadSchemas.fields.updateCheckOptions.startupRemindersEnabled.type, 'boolean');
   assert.equal(payloadSchemas.fields.modalSettings.closeOnBackdropClick.type, 'boolean');
   assert.equal(payloadSchemas.fields.runnerConfig.stopOnFailure.type, 'boolean');
   assert.equal(payloadSchemas.fields.runner.allowEnvironmentMutation.type, 'boolean');

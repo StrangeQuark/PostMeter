@@ -1,5 +1,6 @@
 const { checkForUpdates } = require('../src/core/updateChecker');
 const {
+  assertAutoUpdateStatusPayload,
   assertExternalUrlPayload,
   assertUpdateCheckOptionsPayload
 } = require('../src/core/ipcValidation');
@@ -9,6 +10,7 @@ function registerAppIpc(options = {}) {
     app,
     checkForUpdates: checkForUpdatesImpl = checkForUpdates,
     clipboard,
+    getAutoUpdateService = () => null,
     ipcMain,
     recordDiagnosticEvent = async () => {},
     shell
@@ -22,6 +24,7 @@ function registerAppIpc(options = {}) {
       chrome: process.versions.chrome,
       node: process.versions.node,
       platform: process.platform,
+      packaged: app.isPackaged === true,
       releaseChannel: releaseChannelForVersion(appVersion)
     };
   });
@@ -57,6 +60,27 @@ function registerAppIpc(options = {}) {
       });
       throw error;
     }
+  });
+
+  ipcMain.handle('app:auto-update-status', () => {
+    const status = getAutoUpdateService()?.status?.() || {
+      status: 'unsupported',
+      automaticUpdatesEnabled: false,
+      includePrereleases: false,
+      reason: 'Automatic update service is unavailable.'
+    };
+    assertAutoUpdateStatusPayload(status);
+    return status;
+  });
+
+  ipcMain.handle('app:install-update', async () => {
+    const service = getAutoUpdateService();
+    if (!service || typeof service.installUpdate !== 'function') {
+      throw new Error('Automatic update installation is unavailable.');
+    }
+    const status = await service.installUpdate();
+    assertAutoUpdateStatusPayload(status);
+    return status;
   });
 
   ipcMain.handle('app:open-external', async (_event, url) => {

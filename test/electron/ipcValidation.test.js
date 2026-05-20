@@ -4,6 +4,7 @@ const {
   assertCollectionPayload,
   assertCollectionExportFormat,
   assertCollectionRunResultPayload,
+  assertAutoUpdateStatusPayload,
   assertExternalUrlPayload,
   assertExportFormat,
   assertHtmlReportOptionsPayload,
@@ -144,7 +145,7 @@ test('accepts structurally valid IPC payloads', () => {
           }
         }
       },
-      updates: { includePrereleases: true },
+      updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false },
       modals: { closeOnBackdropClick: true }
     },
     collections: [],
@@ -389,7 +390,7 @@ test('accepts structurally valid IPC payloads', () => {
     folderPath: [{ id: 'f1', name: 'Folder' }],
     collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
     cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/' }],
-    settings: { updates: { includePrereleases: true } }
+    settings: { updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false } }
   }));
   assert.doesNotThrow(() => assertWorkspaceRequestSavePayload({
     runnerId: 'runner-1',
@@ -416,7 +417,7 @@ test('accepts structurally valid IPC payloads', () => {
       stopOnFailure: false,
       allowEnvironmentMutation: true
     },
-    settings: { updates: { includePrereleases: true } }
+    settings: { updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false } }
   }));
   assert.doesNotThrow(() => assertWorkspaceRequestSavePayload({
     authRefreshOwnerType: 'performance',
@@ -487,7 +488,7 @@ test('accepts structurally valid IPC payloads', () => {
         }
       }
     },
-    settings: { updates: { includePrereleases: true } }
+    settings: { updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false } }
   }));
   assert.doesNotThrow(() => assertWorkspaceRequestSaveResultPayload({
     request: {
@@ -519,7 +520,7 @@ test('accepts structurally valid IPC payloads', () => {
       requests: [],
       folders: []
     },
-    settings: { updates: { includePrereleases: true } }
+    settings: { updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false } }
   }));
   assert.doesNotThrow(() => assertWorkspaceCollectionSaveResultPayload({
     collection: {
@@ -555,7 +556,7 @@ test('accepts structurally valid IPC payloads', () => {
       certificates: []
     },
     folderPath: [{ id: 'f1', name: 'Folder' }],
-    settings: { updates: { includePrereleases: true } }
+    settings: { updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false } }
   }));
   assert.doesNotThrow(() => assertWorkspaceFolderSaveResultPayload({
     folder: {
@@ -609,7 +610,7 @@ test('accepts structurally valid IPC payloads', () => {
     environmentId: 'e1',
     createdUnsaved: true,
     environment: { id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] },
-    settings: { updates: { includePrereleases: true } }
+    settings: { updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false } }
   }));
   assert.doesNotThrow(() => assertWorkspaceEnvironmentSaveResultPayload({
     environment: { id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] }
@@ -636,7 +637,7 @@ test('accepts structurally valid IPC payloads', () => {
     },
     tabs: { saveOnForceClose: true },
     modals: { closeOnBackdropClick: true },
-    updates: { includePrereleases: true },
+    updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false },
     shortcuts: {
       'new-request': 'CmdOrCtrl+1',
       'zoom-in': 'CmdOrCtrl+Plus',
@@ -646,7 +647,7 @@ test('accepts structurally valid IPC payloads', () => {
   assert.doesNotThrow(() => assertWorkspaceSettingsSaveResultPayload({
     settings: {
       appearance: { theme: 'dark' },
-      updates: { includePrereleases: true }
+      updates: { automaticUpdatesEnabled: true, includePrereleases: true, startupRemindersEnabled: false }
     }
   }));
   assert.doesNotThrow(() => assertFileOperationResultPayload({
@@ -738,7 +739,24 @@ test('accepts structurally valid IPC payloads', () => {
     includeRequestResults: false,
     includeRequestDetails: false
   }));
-  assert.doesNotThrow(() => assertUpdateCheckOptionsPayload({ includePrereleases: true }));
+  assert.doesNotThrow(() => assertUpdateCheckOptionsPayload({
+    automaticUpdatesEnabled: true,
+    includePrereleases: true,
+    startupRemindersEnabled: false
+  }));
+  assert.doesNotThrow(() => assertAutoUpdateStatusPayload({
+    status: 'downloading',
+    automaticUpdatesEnabled: true,
+    includePrereleases: true,
+    version: '9.9.9',
+    releaseName: 'PostMeter 9.9.9',
+    releaseDate: '2026-05-20T00:00:00.000Z',
+    source: 'scheduled',
+    percent: 42,
+    transferred: 420,
+    total: 1000,
+    bytesPerSecond: 128
+  }));
   assert.doesNotThrow(() => assertExternalUrlPayload('https://github.com/StrangeQuark/PostMeter/releases'));
 });
 
@@ -765,6 +783,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
   assert.throws(() => assertWorkspacePayload({ collections: [], runners: {}, environments: [], history: [] }), /workspace.runners must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
+  assert.throws(() => assertWorkspacePayload({ settings: { updates: { automaticUpdatesEnabled: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.automaticUpdatesEnabled must be a boolean/);
+  assert.throws(() => assertWorkspacePayload({ settings: { updates: { startupRemindersEnabled: 'no' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.startupRemindersEnabled must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { editor: { lineNumbers: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.editor.lineNumbers must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ editor: { variableTooltipHints: 'yes' } }), /settings.editor.variableTooltipHints must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
@@ -789,6 +809,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ priority: 'Urgent' }], history: [] }), /workspace.cookies\[0\].priority must be one of/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ extensions: [42] }], history: [] }), /workspace.cookies\[0\].extensions\[0\] must be a string/);
   assert.throws(() => assertUpdateCheckOptionsPayload({ includePrereleases: 'yes' }), /options.includePrereleases must be a boolean/);
+  assert.throws(() => assertUpdateCheckOptionsPayload({ automaticUpdatesEnabled: 'yes' }), /options.automaticUpdatesEnabled must be a boolean/);
+  assert.throws(() => assertAutoUpdateStatusPayload({ status: 'restarting' }), /status.status is not supported/);
+  assert.throws(() => assertAutoUpdateStatusPayload({ status: 'failed', error: 42 }), /status.error must be a string/);
   assert.throws(() => assertExternalUrlPayload(42), /external.url must be a string/);
   assert.throws(() => assertRunnerConfigPayload({ stopOnFailure: 'yes' }), /config.stopOnFailure must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', environmentId: 'none', allowEnvironmentMutation: 'yes', requests: [] }), /runner.allowEnvironmentMutation must be a boolean/);

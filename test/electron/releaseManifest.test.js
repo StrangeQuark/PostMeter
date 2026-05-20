@@ -14,6 +14,7 @@ const {
   macInfoPlistPathFromListing,
   releaseValidationCommandTimeoutMillis,
   runCommand: runValidatedReleaseCommand,
+  sha512FileBase64,
   validateMacZipProtocol,
   validatePackageMetadata,
   validateReleaseManifest
@@ -145,6 +146,7 @@ test('validates release artifact manifest entries against files and package prot
       productName: 'PostMeter',
       icon: 'build/icon.png',
       protocols: [{ schemes: ['postmeter'] }],
+      publish: [{ provider: 'github', owner: 'StrangeQuark', repo: 'PostMeter', releaseType: 'release' }],
       directories: { output: 'release' },
       linux: {
         maintainer: 'StrangeQuark <support@qrksw.com>',
@@ -175,6 +177,7 @@ test('validates release artifact manifest entries against files and package prot
     }]
   }));
   await fs.writeFile(checksumPath, `${hash}  PostMeter-9.9.9.dmg\n`);
+  await writeUpdaterMetadata(tempDir, 'latest-mac.yml', 'PostMeter-9.9.9.dmg', '9.9.9');
 
   await assert.doesNotReject(() => validatePackageMetadata(packageJsonPath));
   await assert.doesNotReject(() => validateReleaseManifest({
@@ -188,8 +191,77 @@ test('validates release artifact manifest entries against files and package prot
   await assert.rejects(() => validateReleaseManifest({
     releaseDir: tempDir,
     manifestFile: manifestPath,
-    requiredTypes: new Set(['deb'])
+    requiredTypes: new Set(['zip'])
   }), /Missing required release artifact type/);
+});
+
+test('release validation requires and verifies electron-updater metadata for required platforms', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-updater-metadata-'));
+  try {
+    const artifactPath = path.join(tempDir, 'PostMeter Setup 9.9.9.exe');
+    await fs.writeFile(artifactPath, 'installer');
+    const artifactBytes = await fs.readFile(artifactPath);
+    const hash = crypto.createHash('sha256').update(artifactBytes).digest('hex');
+    const stat = await fs.stat(artifactPath);
+    const manifestPath = path.join(tempDir, 'release-manifest.json');
+    const checksumPath = path.join(tempDir, 'SHA256SUMS');
+    await fs.writeFile(manifestPath, JSON.stringify({
+      schemaVersion: 1,
+      productName: 'PostMeter',
+      appId: 'com.strangequark.postmeter',
+      version: '9.9.9',
+      artifacts: [{
+        file: 'PostMeter Setup 9.9.9.exe',
+        sizeBytes: stat.size,
+        sha256: hash,
+        platform: 'windows',
+        type: 'exe'
+      }]
+    }));
+    await fs.writeFile(checksumPath, `${hash}  PostMeter Setup 9.9.9.exe\n`);
+
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      requiredTypes: new Set(['exe']),
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /Missing electron-updater metadata file: latest\.yml/);
+
+    await writeUpdaterMetadata(tempDir, 'latest.yml', 'PostMeter Setup 9.9.9.exe', '9.9.9');
+    await assert.doesNotReject(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      requiredTypes: new Set(['exe']),
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }));
+
+    await fs.writeFile(path.join(tempDir, 'latest.yml'), [
+      'version: 9.9.9',
+      'files:',
+      '  - url: PostMeter Setup 9.9.9.exe',
+      '    sha512: stale',
+      'path: PostMeter Setup 9.9.9.exe',
+      'sha512: stale',
+      ''
+    ].join('\n'));
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      requiredTypes: new Set(['exe']),
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /latest\.yml SHA-512/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('release manifest validation rejects stale checksums and unmanifested top-level artifacts', async () => {
@@ -469,6 +541,19 @@ function runCommand(command, args, options = {}) {
     child.on('error', (error) => resolve({ code: 1, stdout, stderr: error.message || String(error) }));
     child.on('exit', (code) => resolve({ code, stdout, stderr }));
   });
+}
+
+async function writeUpdaterMetadata(releaseDir, fileName, artifactFile, version) {
+  const sha512 = await sha512FileBase64(path.join(releaseDir, artifactFile));
+  await fs.writeFile(path.join(releaseDir, fileName), [
+    `version: ${version}`,
+    'files:',
+    `  - url: ${artifactFile}`,
+    `    sha512: "${sha512}"`,
+    `path: ${artifactFile}`,
+    `sha512: "${sha512}"`,
+    ''
+  ].join('\n'));
 }
 
 async function commandExists(command) {

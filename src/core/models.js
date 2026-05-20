@@ -574,7 +574,9 @@ function normalizeSettings(settings) {
       closeOnBackdropClick: settings?.modals?.closeOnBackdropClick === true
     },
     updates: {
-      includePrereleases: settings?.updates?.includePrereleases === true
+      automaticUpdatesEnabled: settings?.updates?.automaticUpdatesEnabled === true,
+      includePrereleases: settings?.updates?.includePrereleases === true,
+      startupRemindersEnabled: settings?.updates?.startupRemindersEnabled !== false
     },
     shortcuts: normalizeKeyboardShortcuts(settings?.shortcuts),
     request: normalizeTlsRequestSettings(settings?.request)

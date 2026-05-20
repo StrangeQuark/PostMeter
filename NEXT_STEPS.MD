@@ -95,20 +95,13 @@ These are production-readiness items that cannot be fully proven by local Linux 
   - Manual stress validation: run owned endpoint tests at 100k, 200k, 500k, and 1m requests with concurrency near the new cap; watch CPU, RSS, disk growth, result-store size, progress cadence, cancellation responsiveness, and export correctness. Preserve logs/evidence for regressions.
   - Documentation updates needed: README feature summary, architecture docs, tech specs, compatibility notes, release-readiness matrix, and user-facing Performance docs/tooltips explaining local load limits, HTTPS support, worker fallback behavior, capture settings, result storage, and CSV export.
 - Format large integer inputs with comma separators in Runner and Performance panes. Native `type="number"` inputs do not display `1,000,000`, so this likely needs comma-aware text inputs plus shared parse/clamp helpers that preserve the existing 1m request caps and cross-field max-request validation.
-- True auto-download/auto-install updates beyond opening GitHub Releases.
 - Direct first-party Postman account/provider integration for fetching team Package Library `@team/package` sources remains deferred. The current reviewed HTTPS source-URL workflow stays the supported path until a future provider-specific auth/import contract is approved.
 - User-imported custom fonts for Settings > Appearance remain deferred. If revisited later, support importing and deleting local `.ttf`, `.otf`, `.woff`, and `.woff2` fonts from an app-controlled local font store, expose them in both Interface Text and Editor Text selectors, reset affected selections when a custom font is deleted, avoid storing raw local paths in exported workspace files, and add E2E coverage for import, selection, deletion, persistence, invalid files, and privacy behavior.
 
 ## Risks / Gaps Blocking Production Readiness
 
-- Native Windows/macOS packaged OS-sandbox assertions are wired into CI/release evidence paths. gRPC PFX/P12 client-certificate extraction, Postman-style per-request vault prompts, and checked-in `newman@6.2.2` JSON evidence reports are implemented locally and covered by focused validation.
-- Live OAuth provider tooling is implemented and mocked certification passes locally, but live Google, Microsoft Entra ID / Azure AD, and GitHub tenant evidence is not captured yet.
-- Automated Electron UI coverage is broader and includes screenshot, mocked OAuth, and XML/HTML formatting smokes, but it is still Linux/headless focused and not broad cross-platform UI automation.
-- Custom URI-scheme OAuth redirects are implemented and mocked; Linux deb/AppImage desktop-entry registration, macOS zip app-bundle metadata, Windows/macOS protocol validators, and native-runner validation jobs are wired. The remaining requirement is executing and monitoring those GitHub Actions jobs for release evidence.
 - IPC validation uses shared schema metadata for common fields, update/external payloads, file-operation results, OAuth progress, runner config/progress, and result payloads, but some complex validators are still partly handwritten rather than fully generated.
 - Signing/notarization remains incomplete; unsigned GitHub Release artifact publishing is configured.
-- In-app update checks can open GitHub Releases, but PostMeter does not yet auto-download or auto-install updates.
-- The legacy Load Test implementation is removed; the eight-type local V1 Performance model is implemented with scoped Full Endpoint Diagnosis profiles and should continue receiving result-presentation and real-world workload hardening.
 
 ## Next Iteration Starting Point
 

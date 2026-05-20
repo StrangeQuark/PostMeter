@@ -2868,6 +2868,14 @@
             <h3>Updates</h3>
             <div class="settings-card">
               <label class="checkbox-line">
+                <input id="automaticUpdatesInput" type="checkbox">
+                <span>Automatically download and install updates</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="startupUpdateRemindersInput" type="checkbox">
+                <span>Show startup reminders when updates are available</span>
+              </label>
+              <label class="checkbox-line">
                 <input id="includePrereleasesInput" type="checkbox">
                 <span>Include prereleases when checking for updates</span>
               </label>
@@ -3345,6 +3353,16 @@
       <div class="modal-actions">
         <button id="cancelConfirmActionButton" type="button">Cancel</button>
         <button id="confirmActionButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <section id="updateReminderModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="updateReminderModalTitle" aria-describedby="updateReminderModalMessage" hidden>
+      <h2 id="updateReminderModalTitle">Update available</h2>
+      <p id="updateReminderModalMessage">A new PostMeter release is available.</p>
+      <div class="modal-actions">
+        <button id="stopUpdateReminderButton" type="button">Stop reminder</button>
+        <button id="cancelUpdateReminderButton" type="button">Cancel</button>
+        <button id="updateNowButton" type="button" class="primary">Update now</button>
       </div>
     </section>
 

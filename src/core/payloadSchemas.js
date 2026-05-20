@@ -297,7 +297,9 @@ const FIELD_SCHEMAS = {
     interactive: { type: 'boolean', optional: true }
   },
   updateCheckOptions: {
-    includePrereleases: { type: 'boolean', optional: true }
+    automaticUpdatesEnabled: { type: 'boolean', optional: true },
+    includePrereleases: { type: 'boolean', optional: true },
+    startupRemindersEnabled: { type: 'boolean', optional: true }
   },
   runnerConfig: {
     allowEnvironmentMutation: { type: 'boolean', optional: true },

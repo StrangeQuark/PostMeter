@@ -7,8 +7,15 @@ const postmeterApi = {
   app: {
     versions: () => ipcRenderer.invoke('app:versions'),
     checkForUpdates: (options) => ipcRenderer.invoke('app:check-updates', options),
+    autoUpdateStatus: () => ipcRenderer.invoke('app:auto-update-status'),
+    installUpdate: () => ipcRenderer.invoke('app:install-update'),
     openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
     setMenuShortcutsIgnored: (ignored) => ipcRenderer.invoke('app:set-menu-shortcuts-ignored', ignored === true),
+    onAutoUpdateStatus: (callback) => {
+      const listener = (_event, payload) => callback(safeAutoUpdateStatusPayload(payload));
+      ipcRenderer.on('updates:status', listener);
+      return () => ipcRenderer.removeListener('updates:status', listener);
+    },
     onMenuAction: (callback) => {
       const allowedStringActions = new Set([
         'new-workspace',
@@ -213,6 +220,42 @@ function safeVaultPromptDecision(decision = {}) {
 
 function stringField(value, maxLength) {
   return String(value == null ? '' : value).slice(0, maxLength);
+}
+
+function safeAutoUpdateStatusPayload(payload = {}) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const status = [
+    'available',
+    'checking',
+    'downloaded',
+    'downloading',
+    'failed',
+    'idle',
+    'installing',
+    'not-available',
+    'skipped',
+    'unsupported'
+  ].includes(source.status) ? source.status : 'failed';
+  return {
+    status,
+    automaticUpdatesEnabled: source.automaticUpdatesEnabled === true,
+    includePrereleases: source.includePrereleases === true,
+    version: stringField(source.version, 64),
+    releaseName: stringField(source.releaseName, 256),
+    releaseDate: stringField(source.releaseDate, 256),
+    source: stringField(source.source, 64),
+    reason: stringField(source.reason, 32768),
+    error: stringField(source.error, 32768),
+    percent: finiteNumber(source.percent),
+    transferred: finiteNumber(source.transferred),
+    total: finiteNumber(source.total),
+    bytesPerSecond: finiteNumber(source.bytesPerSecond)
+  };
+}
+
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
 }
 
 function optionalFilePath(value) {

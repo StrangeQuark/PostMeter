@@ -80,6 +80,7 @@ function registerWorkspaceIpc(options = {}) {
     queueWorkspaceOperation = async (operation) => operation(),
     recordDiagnosticEvent = async () => {},
     refreshApplicationMenu,
+    onSettingsSaved = () => {},
     renameLocalSettings = async () => {},
     renameVaultStore = async () => {},
     deleteLocalSettings = async () => {},
@@ -188,6 +189,7 @@ function registerWorkspaceIpc(options = {}) {
       return nextWorkspace;
     });
     refreshApplicationMenu();
+    onSettingsSaved(workspace.settings || {});
     const result = { settings: workspace.settings || {} };
     assertWorkspaceSettingsSaveResultPayload(result);
     return result;

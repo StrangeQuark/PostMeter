@@ -55,6 +55,8 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /Upload native package artifacts/);
   assert.match(workflow, /release\/\*\.AppImage/);
   assert.match(workflow, /release\/\*\.deb/);
+  assert.match(workflow, /release\/latest\*\.yml/);
+  assert.match(workflow, /release\/\*\.blockmap/);
   assert.doesNotMatch(workflow, /release\/\*\.msi/);
   assert.doesNotMatch(workflow, /release\/\*\.rpm/);
   assert.match(workflow, /if-no-files-found:\s*error/);
@@ -128,6 +130,8 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /release\/\*\.dmg/);
   assert.match(workflow, /release\/\*\.zip/);
   assert.match(workflow, /release\/\*\.exe/);
+  assert.match(workflow, /release\/latest\*\.yml/);
+  assert.match(workflow, /release\/\*\.blockmap/);
   assert.doesNotMatch(workflow, /release\/\*\.msi/);
   assert.doesNotMatch(workflow, /release\/\*\.rpm/);
   assert.match(workflow, /if-no-files-found:\s*error/);
@@ -191,6 +195,8 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /Source UI smoke suite/);
   assert.match(workflow, /Protocol registration validation/);
   assertNoPlatformSpecificSkippedSteps(workflowDocument, 'release-validation.yml');
+  assert.match(workflow, /release\/latest\*\.yml/);
+  assert.match(workflow, /release\/\*\.blockmap/);
   assert.doesNotMatch(workflow, /release\/\*\.msi/);
   assert.doesNotMatch(workflow, /release\/\*\.rpm/);
   assert.doesNotMatch(workflow, /gh release create/);

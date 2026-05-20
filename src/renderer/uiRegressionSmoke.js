@@ -30,6 +30,8 @@
     setStatus('Regression status tracked.');
     assertStatusIncludes('Regression status tracked', 'setStatus should update the internal app status.');
     assertUiSmoke(!$('checkUpdatesButton'), 'Updates toolbar button should be handled by the Help menu.');
+    assertUiSmoke($('automaticUpdatesInput'), 'Automatic updates setting should be available in Settings.');
+    assertUiSmoke($('startupUpdateRemindersInput'), 'Startup update reminder setting should be available in Settings.');
     assertUiSmoke($('includePrereleasesInput'), 'Prereleases setting should be available in Settings.');
     assertUiSmoke($('closeModalsOnBackdropClickInput'), 'Modal backdrop-close setting should be available in Settings.');
     await assertUpdateCheckSmoke();
@@ -1392,6 +1394,28 @@
     );
   }
 
+  async function setAutomaticUpdatesFromSettingsPanel(enabled) {
+    await setSettingCheckboxFromSettingsPanel(
+      'updates',
+      'automaticUpdatesInput',
+      enabled === true,
+      `Automatic updates ${enabled ? 'enabled' : 'disabled'}.`,
+      () => workspace.settings.updates.automaticUpdatesEnabled === (enabled === true),
+      `Settings Updates panel should ${enabled ? 'enable' : 'disable'} automatic updates.`
+    );
+  }
+
+  async function setStartupUpdateRemindersFromSettingsPanel(enabled) {
+    await setSettingCheckboxFromSettingsPanel(
+      'updates',
+      'startupUpdateRemindersInput',
+      enabled === true,
+      `Startup update reminders ${enabled ? 'enabled' : 'disabled'}.`,
+      () => workspace.settings.updates.startupRemindersEnabled === (enabled === true),
+      `Settings Updates panel should ${enabled ? 'enable' : 'disable'} startup update reminders.`
+    );
+  }
+
   async function setVariableTooltipHintsFromSettingsPanel(enabled) {
     await setSettingCheckboxFromSettingsPanel(
       'appearance',
@@ -2021,6 +2045,16 @@
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
       assertStatusIncludes('Prerelease setting save failed', 'Failed prerelease setting save should surface a user-visible status.');
 
+      workspace.settings.updates.automaticUpdatesEnabled = false;
+      await setAutomaticUpdatesEnabled(true, { save: true });
+      assertUiSmoke(workspace.settings.updates.automaticUpdatesEnabled === false, 'Failed automatic update setting save should roll back the in-memory setting.');
+      assertStatusIncludes('Automatic update setting save failed', 'Failed automatic update setting save should surface a user-visible status.');
+
+      workspace.settings.updates.startupRemindersEnabled = true;
+      await setStartupUpdateRemindersEnabled(false, { save: true });
+      assertUiSmoke(workspace.settings.updates.startupRemindersEnabled === true, 'Failed startup update reminder setting save should roll back the in-memory setting.');
+      assertStatusIncludes('Update reminder setting save failed', 'Failed startup reminder setting save should surface a user-visible status.');
+
       workspace.settings.editor.variableTooltipHints = true;
       await setVariableTooltipHints(false, { save: true });
       assertUiSmoke(workspace.settings.editor.variableTooltipHints === true, 'Failed variable tooltip setting save should roll back the in-memory setting.');
@@ -2068,8 +2102,14 @@
   async function assertUpdateCheckSmoke() {
     const originalCheck = window.__postmeterUpdateCheck;
     const originalOpen = window.__postmeterOpenExternal;
+    const originalUpdates = structuredClone(workspace.settings.updates || {});
     let checkOptions = null;
     try {
+      await setAutomaticUpdatesFromSettingsPanel(true);
+      await setAutomaticUpdatesFromSettingsPanel(false);
+      await setStartupUpdateRemindersFromSettingsPanel(false);
+      await setStartupUpdateRemindersFromSettingsPanel(true);
+
       window.__postmeterUpdateCheck = async (options) => {
         checkOptions = options;
         return {
@@ -2114,10 +2154,73 @@
       await checkForUpdates();
       assertUiSmoke(lastUserNotification?.title === 'Update Check Failed', 'Failed update check did not show a popup notification.');
       assertUiSmoke(lastUserNotification?.message.includes('network down'), 'Failed update check popup did not include the error message.');
+
+      await assertStartupUpdateReminderSmoke();
     } finally {
       window.__postmeterUpdateCheck = originalCheck;
       window.__postmeterOpenExternal = originalOpen;
+      workspace.settings.updates = originalUpdates;
+      renderSettingsControls();
     }
+  }
+
+  async function assertStartupUpdateReminderSmoke() {
+    let checkCount = 0;
+    let openedUrl = '';
+    let checkOptions = null;
+    workspace.settings.updates = {
+      automaticUpdatesEnabled: false,
+      includePrereleases: true,
+      startupRemindersEnabled: true
+    };
+    renderSettingsControls();
+    window.__postmeterUpdateCheck = async (options) => {
+      checkCount += 1;
+      checkOptions = options;
+      return {
+        currentVersion: '0.2.0',
+        latestVersion: '0.3.0',
+        updateAvailable: true,
+        releaseUrl: 'https://github.com/StrangeQuark/PostMeter/releases/tag/v0.3.0'
+      };
+    };
+    window.__postmeterOpenExternal = async (url) => {
+      openedUrl = url;
+      return true;
+    };
+
+    let reminderPromise = checkForStartupUpdateReminder();
+    await waitForUiSmoke(() => !$('updateReminderModal').hidden, 'Startup update reminder should open when an update is available.', 3000, global);
+    assertUiSmoke($('updateReminderModalTitle').textContent.includes('0.3.0'), 'Startup update reminder should show the available version.');
+    $('updateNowButton').click();
+    await reminderPromise;
+    assertUiSmoke(checkOptions?.includePrereleases === true, 'Startup update reminder check should honor prerelease opt-in.');
+    assertUiSmoke(openedUrl.endsWith('/v0.3.0'), 'Update now should open the release URL.');
+
+    openedUrl = '';
+    reminderPromise = checkForStartupUpdateReminder();
+    await waitForUiSmoke(() => !$('updateReminderModal').hidden, 'Startup update reminder should support cancel.', 3000, global);
+    $('cancelUpdateReminderButton').click();
+    await reminderPromise;
+    assertUiSmoke(openedUrl === '', 'Cancel should not open the release URL.');
+    assertUiSmoke(workspace.settings.updates.startupRemindersEnabled === true, 'Cancel should keep startup update reminders enabled.');
+
+    reminderPromise = checkForStartupUpdateReminder();
+    await waitForUiSmoke(() => !$('updateReminderModal').hidden, 'Startup update reminder should support stopping future reminders.', 3000, global);
+    $('stopUpdateReminderButton').click();
+    await reminderPromise;
+    assertUiSmoke(workspace.settings.updates.startupRemindersEnabled === false, 'Stop reminder should disable startup update reminders.');
+    assertUiSmoke($('startupUpdateRemindersInput').checked === false, 'Stop reminder should sync the Settings checkbox.');
+
+    checkCount = 0;
+    workspace.settings.updates = {
+      automaticUpdatesEnabled: true,
+      includePrereleases: false,
+      startupRemindersEnabled: true
+    };
+    renderSettingsControls();
+    await checkForStartupUpdateReminder();
+    assertUiSmoke(checkCount === 0, 'Startup update reminder should skip checks when automatic updates are enabled.');
   }
 
   async function assertWorkspaceManagementSmoke() {
