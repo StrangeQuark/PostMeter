@@ -624,6 +624,7 @@ function focusInitialModalElement(modalId) {
     requestExportModal: 'copyRequestExportButton',
     clientCertificateModal: 'clientCertificateNameInput',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
+    workspaceEncryptionModal: 'workspaceEncryptionKeyInput',
     csvVariablesModal: 'csvVariablesSchemaInput',
     htmlReportOptionsModal: 'htmlReportIncludeResultsInput',
     confirmActionModal: 'cancelConfirmActionButton',

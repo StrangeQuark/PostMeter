@@ -12,6 +12,25 @@
       </div>
     </section>
 
+    <section id="workspaceEncryptionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="workspaceEncryptionTitle" aria-describedby="workspaceEncryptionMessage workspaceEncryptionWarning workspaceEncryptionError" hidden>
+      <h2 id="workspaceEncryptionTitle">Workspace encryption</h2>
+      <p id="workspaceEncryptionMessage">Enter the workspace key.</p>
+      <p id="workspaceEncryptionWarning" class="file-picker-error" role="note">Losing this key permanently loses access to the encrypted workspace. PostMeter does not store it.</p>
+      <label class="field">
+        <span id="workspaceEncryptionKeyLabel">Key</span>
+        <input id="workspaceEncryptionKeyInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <label id="workspaceEncryptionConfirmField" class="field" hidden>
+        <span>Confirm key</span>
+        <input id="workspaceEncryptionConfirmInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <p id="workspaceEncryptionError" class="file-picker-error" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelWorkspaceEncryptionButton" type="button">Cancel</button>
+        <button id="confirmWorkspaceEncryptionButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
     <section id="clientCertificateModal" class="modal client-certificate-modal" role="dialog" aria-modal="true" aria-labelledby="clientCertificateModalTitle" aria-describedby="clientCertificateModalMessage" hidden>
       <div class="modal-title-row">
         <h2 id="clientCertificateModalTitle">Add client certificate</h2>
@@ -268,4 +287,3 @@
       </div>
     </section>
   </div>
-

@@ -665,11 +665,16 @@ initializeRenderer({
         void handleVaultPrompt(payload).catch(() => {});
       }));
     }
+    if (window.postmeter.workspace?.onKeyPrompt) {
+      registerCleanup(window.postmeter.workspace.onKeyPrompt((payload) => {
+        void handleWorkspaceKeyPrompt(payload).catch(() => {});
+      }));
+    }
 
     markUiWorkflowStartupStep('before-workspace-load');
     const loaded = await window.postmeter.workspace.load();
     markUiWorkflowStartupStep('after-workspace-load');
-    applyLoadedWorkspace(loaded, { focus: 'request', render: false });
+    await applyLoadedWorkspaceOrPrompt(loaded, { focus: 'request', render: false });
     markUiWorkflowStartupStep('before-session-load');
     const session = await window.postmeter.session.load();
     markUiWorkflowStartupStep('after-session-load');

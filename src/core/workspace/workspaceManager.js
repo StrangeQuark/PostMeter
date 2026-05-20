@@ -1,14 +1,25 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { defaultWorkspace, walkRequests } = require('./models');
-const { fsyncDirectory, moveFileNoOverwrite, pathExists, temporaryJsonPath } = require('./workspacePersistence');
+const {
+  fsyncDirectory,
+  moveFileNoOverwrite,
+  pathExists,
+  temporaryJsonPath,
+  writeTextFileAtomic
+} = require('./workspacePersistence');
 const {
   WorkspaceRecoveryError,
   WorkspaceStore,
   defaultWorkspacePath,
-  looksLikeNativeWorkspace,
   normalizeWorkspace
 } = require('./workspaceStore');
+const {
+  WorkspaceEncryptionKeyRequiredError,
+  assertWorkspaceEncryptionKey,
+  decryptWorkspaceEnvelope,
+  isEncryptedWorkspaceEnvelope
+} = require('./workspaceEncryption');
 
 class WorkspaceManager {
   constructor(preferredWorkspacePath = defaultWorkspacePath()) {
@@ -20,6 +31,7 @@ class WorkspaceManager {
     this.legacyManifestPath = path.join(this.baseDirectory, `${this.workspaceStem}.workspaces.manifest.json`);
     this.currentWorkspaceId = this.preferredWorkspaceFilename;
     this.currentWorkspacePath = this.preferredWorkspacePath;
+    this.workspaceEncryptionKeys = new Map();
   }
 
   getWorkspacePath() {
@@ -36,12 +48,22 @@ class WorkspaceManager {
     this.currentWorkspacePath = this.absoluteWorkspacePath(catalog.currentWorkspaceId);
     const store = this.currentStore();
     try {
-      const loaded = await store.load();
+      const loaded = await store.load({ encryptionKey: this.encryptionKeyForWorkspace(this.currentWorkspaceId) });
       return this.describeCurrent(loaded.workspace, {
+        encrypted: loaded.encrypted === true,
+        locked: false,
         recovered: loaded.recovered === true,
         recoveredPath: loaded.recoveredPath || ''
       });
     } catch (error) {
+      if (error instanceof WorkspaceEncryptionKeyRequiredError) {
+        return this.describeCurrent(defaultWorkspace(), {
+          encrypted: true,
+          locked: true,
+          recovered: false,
+          recoveredPath: ''
+        });
+      }
       if (error instanceof WorkspaceRecoveryError) {
         error.path = this.currentWorkspacePath;
         error.activeWorkspaceId = this.currentWorkspaceId;
@@ -52,11 +74,19 @@ class WorkspaceManager {
   }
 
   async describeCurrent(workspace, extras = {}) {
+    const encrypted = extras.encrypted == null
+      ? await this.isWorkspaceEncrypted(this.currentWorkspaceId)
+      : extras.encrypted === true;
+    const locked = extras.locked == null
+      ? encrypted && !this.encryptionKeyForWorkspace(this.currentWorkspaceId)
+      : extras.locked === true;
     return {
       workspace,
       path: this.currentWorkspacePath,
       activeWorkspaceId: this.currentWorkspaceId,
       workspaces: await this.listWorkspaceItems(),
+      encrypted,
+      locked,
       ...extras
     };
   }
@@ -71,11 +101,15 @@ class WorkspaceManager {
   }
 
   async save(workspace) {
-    return this.currentStore().save(workspace);
+    return this.currentStore().save(workspace, {
+      encryptionKey: this.encryptionKeyForWorkspace(this.currentWorkspaceId)
+    });
   }
 
   saveSync(workspace) {
-    return this.currentStore().saveSync(workspace);
+    return this.currentStore().saveSync(workspace, {
+      encryptionKey: this.encryptionKeyForWorkspace(this.currentWorkspaceId)
+    });
   }
 
   async backupCurrentWorkspace(reason = 'manual.backup') {
@@ -84,12 +118,21 @@ class WorkspaceManager {
 
   async importWorkspace(importPath) {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    const rawContent = await fs.readFile(importPath, 'utf8');
+    const parsed = JSON.parse(rawContent);
+    if (isEncryptedWorkspaceEnvelope(parsed)) {
+      const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
+      return this.saveNewWorkspaceTextFile(workspaceName, rawContent, catalog.files);
+    }
     const importedWorkspace = await this.currentStore().importWorkspace(importPath);
     const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
     return this.saveNewWorkspaceFile(workspaceName, importedWorkspace, catalog.files);
   }
 
   async exportWorkspace(workspace, exportPath) {
+    if (await this.isWorkspaceEncrypted(this.currentWorkspaceId)) {
+      return this.exportWorkspaceById(this.currentWorkspaceId, exportPath);
+    }
     return this.currentStore().exportWorkspace(workspace, exportPath);
   }
 
@@ -98,8 +141,13 @@ class WorkspaceManager {
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
+    if (await this.isWorkspaceEncrypted(workspaceId)) {
+      const rawContent = await fs.readFile(this.absoluteWorkspacePath(workspaceId), 'utf8');
+      await writeTextFileAtomic(exportPath, rawContent, { prefix: 'postmeter-workspace-export' });
+      return exportPath;
+    }
     const store = new WorkspaceStore(this.absoluteWorkspacePath(workspaceId));
-    const loaded = await store.load();
+    const loaded = await store.load({ encryptionKey: this.encryptionKeyForWorkspace(workspaceId) });
     return store.exportWorkspace(loaded.workspace, exportPath);
   }
 
@@ -108,9 +156,21 @@ class WorkspaceManager {
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
-    const sourceWorkspace = await this.loadWorkspaceById(workspaceId);
     const sourceName = this.workspaceDisplayNameFromFilename(workspaceId);
     const duplicateName = await this.nextWorkspaceName(`${sourceName} Copy`);
+    if (await this.isWorkspaceEncrypted(workspaceId)) {
+      const duplicatedWorkspaceId = await this.saveNewWorkspaceTextFile(
+        duplicateName,
+        await fs.readFile(this.absoluteWorkspacePath(workspaceId), 'utf8'),
+        catalog.files
+      );
+      const sourceKey = this.encryptionKeyForWorkspace(workspaceId);
+      if (sourceKey) {
+        this.workspaceEncryptionKeys.set(duplicatedWorkspaceId, sourceKey);
+      }
+      return duplicatedWorkspaceId;
+    }
+    const sourceWorkspace = await this.loadWorkspaceById(workspaceId);
     return this.saveNewWorkspaceFile(duplicateName, sourceWorkspace, catalog.files);
   }
 
@@ -119,7 +179,9 @@ class WorkspaceManager {
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
-    const loaded = await new WorkspaceStore(this.absoluteWorkspacePath(workspaceId)).load();
+    const loaded = await new WorkspaceStore(this.absoluteWorkspacePath(workspaceId)).load({
+      encryptionKey: this.encryptionKeyForWorkspace(workspaceId)
+    });
     return loaded.workspace;
   }
 
@@ -215,6 +277,61 @@ class WorkspaceManager {
     return this.load({ preferredWorkspaceId: workspaceId });
   }
 
+  async unlockWorkspace(workspaceId, encryptionKey) {
+    assertWorkspaceEncryptionKey(encryptionKey);
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    if (!catalog.files.includes(workspaceId)) {
+      throw new Error(`Workspace "${workspaceId}" was not found.`);
+    }
+    const loaded = await new WorkspaceStore(this.absoluteWorkspacePath(workspaceId)).load({ encryptionKey });
+    if (loaded.encrypted !== true) {
+      throw new Error(`Workspace "${workspaceId}" is not encrypted.`);
+    }
+    this.workspaceEncryptionKeys.set(workspaceId, encryptionKey);
+    this.currentWorkspaceId = workspaceId;
+    this.currentWorkspacePath = this.absoluteWorkspacePath(workspaceId);
+    return this.describeCurrent(loaded.workspace, {
+      encrypted: loaded.encrypted === true,
+      locked: false
+    });
+  }
+
+  async encryptWorkspace(workspaceId, workspace, encryptionKey) {
+    assertWorkspaceEncryptionKey(encryptionKey);
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    if (!catalog.files.includes(workspaceId)) {
+      throw new Error(`Workspace "${workspaceId}" was not found.`);
+    }
+    const targetStore = new WorkspaceStore(this.absoluteWorkspacePath(workspaceId));
+    const sourceWorkspace = workspaceId === this.currentWorkspaceId
+      ? normalizeWorkspace(workspace)
+      : await targetStore.load().then((loaded) => loaded.workspace);
+    const saved = await targetStore.encryptWorkspace(sourceWorkspace, encryptionKey);
+    this.workspaceEncryptionKeys.set(workspaceId, encryptionKey);
+    if (workspaceId === this.currentWorkspaceId) {
+      return this.describeCurrent(saved, { encrypted: true, locked: false });
+    }
+    return this.describeCurrent(workspace, { encrypted: await this.isWorkspaceEncrypted(this.currentWorkspaceId), locked: false });
+  }
+
+  async removeWorkspaceEncryption(workspaceId, encryptionKey, currentWorkspace = defaultWorkspace()) {
+    assertWorkspaceEncryptionKey(encryptionKey);
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    if (!catalog.files.includes(workspaceId)) {
+      throw new Error(`Workspace "${workspaceId}" was not found.`);
+    }
+    const targetStore = new WorkspaceStore(this.absoluteWorkspacePath(workspaceId));
+    const saved = await targetStore.removeEncryption(encryptionKey);
+    this.workspaceEncryptionKeys.delete(workspaceId);
+    if (workspaceId === this.currentWorkspaceId) {
+      return this.describeCurrent(saved, { encrypted: false, locked: false });
+    }
+    return this.describeCurrent(currentWorkspace, {
+      encrypted: await this.isWorkspaceEncrypted(this.currentWorkspaceId),
+      locked: false
+    });
+  }
+
   async deleteWorkspace(workspaceId) {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     if (!catalog.files.includes(workspaceId)) {
@@ -224,6 +341,7 @@ class WorkspaceManager {
       throw new Error('At least one workspace must remain.');
     }
     await fs.rm(this.absoluteWorkspacePath(workspaceId), { force: true });
+    this.workspaceEncryptionKeys.delete(workspaceId);
     await fsyncDirectory(this.baseDirectory);
     const remainingFiles = catalog.files.filter((file) => file !== workspaceId);
     catalog.files = remainingFiles;
@@ -240,6 +358,19 @@ class WorkspaceManager {
 
   currentStore() {
     return new WorkspaceStore(this.currentWorkspacePath);
+  }
+
+  encryptionKeyForWorkspace(workspaceId) {
+    return this.workspaceEncryptionKeys.get(String(workspaceId || '')) || '';
+  }
+
+  setWorkspaceEncryptionKey(workspaceId, encryptionKey) {
+    assertWorkspaceEncryptionKey(encryptionKey);
+    this.workspaceEncryptionKeys.set(String(workspaceId || this.currentWorkspaceId || ''), encryptionKey);
+  }
+
+  clearWorkspaceEncryptionKey(workspaceId) {
+    this.workspaceEncryptionKeys.delete(String(workspaceId || this.currentWorkspaceId || ''));
   }
 
   absoluteWorkspacePath(filename) {
@@ -309,7 +440,7 @@ class WorkspaceManager {
     }
     try {
       const parsed = JSON.parse(await fs.readFile(this.absoluteWorkspacePath(filename), 'utf8'));
-      return looksLikeNativeWorkspace(parsed);
+      return looksLikeManagedWorkspaceFile(parsed);
     } catch {
       return false;
     }
@@ -411,6 +542,36 @@ class WorkspaceManager {
     throw new Error('Could not allocate a non-conflicting workspace filename.');
   }
 
+  async saveNewWorkspaceTextFile(workspaceName, content, existingFiles = []) {
+    const reservedFiles = new Set(existingFiles);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const filename = await this.nextAvailableWorkspaceFilename(Array.from(reservedFiles), workspaceName);
+      try {
+        await writeTextFileAtomic(
+          this.absoluteWorkspacePath(filename),
+          String(content || ''),
+          { prefix: 'postmeter-workspace-import', overwrite: false }
+        );
+        return filename;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') {
+          throw error;
+        }
+        reservedFiles.add(filename);
+      }
+    }
+    throw new Error('Could not allocate a non-conflicting workspace filename.');
+  }
+
+  async isWorkspaceEncrypted(workspaceId) {
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.absoluteWorkspacePath(workspaceId), 'utf8'));
+      return isEncryptedWorkspaceEnvelope(parsed);
+    } catch {
+      return false;
+    }
+  }
+
   async workspaceFilenameAvailable(filename, allowedFilename = '') {
     const candidatePath = this.absoluteWorkspacePath(filename);
     if (!(await pathExists(candidatePath))) {
@@ -454,18 +615,51 @@ class WorkspaceManager {
       environmentCount: summary.environmentCount,
       runnerCount: summary.runnerCount,
       cookieCount: summary.cookieCount,
-      historyCount: summary.historyCount
+      historyCount: summary.historyCount,
+      encrypted: summary.encrypted === true,
+      locked: summary.locked === true
     };
   }
 
   async readWorkspaceSummary(file) {
     try {
       const parsed = JSON.parse(await fs.readFile(this.absoluteWorkspacePath(file), 'utf8'));
+      if (isEncryptedWorkspaceEnvelope(parsed)) {
+        const encryptionKey = this.encryptionKeyForWorkspace(file);
+        if (!encryptionKey) {
+          return workspaceSummary(defaultWorkspace(), { encrypted: true, locked: true });
+        }
+        try {
+          return workspaceSummary(normalizeWorkspace(await decryptWorkspaceEnvelope(parsed, encryptionKey)), {
+            encrypted: true,
+            locked: false
+          });
+        } catch {
+          this.clearWorkspaceEncryptionKey(file);
+          return workspaceSummary(defaultWorkspace(), { encrypted: true, locked: true });
+        }
+      }
       return workspaceSummary(normalizeWorkspace(parsed));
     } catch {
       return workspaceSummary(defaultWorkspace());
     }
   }
+}
+
+function looksLikeManagedWorkspaceFile(value) {
+  return isEncryptedWorkspaceEnvelope(value)
+    || Boolean(
+      value
+      && typeof value === 'object'
+      && (
+        Object.hasOwn(value, 'schemaVersion')
+        || Array.isArray(value.collections)
+        || Array.isArray(value.environments)
+        || Array.isArray(value.runners)
+        || Array.isArray(value.performanceTests)
+        || Array.isArray(value.history)
+      )
+    );
 }
 
 function workspaceFilename(name, extension) {
@@ -523,7 +717,7 @@ function importWorkspaceDisplayName(importPath) {
   return normalizeWorkspaceDisplayName(baseName || 'Workspace');
 }
 
-function workspaceSummary(workspace) {
+function workspaceSummary(workspace, extras = {}) {
   let requestCount = 0;
   for (const collection of workspace.collections || []) {
     walkRequests(collection, () => {
@@ -538,7 +732,9 @@ function workspaceSummary(workspace) {
     environmentCount: Array.isArray(workspace?.environments) ? workspace.environments.length : 0,
     runnerCount: Array.isArray(workspace?.runners) ? workspace.runners.length : 0,
     cookieCount: Array.isArray(workspace?.cookies) ? workspace.cookies.length : 0,
-    historyCount: Array.isArray(workspace?.history) ? workspace.history.length : 0
+    historyCount: Array.isArray(workspace?.history) ? workspace.history.length : 0,
+    encrypted: extras.encrypted === true,
+    locked: extras.locked === true
   };
 }
 

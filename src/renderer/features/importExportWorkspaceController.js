@@ -1,8 +1,16 @@
 async function saveWorkspace(showStatus = true, options = {}) {
+  if (activeWorkspaceLocked()) {
+    setStatus('Unlock workspace before saving.');
+    return false;
+  }
   return rendererWorkflows.saveWorkspace(showStatus, options);
 }
 
 async function persistWorkspace(showStatus = true, options = {}) {
+  if (activeWorkspaceLocked()) {
+    setStatus('Unlock workspace before saving.');
+    return false;
+  }
   return rendererWorkflows.persistWorkspace(showStatus, options);
 }
 
@@ -17,6 +25,108 @@ async function importWorkspace() {
   return filePath == null
     ? rendererWorkflows.importWorkspace()
     : rendererWorkflows.importWorkspace(filePath);
+}
+
+const WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH = 6;
+let workspaceEncryptionModalState = null;
+
+async function promptWorkspaceEncryptionKey(options = {}) {
+  workspaceEncryptionModalState = {
+    mode: options.mode || 'unlock',
+    requireConfirmation: options.requireConfirmation === true,
+    resolveOnConfirm: true
+  };
+  $('workspaceEncryptionTitle').textContent = options.title || 'Workspace encryption';
+  $('workspaceEncryptionMessage').textContent = options.message || 'Enter the workspace key.';
+  $('workspaceEncryptionWarning').textContent = options.warning || 'Losing this key permanently loses access to the encrypted workspace. PostMeter does not store it.';
+  $('workspaceEncryptionKeyLabel').textContent = options.label || 'Key';
+  $('workspaceEncryptionKeyInput').value = '';
+  $('workspaceEncryptionConfirmInput').value = '';
+  $('workspaceEncryptionConfirmField').hidden = options.requireConfirmation !== true;
+  $('workspaceEncryptionError').hidden = true;
+  $('workspaceEncryptionError').textContent = '';
+  $('confirmWorkspaceEncryptionButton').textContent = options.confirmLabel || 'Continue';
+  const key = await showModal('workspaceEncryptionModal', null);
+  $('workspaceEncryptionKeyInput').value = '';
+  $('workspaceEncryptionConfirmInput').value = '';
+  workspaceEncryptionModalState = null;
+  return typeof key === 'string' && key.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH ? key : null;
+}
+
+function confirmWorkspaceEncryptionModal() {
+  const key = $('workspaceEncryptionKeyInput')?.value || '';
+  const confirmation = $('workspaceEncryptionConfirmInput')?.value || '';
+  if (key.length < WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH) {
+    showWorkspaceEncryptionModalError(`Key must be at least ${WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH} characters.`);
+    return;
+  }
+  if (workspaceEncryptionModalState?.requireConfirmation === true && key !== confirmation) {
+    showWorkspaceEncryptionModalError('The confirmation key does not match.');
+    return;
+  }
+  resolveActiveModal(key);
+}
+
+function showWorkspaceEncryptionModalError(message) {
+  const error = $('workspaceEncryptionError');
+  error.textContent = message;
+  error.hidden = false;
+}
+
+async function handleWorkspaceKeyPrompt(payload = {}) {
+  const key = await promptWorkspaceEncryptionKey({
+    mode: 'save',
+    title: 'Unlock workspace to save',
+    message: `"${payload.workspaceName || payload.workspaceId || 'This workspace'}" is encrypted. Enter the key to save changes.`,
+    warning: 'PostMeter keeps the key in memory only while this workspace is unlocked.',
+    confirmLabel: 'Unlock'
+  });
+  await window.postmeter.workspace.resolveKeyPrompt(payload.promptId, key || '');
+}
+
+async function applyLoadedWorkspaceOrPrompt(loaded, options = {}) {
+  if (loaded?.locked === true && loaded?.encrypted === true) {
+    return unlockWorkspaceFromLockedLoad(loaded, options);
+  }
+  applyLoadedWorkspace(loaded, options);
+  return loaded?.workspace || null;
+}
+
+async function unlockWorkspaceFromLockedLoad(loaded, options = {}) {
+  applyWorkspaceCatalogUpdate(loaded, {
+    focus: 'workspace',
+    selectedWorkspaceId: loaded?.activeWorkspaceId || selectedWorkspaceId,
+    render: options.render
+  });
+  const workspaceId = loaded?.activeWorkspaceId || selectedWorkspaceId || activeWorkspaceId;
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId) || null;
+  const key = await promptWorkspaceEncryptionKey({
+    mode: 'unlock',
+    title: 'Unlock workspace',
+    message: `Enter the key for "${workspaceDisplayName(workspaceItem)}".`,
+    warning: 'PostMeter decrypts the workspace in memory and keeps saving it encrypted.',
+    confirmLabel: 'Unlock'
+  });
+  if (!key) {
+    setStatus('Workspace is locked.');
+    applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    return null;
+  }
+  try {
+    const unlocked = await window.postmeter.workspace.unlock(workspaceId, key);
+    applyLoadedWorkspace(unlocked, {
+      ...options,
+      selectedWorkspaceId: workspaceId
+    });
+    setStatus(`Unlocked workspace: ${workspaceDisplayName()}.`);
+    return unlocked.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace unlock failed: ${message}`);
+    notifyUser('Workspace Unlock Failed', message);
+    applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    return null;
+  }
 }
 
 async function runPickerFirstExport({
@@ -98,6 +208,24 @@ async function exportWorkspace(workspaceIdOrItem = null) {
   if (!workspaceItem) {
     setStatus('Select a workspace before exporting.');
     return null;
+  }
+  if (workspaceItem.encrypted === true) {
+    try {
+      if (workspaceItem.current === true && workspaceItem.locked !== true) {
+        await persistWorkspace(false, { scope: 'all' });
+      }
+      const exportWorkspaceBoundary = window.__postmeterExportWorkspace || window.postmeter.workspace.exportWorkspace;
+      const result = await exportWorkspaceBoundary(null, workspaceItem.id);
+      if (!result.cancelled) {
+        setStatus(`Encrypted workspace exported to ${result.path}.`);
+      }
+      return result;
+    } catch (error) {
+      const message = error.message || String(error);
+      setStatus('Workspace export failed.');
+      notifyUser('Workspace Export Failed', message);
+      return null;
+    }
   }
   if (workspaceItem.current !== true) {
     try {
@@ -194,6 +322,9 @@ async function prepareForWorkspaceChange(actionLabel) {
     }))) {
       return false;
     }
+  }
+  if (workspaceListItems().find((item) => item.id === activeWorkspaceId)?.locked === true) {
+    return true;
   }
   await persistWorkspace(false, { scope: 'all' });
   return true;
@@ -306,6 +437,9 @@ async function switchWorkspace(workspaceId, options = {}) {
       return null;
     }
     const loaded = await window.postmeter.workspace.switch(workspaceId);
+    if (loaded?.locked === true && loaded?.encrypted === true) {
+      return applyLoadedWorkspaceOrPrompt(loaded, { focus: options.focus || 'workspace', selectedWorkspaceId: workspaceId });
+    }
     applyLoadedWorkspace(loaded, { focus: options.focus || 'workspace', selectedWorkspaceId: workspaceId });
     setStatus(`Switched to workspace: ${workspaceDisplayName()}.`);
     return loaded.workspace;
@@ -313,6 +447,118 @@ async function switchWorkspace(workspaceId, options = {}) {
     const message = error.message || String(error);
     setStatus(`Workspace switch failed: ${message}`);
     notifyUser('Workspace Switch Failed', message);
+    return null;
+  }
+}
+
+async function unlockWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId, options = {}) {
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId) || null;
+  if (!workspaceItem) {
+    setStatus('Select a workspace before unlocking.');
+    return null;
+  }
+  const key = await promptWorkspaceEncryptionKey({
+    mode: 'unlock',
+    title: 'Unlock workspace',
+    message: `Enter the key for "${workspaceDisplayName(workspaceItem)}".`,
+    warning: 'PostMeter decrypts the workspace in memory and keeps saving it encrypted.',
+    confirmLabel: 'Unlock'
+  });
+  if (!key) {
+    return null;
+  }
+  try {
+    if (workspaceId !== activeWorkspaceId && !(await prepareForWorkspaceChange('unlocking a workspace'))) {
+      return null;
+    }
+    const loaded = await window.postmeter.workspace.unlock(workspaceId, key);
+    applyLoadedWorkspace(loaded, { focus: options.focus || 'workspace', selectedWorkspaceId: workspaceId });
+    setStatus(`Unlocked workspace: ${workspaceDisplayName()}.`);
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace unlock failed: ${message}`);
+    notifyUser('Workspace Unlock Failed', message);
+    return null;
+  }
+}
+
+async function encryptWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId) || null;
+  if (!workspaceItem) {
+    setStatus('Select a workspace before encrypting.');
+    return null;
+  }
+  if (workspaceItem.encrypted === true) {
+    setStatus('Workspace is already encrypted.');
+    return null;
+  }
+  const key = await promptWorkspaceEncryptionKey({
+    mode: 'encrypt',
+    title: 'Encrypt workspace',
+    message: `Choose a key for "${workspaceDisplayName(workspaceItem)}".`,
+    warning: 'Losing this key permanently loses access to this workspace. Existing unencrypted workspace backups will be deleted.',
+    confirmLabel: 'Encrypt',
+    requireConfirmation: true
+  });
+  if (!key) {
+    return null;
+  }
+  try {
+    let workspacePayload = null;
+    if (workspaceId === activeWorkspaceId) {
+      collectActiveEditorState();
+      workspacePayload = cloneJson(workspace);
+    }
+    const loaded = await window.postmeter.workspace.encrypt(workspaceId, key, workspacePayload);
+    if (workspaceId === activeWorkspaceId) {
+      applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    } else {
+      applyWorkspaceCatalogUpdate(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    }
+    setStatus('Workspace encrypted. Unencrypted workspace backups were removed.');
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace encryption failed: ${message}`);
+    notifyUser('Workspace Encryption Failed', message);
+    return null;
+  }
+}
+
+async function removeWorkspaceEncryption(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId) || null;
+  if (!workspaceItem) {
+    setStatus('Select a workspace before removing encryption.');
+    return null;
+  }
+  if (workspaceItem.encrypted !== true) {
+    setStatus('Workspace is not encrypted.');
+    return null;
+  }
+  const key = await promptWorkspaceEncryptionKey({
+    mode: 'remove',
+    title: 'Decrypt workspace',
+    message: `Enter the key for "${workspaceDisplayName(workspaceItem)}".`,
+    warning: 'The workspace file will be saved as plaintext. Existing encrypted workspace backups will be deleted.',
+    confirmLabel: 'Decrypt'
+  });
+  if (!key) {
+    return null;
+  }
+  try {
+    const loaded = await window.postmeter.workspace.removeEncryption(workspaceId, key);
+    if (workspaceId === activeWorkspaceId) {
+      applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    } else {
+      applyWorkspaceCatalogUpdate(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    }
+    setStatus('Workspace decrypted. Encrypted workspace backups were removed.');
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace decrypt failed: ${message}`);
+    notifyUser('Workspace Decrypt Failed', message);
     return null;
   }
 }

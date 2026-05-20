@@ -14,6 +14,7 @@ const {
   importRequestFromText
 } = require('../../src/core/import-export/requestFormats');
 const { writeTextFileAtomic } = require('../../src/core/workspace/workspacePersistence');
+const { assertWorkspaceEncryptionKey } = require('../../src/core/workspace/workspaceEncryption');
 const {
   collectionExportExtension,
   collectionExportFilters,
@@ -283,6 +284,76 @@ function registerWorkspaceIpc(options = {}) {
     return result;
   });
 
+  ipcMain.handle('workspace:unlock', async (_event, workspaceId, encryptionKey) => {
+    const targetWorkspaceId = validateWorkspaceId(workspaceId);
+    const key = validateWorkspaceEncryptionKey(encryptionKey);
+    const result = await queueWorkspaceOperation(async () => {
+      const unlocked = hydrateLoadResult(await getWorkspaceStore().unlockWorkspace(targetWorkspaceId, key));
+      setWorkspace(unlocked.workspace);
+      return unlocked;
+    });
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:encrypt', async (_event, workspaceId, encryptionKey, nextWorkspace = null) => {
+    const targetWorkspaceId = validateWorkspaceId(workspaceId);
+    const key = validateWorkspaceEncryptionKey(encryptionKey);
+    if (nextWorkspace) {
+      assertWorkspacePayload(nextWorkspace);
+    }
+    const result = await queueWorkspaceOperation(async () => {
+      const workspaceStore = getWorkspaceStore();
+      const currentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
+      let workspaceForEncryption = nextWorkspace || getWorkspace();
+      if (targetWorkspaceId === currentWorkspaceId && workspaceForEncryption) {
+        const localSettings = await saveLocalSettings(
+          workspaceForEncryption.settings,
+          targetWorkspaceId,
+          workspaceForEncryption.localsettings
+        );
+        workspaceForEncryption = {
+          ...workspaceForEncryption,
+          localsettings: localSettings
+        };
+      }
+      const encrypted = hydrateLoadResult(await workspaceStore.encryptWorkspace(
+        targetWorkspaceId,
+        workspaceForEncryption,
+        key
+      ));
+      if (targetWorkspaceId === currentWorkspaceId) {
+        setWorkspace(encrypted.workspace);
+      }
+      return encrypted;
+    });
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:removeEncryption', async (_event, workspaceId, encryptionKey) => {
+    const targetWorkspaceId = validateWorkspaceId(workspaceId);
+    const key = validateWorkspaceEncryptionKey(encryptionKey);
+    const result = await queueWorkspaceOperation(async () => {
+      const workspaceStore = getWorkspaceStore();
+      const currentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
+      const decrypted = hydrateLoadResult(await workspaceStore.removeWorkspaceEncryption(
+        targetWorkspaceId,
+        key,
+        getWorkspace()
+      ));
+      if (targetWorkspaceId === currentWorkspaceId) {
+        setWorkspace(decrypted.workspace);
+      }
+      return decrypted;
+    });
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
+  });
+
   ipcMain.handle('workspace:delete', async (_event, workspaceId) => {
     if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
       throw new Error('workspaceId must be a non-empty string.');
@@ -291,7 +362,7 @@ function registerWorkspaceIpc(options = {}) {
     const originalCurrentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
     const result = await queueWorkspaceOperation(async () => {
       const deletedWorkspaceSnapshot = typeof workspaceStore.loadWorkspaceById === 'function'
-        ? await workspaceStore.loadWorkspaceById(workspaceId)
+        ? await workspaceStore.loadWorkspaceById(workspaceId).catch(() => null)
         : null;
       let deleted = null;
       try {
@@ -575,6 +646,24 @@ function normalizeRequestImportSource(source = {}) {
       : '',
     text: typeof value.text === 'string' ? value.text : ''
   };
+}
+
+function validateWorkspaceId(workspaceId) {
+  if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
+    throw new Error('workspaceId must be a non-empty string.');
+  }
+  return workspaceId;
+}
+
+function validateWorkspaceEncryptionKey(encryptionKey) {
+  if (typeof encryptionKey !== 'string') {
+    throw new Error('Workspace encryption key must be a string.');
+  }
+  if (encryptionKey.length > 1024) {
+    throw new Error('Workspace encryption key must be 1024 characters or fewer.');
+  }
+  assertWorkspaceEncryptionKey(encryptionKey, 'Workspace encryption key');
+  return encryptionKey;
 }
 
 function assertRequestExportFormat(format) {

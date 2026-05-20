@@ -97,10 +97,19 @@ const postmeterApi = {
     create: () => ipcRenderer.invoke('workspace:create'),
     rename: (workspaceId, name) => ipcRenderer.invoke('workspace:rename', workspaceId, name),
     switch: (workspaceId) => ipcRenderer.invoke('workspace:switch', workspaceId),
+    unlock: (workspaceId, key) => ipcRenderer.invoke('workspace:unlock', workspaceId, key),
+    encrypt: (workspaceId, key, workspace) => ipcRenderer.invoke('workspace:encrypt', workspaceId, key, workspace || null),
+    removeEncryption: (workspaceId, key) => ipcRenderer.invoke('workspace:removeEncryption', workspaceId, key),
     delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
     duplicate: (workspaceId) => ipcRenderer.invoke('workspace:duplicate', workspaceId),
     importWorkspace: (filePath) => ipcRenderer.invoke('workspace:import', optionalFilePath(filePath)),
-    exportWorkspace: (workspace, workspaceId) => ipcRenderer.invoke('workspace:export', workspace, workspaceId)
+    exportWorkspace: (workspace, workspaceId) => ipcRenderer.invoke('workspace:export', workspace, workspaceId),
+    onKeyPrompt: (callback) => {
+      const listener = (_event, payload) => callback(safeWorkspaceKeyPromptPayload(payload));
+      ipcRenderer.on('workspace:key-prompt', listener);
+      return () => ipcRenderer.removeListener('workspace:key-prompt', listener);
+    },
+    resolveKeyPrompt: (promptId, key) => ipcRenderer.invoke('workspace:key-prompt-response', String(promptId || '').slice(0, 128), String(key || '').slice(0, 1024))
   },
   collection: {
     importCollection: (filePath) => ipcRenderer.invoke('collection:import', optionalFilePath(filePath)),
@@ -205,6 +214,15 @@ function safeVaultPromptPayload(payload = {}) {
     promptId: stringField(payload.promptId, 128),
     requestId: stringField(payload.requestId, 256),
     requestName: stringField(payload.requestName, 256),
+    workspaceId: stringField(payload.workspaceId, 256),
+    workspaceName: stringField(payload.workspaceName, 256)
+  };
+}
+
+function safeWorkspaceKeyPromptPayload(payload = {}) {
+  return {
+    promptId: stringField(payload.promptId, 128),
+    reason: stringField(payload.reason, 64),
     workspaceId: stringField(payload.workspaceId, 256),
     workspaceName: stringField(payload.workspaceName, 256)
   };

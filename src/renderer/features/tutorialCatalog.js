@@ -706,8 +706,8 @@
       id: 'workspaces-basics',
       title: 'Workspaces',
       level: 'Beginner',
-      duration: '3 minutes',
-      summary: 'Use the Workspaces panel to switch, inspect, export, and manage local-first workspace files.',
+      duration: '4 minutes',
+      summary: 'Use the Workspaces panel to switch, inspect, encrypt, export, and manage local-first workspace files.',
       steps: Object.freeze([
         {
           selector: '#workspacesPanelTab',
@@ -729,7 +729,7 @@
         {
           selector: '#workspaceSummary',
           title: 'Read the summary',
-          body: 'The summary reports saved collections, folders, requests, environments, runners, and performance tests.',
+          body: 'The summary reports saved collections, folders, requests, environments, runners, performance tests, and workspace encryption status.',
           beforeStep: tutorialEnsureWorkspaceContext
         },
         {
@@ -739,9 +739,15 @@
           beforeStep: tutorialEnsureWorkspaceContext
         },
         {
+          selector: '#encryptWorkspacePanelButton:not([hidden]), #removeWorkspaceEncryptionPanelButton:not([hidden])',
+          title: 'Protect sensitive workspaces',
+          body: 'Encrypt Workspace saves plaintext workspaces encrypted at rest and removes old unencrypted backups. Decrypt Workspace is shown after an encrypted workspace is unlocked. PostMeter does not store the key.',
+          beforeStep: tutorialEnsureWorkspaceContext
+        },
+        {
           selector: '#exportWorkspacePanelButton',
           title: 'Export workspace definitions',
-          body: 'Workspace export includes saved definitions but excludes profile settings, vaults, diagnostics, and local-only bindings.',
+          body: 'Workspace export includes saved definitions but excludes profile settings, vaults, diagnostics, and local-only bindings. Encrypted workspaces export as encrypted files.',
           beforeStep: tutorialEnsureWorkspaceContext
         },
         {

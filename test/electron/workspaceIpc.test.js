@@ -136,9 +136,11 @@ test('workspace IPC registers stable workspace, collection, and request channels
     'workspace:create',
     'workspace:delete',
     'workspace:duplicate',
+    'workspace:encrypt',
     'workspace:export',
     'workspace:import',
     'workspace:load',
+    'workspace:removeEncryption',
     'workspace:rename',
     'workspace:save',
     'workspace:saveCollection',
@@ -146,7 +148,8 @@ test('workspace IPC registers stable workspace, collection, and request channels
     'workspace:saveFolder',
     'workspace:saveRequest',
     'workspace:saveSettings',
-    'workspace:switch'
+    'workspace:switch',
+    'workspace:unlock'
   ]);
   assert.deepEqual([...syncHandlers.keys()].sort(), ['workspace:saveSync']);
   await handlers.get('workspace:rename')({}, 'Local Workspace.json', 'Renamed Workspace');

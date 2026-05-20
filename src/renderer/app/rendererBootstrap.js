@@ -255,6 +255,9 @@
     bindClick(doc, 'setEnvironmentButton', options.onSetEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
+    bindClick(doc, 'unlockWorkspacePanelButton', options.onUnlockWorkspace);
+    bindClick(doc, 'encryptWorkspacePanelButton', options.onEncryptWorkspace);
+    bindClick(doc, 'removeWorkspaceEncryptionPanelButton', options.onRemoveWorkspaceEncryption);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
     bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
     bindClick(doc, 'exportWorkspacePanelButton', options.onExportWorkspace);
@@ -561,6 +564,10 @@
       const valueControlId = modal?.dataset?.valueControl || 'textInputModalInput';
       options.onResolveActiveModal?.(getElement(doc, valueControlId)?.value || '');
     });
+    bindClick(doc, 'cancelWorkspaceEncryptionButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'confirmWorkspaceEncryptionButton', options.onConfirmWorkspaceEncryptionModal);
+    bindKey(doc, 'workspaceEncryptionKeyInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
+    bindKey(doc, 'workspaceEncryptionConfirmInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
     bindClick(doc, 'closeClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'cancelClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'saveClientCertificateModalButton', options.onConfirmClientCertificateModal);

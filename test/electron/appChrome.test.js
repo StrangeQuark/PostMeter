@@ -410,7 +410,8 @@ test('Electron security matrix enumerates every IPC channel exposed by source', 
     'electron/ipc/sandboxPackageIpc.js',
     'electron/ipc/sessionIpc.js',
     'electron/ipc/vaultPrompt.js',
-    'electron/ipc/workspaceIpc.js'
+    'electron/ipc/workspaceIpc.js',
+    'electron/ipc/workspaceKeyPrompt.js'
   ];
   const mainSource = (await Promise.all(mainFiles.map((file) => fs.readFile(path.join(root, file), 'utf8')))).join('\n');
   const preloadSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'preload.js'), 'utf8');

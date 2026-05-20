@@ -1508,6 +1508,8 @@ function assertWorkspaceLoadResultPayload(value, field = 'result') {
   optionalString(value.path, `${field}.path`, LIMITS.value);
   optionalString(value.activeWorkspaceId, `${field}.activeWorkspaceId`, LIMITS.value);
   optionalString(value.createdWorkspaceId, `${field}.createdWorkspaceId`, LIMITS.value);
+  optionalBoolean(value.encrypted, `${field}.encrypted`);
+  optionalBoolean(value.locked, `${field}.locked`);
   if (value.workspaces != null) {
     array(value.workspaces, `${field}.workspaces`, LIMITS.environments).forEach((workspaceItem, index) => {
       assertWorkspaceListItemPayload(workspaceItem, `${field}.workspaces[${index}]`);
@@ -1578,6 +1580,8 @@ function assertWorkspaceListItemPayload(value, field = 'workspaceItem') {
   optionalString(value.path, `${field}.path`, LIMITS.value);
   optionalBoolean(value.current, `${field}.current`);
   optionalBoolean(value.deletable, `${field}.deletable`);
+  optionalBoolean(value.encrypted, `${field}.encrypted`);
+  optionalBoolean(value.locked, `${field}.locked`);
   optionalNumber(value.schemaVersion, `${field}.schemaVersion`);
   optionalString(value.theme, `${field}.theme`, LIMITS.name);
   optionalNumber(value.collectionCount, `${field}.collectionCount`);

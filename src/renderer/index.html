@@ -1181,6 +1181,9 @@
           </div>
           <div class="workspace-actions">
             <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
+            <button id="unlockWorkspacePanelButton" type="button" hidden>Unlock Workspace</button>
+            <button id="encryptWorkspacePanelButton" type="button">Encrypt Workspace</button>
+            <button id="removeWorkspaceEncryptionPanelButton" type="button">Decrypt Workspace</button>
             <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
             <button id="deleteWorkspacePanelButton" class="danger-button" type="button">Delete Workspace</button>
           </div>
@@ -1196,7 +1199,6 @@
           <h2>Select a workspace</h2>
         </div>
       </section>
-
       <section id="runnerMainPanel" class="panel runner-main-panel" role="tabpanel" hidden>
         <div id="runnerEditorSection" class="runner-editor-section">
           <div class="runner-main-header">
@@ -3204,6 +3206,25 @@
       </div>
     </section>
 
+    <section id="workspaceEncryptionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="workspaceEncryptionTitle" aria-describedby="workspaceEncryptionMessage workspaceEncryptionWarning workspaceEncryptionError" hidden>
+      <h2 id="workspaceEncryptionTitle">Workspace encryption</h2>
+      <p id="workspaceEncryptionMessage">Enter the workspace key.</p>
+      <p id="workspaceEncryptionWarning" class="file-picker-error" role="note">Losing this key permanently loses access to the encrypted workspace. PostMeter does not store it.</p>
+      <label class="field">
+        <span id="workspaceEncryptionKeyLabel">Key</span>
+        <input id="workspaceEncryptionKeyInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <label id="workspaceEncryptionConfirmField" class="field" hidden>
+        <span>Confirm key</span>
+        <input id="workspaceEncryptionConfirmInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <p id="workspaceEncryptionError" class="file-picker-error" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelWorkspaceEncryptionButton" type="button">Cancel</button>
+        <button id="confirmWorkspaceEncryptionButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
     <section id="clientCertificateModal" class="modal client-certificate-modal" role="dialog" aria-modal="true" aria-labelledby="clientCertificateModalTitle" aria-describedby="clientCertificateModalMessage" hidden>
       <div class="modal-title-row">
         <h2 id="clientCertificateModalTitle">Add client certificate</h2>
@@ -3460,7 +3481,6 @@
       </div>
     </section>
   </div>
-
   <div id="contextMenu" class="context-menu" role="menu" aria-label="Item actions" hidden></div>
   <div id="fileSourceMenu" class="context-menu file-source-menu" role="menu" aria-label="File source actions" hidden>
     <button id="fileSourceChooseButton" type="button" role="menuitem">Choose File...</button>

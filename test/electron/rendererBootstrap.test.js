@@ -1103,6 +1103,45 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, 'stop', 'cancel', 'update', null, null, 'auth-auto-detect-confirm', true, true, null]);
 });
 
+test('renderer bootstrap submits workspace encryption modal inputs on Enter', () => {
+  const calls = {
+    confirm: 0,
+    resolved: []
+  };
+  const elements = new Map([
+    ['workspaceEncryptionKeyInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
+    ['workspaceEncryptionConfirmInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
+    ['confirmWorkspaceEncryptionButton', createElement()],
+    ['cancelWorkspaceEncryptionButton', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onConfirmWorkspaceEncryptionModal: () => { calls.confirm += 1; },
+    onResolveActiveModal: (value) => calls.resolved.push(value)
+  });
+
+  elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('workspaceEncryptionConfirmInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Tab' });
+  elements.get('confirmWorkspaceEncryptionButton').dispatch('click');
+  elements.get('cancelWorkspaceEncryptionButton').dispatch('click');
+
+  assert.equal(calls.confirm, 3);
+  assert.deepEqual(calls.resolved, [null]);
+});
+
 test('renderer bootstrap binds workspace cookie manager controls', () => {
   const calls = [];
   const elements = new Map([

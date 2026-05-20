@@ -37,6 +37,10 @@
   display: none;
 }
 
+.modal [hidden] {
+  display: none !important;
+}
+
 .modal h2 {
   margin: 0 0 8px;
   font-size: var(--ui-font-size-title);

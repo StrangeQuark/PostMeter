@@ -324,6 +324,10 @@ function activeWorkspaceItem() {
   return workspaceListItems().find((item) => item.id === selectedWorkspaceId) || null;
 }
 
+function activeWorkspaceLocked() {
+  return workspaceListItems().find((item) => item.id === activeWorkspaceId)?.locked === true;
+}
+
 function workspaceDisplayName(workspaceItem = activeWorkspaceItem()) {
   if (typeof rendererEntityDisplay?.workspaceDisplayName === 'function') {
     return rendererEntityDisplay.workspaceDisplayName(workspaceItem);

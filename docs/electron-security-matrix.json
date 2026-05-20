@@ -1174,6 +1174,23 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.workspace-encrypt",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:encrypt`: Workspace encryption validates workspace IDs, workspace payloads, and bounded keys before writing an encrypted workspace envelope.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.workspace-export",
       "area": "IPC channel",
       "target": "renderer-to-main channel `workspace:export`: Workspace export validates optional workspace payload/ID before a main-process JSON save picker.",
@@ -1206,6 +1223,35 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.workspace-key-prompt",
+      "area": "IPC channel",
+      "target": "main-to-renderer channel `workspace:key-prompt`: Workspace key prompts carry workspace metadata only and never include stored keys or workspace contents.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceKeyPrompt.js",
+        "electron/app-shell/preload.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-key-prompt-response",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:key-prompt-response`: Workspace key prompt responses are scoped to the prompting renderer and bounded before the main process validates the key.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceKeyPrompt.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.workspace-load",
       "area": "IPC channel",
       "target": "renderer-to-main channel `workspace:load`: Workspace load returns schema-validated workspace metadata.",
@@ -1218,6 +1264,23 @@
       "tests": [
         "test/electron/workspaceIpc.test.js",
         "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-removeencryption",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:removeEncryption`: Workspace encryption removal validates workspace IDs and bounded keys before saving the workspace as plaintext and deleting encrypted backups.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceStore.test.js"
       ],
       "notes": ""
     },
@@ -1360,6 +1423,23 @@
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-unlock",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:unlock`: Encrypted workspace unlock validates workspace IDs and bounded keys before decrypting in the main process.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceStore.test.js"
       ],
       "notes": ""
     },

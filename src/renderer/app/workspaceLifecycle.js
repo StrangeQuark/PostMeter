@@ -148,6 +148,9 @@ function buildWorkspaceStateForPersistence() {
 }
 
 async function persistWorkspaceState() {
+  if (typeof activeWorkspaceLocked === 'function' && activeWorkspaceLocked()) {
+    return null;
+  }
   try {
     const save = window.__postmeterSaveWorkspace || window.postmeter.workspace.save;
     workspace = await save(buildWorkspaceStateForPersistence());
@@ -158,6 +161,9 @@ async function persistWorkspaceState() {
 }
 
 function flushWorkspaceSave(options = {}) {
+  if (typeof activeWorkspaceLocked === 'function' && activeWorkspaceLocked()) {
+    return null;
+  }
   if (options.sync === true) {
     try {
       const saveWorkspaceSync = window.postmeter?.workspace?.saveSync;

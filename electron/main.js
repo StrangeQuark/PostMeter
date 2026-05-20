@@ -4,6 +4,9 @@ const path = require('node:path');
 const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
 const { WorkspaceRecoveryError } = require('../src/core/workspace/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspace/workspaceManager');
+const {
+  WorkspaceEncryptionKeyRequiredError
+} = require('../src/core/workspace/workspaceEncryption');
 const { AppSettingsStore } = require('../src/core/workspace/appSettingsStore');
 const { normalizeWorkspaceLocalSettings } = require('../src/core/workspace/models');
 const { EncryptedVaultStore } = require('../src/core/sandbox/vaultStore');
@@ -35,6 +38,10 @@ const { registerSandboxPackageIpc } = require('./ipc/sandboxPackageIpc');
 const { registerDiagnosticsIpc } = require('./ipc/diagnosticsIpc');
 const { registerExportIpc } = require('./ipc/exportIpc');
 const { registerWorkspaceIpc } = require('./ipc/workspaceIpc');
+const {
+  createWorkspaceKeyPrompt,
+  registerWorkspaceKeyPromptIpc
+} = require('./ipc/workspaceKeyPrompt');
 const { registerRequestIpc } = require('./ipc/requestIpc');
 const { registerOAuthIpc } = require('./ipc/oauthIpc');
 const {
@@ -61,6 +68,7 @@ const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAu
 let diagnosticsLogger;
 let runtimeIpcController;
 let autoUpdateService;
+const promptForWorkspaceEncryptionKey = createWorkspaceKeyPrompt({ getMainWindow: () => mainWindow });
 
 registerAppProtocolScheme(protocol);
 
@@ -249,16 +257,34 @@ app.on('activate', () => {
 });
 
 async function saveWorkspace(nextWorkspace) {
-  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
-  const nextSettings = await saveLocalSettings(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
-  const savedWorkspace = await workspaceStore.save(workspacePayloadForPersistence(nextWorkspace, nextSettings));
-  return hydrateWorkspaceSettings(savedWorkspace);
+  try {
+    return await saveWorkspaceWithAvailableKey(nextWorkspace);
+  } catch (error) {
+    if (!(error instanceof WorkspaceEncryptionKeyRequiredError)) {
+      throw error;
+    }
+    const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+    const key = await promptForWorkspaceEncryptionKey({
+      reason: 'save',
+      workspaceId,
+      workspaceName: workspaceId
+    });
+    await workspaceStore.unlockWorkspace(workspaceId, key);
+    return saveWorkspaceWithAvailableKey(nextWorkspace);
+  }
 }
 
 function saveWorkspaceSync(nextWorkspace) {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const nextSettings = saveLocalSettingsSync(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
   const savedWorkspace = workspaceStore.saveSync(workspacePayloadForPersistence(nextWorkspace, nextSettings));
+  return hydrateWorkspaceSettings(savedWorkspace);
+}
+
+async function saveWorkspaceWithAvailableKey(nextWorkspace) {
+  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const nextSettings = await saveLocalSettings(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
+  const savedWorkspace = await workspaceStore.save(workspacePayloadForPersistence(nextWorkspace, nextSettings));
   return hydrateWorkspaceSettings(savedWorkspace);
 }
 
@@ -536,6 +562,7 @@ trustedIpcMain.handle('vault:unset-secret', async (_event, key) => {
 });
 
 registerVaultPromptIpc({ ipcMain: trustedIpcMain });
+registerWorkspaceKeyPromptIpc({ ipcMain: trustedIpcMain });
 registerAppIpc({
   app,
   clipboard,
