@@ -1038,7 +1038,7 @@ test('workspace import ignores local settings from native files', async () => {
     payloadIdentifiers: false
   });
   assert.deepEqual(imported.localsettings.request, {
-    sslCertificateVerification: false,
+    sslCertificateVerification: true,
     caCertificatePath: '',
     clientCertificates: []
   });
@@ -1094,7 +1094,7 @@ test('workspace export strips workspace-local TLS trust settings', async () => {
 
   const imported = await store.importWorkspace(exportPath);
   assert.deepEqual(imported.localsettings.request, {
-    sslCertificateVerification: false,
+    sslCertificateVerification: true,
     caCertificatePath: '',
     clientCertificates: []
   });

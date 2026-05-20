@@ -46,7 +46,7 @@ test('resolves managed client-certificate passphrases from the workspace vault',
 });
 
 test('normalizes TLS verification aliases and request-local overrides', () => {
-  assert.equal(normalizeTlsSettings({}).sslCertificateVerification, false);
+  assert.equal(normalizeTlsSettings({}).sslCertificateVerification, true);
   assert.equal(normalizeRequestTlsSettings({ strictSSL: false }).sslCertificateVerification, 'disabled');
   assert.equal(normalizeRequestTlsSettings({ sslVerification: true, caCertificatePath: '/ca.pem' }).sslCertificateVerification, 'enabled');
   assert.equal(normalizeTlsSettings({ request: { sslCertificateVerification: 'off' } }).sslCertificateVerification, false);
@@ -122,6 +122,13 @@ test('matches managed client certificates by host, wildcard, match URL, and port
 });
 
 test('builds HTTP TLS policy from global settings and request-local overrides', async () => {
+  const inheritedDefault = await resolveHttpTlsPolicy({
+    auth: { type: 'none' }
+  }, null, new URL('https://api.example.test'), {});
+
+  assert.equal(inheritedDefault.tlsOptions, null);
+  assert.equal(inheritedDefault.tlsDiagnostics.verificationDisabled, false);
+
   const inheritedDisabled = await resolveHttpTlsPolicy({
     auth: { type: 'none' }
   }, null, new URL('https://api.example.test'), {

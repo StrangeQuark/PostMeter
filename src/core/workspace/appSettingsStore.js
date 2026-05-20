@@ -272,7 +272,7 @@ function workspaceLocalSettingsHasValues(settings = {}) {
   if ((local.sandbox?.fileBindings || []).length || (local.sandbox?.packageCache || []).length) {
     return true;
   }
-  if (local.request?.sslCertificateVerification === true || local.request?.caCertificatePath || (local.request?.clientCertificates || []).length) {
+  if (local.request?.sslCertificateVerification === false || local.request?.caCertificatePath || (local.request?.clientCertificates || []).length) {
     return true;
   }
   const vaultGrants = local.sandbox?.trustedCapabilities?.vaultGrants || {};

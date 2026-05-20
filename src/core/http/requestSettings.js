@@ -38,7 +38,7 @@ function normalizeRequestSettings(settings = {}) {
     followOriginalHttpMethod: normalizeBoolean(source.followOriginalHttpMethod, false),
     followAuthorizationHeader: normalizeBoolean(source.followAuthorizationHeader, false),
     removeRefererHeaderOnRedirect: normalizeBoolean(source.removeRefererHeaderOnRedirect, false),
-    strictHttpParser: normalizeBoolean(source.strictHttpParser, false),
+    strictHttpParser: normalizeBoolean(source.strictHttpParser, true),
     encodeUrlAutomatically: normalizeBoolean(
       source.encodeUrlAutomatically ?? invertBooleanLike(source.disableUrlEncoding),
       true

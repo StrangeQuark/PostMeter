@@ -352,7 +352,7 @@ function normalizeRendererGlobalSslVerification(value) {
       return false;
     }
   }
-  return false;
+  return true;
 }
 
 function normalizeRendererClientCertificates(values) {
@@ -387,7 +387,7 @@ const RENDERER_DEFAULT_REQUEST_SETTINGS = Object.freeze({
   followOriginalHttpMethod: false,
   followAuthorizationHeader: false,
   removeRefererHeaderOnRedirect: false,
-  strictHttpParser: false,
+  strictHttpParser: true,
   encodeUrlAutomatically: true,
   maxRedirects: 10,
   useServerCipherSuiteDuringHandshake: false,
@@ -404,7 +404,7 @@ function normalizeRendererRequestTlsSettings(value = {}) {
     followOriginalHttpMethod: source.followOriginalHttpMethod === true,
     followAuthorizationHeader: source.followAuthorizationHeader === true,
     removeRefererHeaderOnRedirect: source.removeRefererHeaderOnRedirect === true,
-    strictHttpParser: source.strictHttpParser === true,
+    strictHttpParser: source.strictHttpParser !== false,
     encodeUrlAutomatically: source.encodeUrlAutomatically !== false,
     maxRedirects: normalizeRendererMaxRedirects(source.maxRedirects),
     useServerCipherSuiteDuringHandshake: source.useServerCipherSuiteDuringHandshake === true,

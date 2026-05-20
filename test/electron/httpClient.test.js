@@ -693,6 +693,23 @@ test('request setting toggles strict HTTP response parsing', async () => {
     await lenient.close();
   }
 
+  const defaultStrict = await createRawHttpServer('HTTP/1.1 200 OK\r\nX-Test: hello\x01\r\nContent-Length: 2\r\n\r\nok');
+  try {
+    await assert.rejects(
+      () => sendRequest({
+        method: 'GET',
+        url: defaultStrict.baseUrl,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: ''
+      }, null),
+      /Invalid header value char|Parse Error/
+    );
+  } finally {
+    await defaultStrict.close();
+  }
+
   const strict = await createRawHttpServer('HTTP/1.1 200 OK\r\nX-Test: hello\x01\r\nContent-Length: 2\r\n\r\nok');
   try {
     await assert.rejects(
@@ -1252,9 +1269,7 @@ test('applies SSL verification settings, custom CA bundles, and TLS response dia
   };
 
   try {
-    const defaultInsecureResult = await sendRequest(request, null, { collectTimings: true });
-    assert.equal(defaultInsecureResult.statusCode, 200);
-    assert.equal(defaultInsecureResult.tls.verificationDisabled, true);
+    await assert.rejects(() => sendRequest(request, null, { collectTimings: true }));
 
     await assert.rejects(() => sendRequest(request, null, {
       tlsSettings: {

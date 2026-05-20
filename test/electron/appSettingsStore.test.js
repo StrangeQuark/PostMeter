@@ -227,7 +227,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(workspaceBSettings.updates.includePrereleases, true);
   assert.equal(workspaceBSettings.updates.startupRemindersEnabled, false);
   assert.equal(workspaceBSettings.diagnostics.requestResponseLogging.urls, false);
-  assert.equal(workspaceBSettings.request.sslCertificateVerification, false);
+  assert.equal(workspaceBSettings.request.sslCertificateVerification, true);
   assert.equal(workspaceBSettings.request.caCertificatePath, '');
   assert.deepEqual(workspaceBSettings.request.clientCertificates, []);
   assert.equal(workspaceBSettings.sandbox.trustedCapabilities.sendRequest, false);

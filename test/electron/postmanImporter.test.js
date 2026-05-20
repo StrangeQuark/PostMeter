@@ -193,7 +193,7 @@ test('imports and exports Postman request settings protocol profile controls', (
   });
   assert.equal(autoCollection.requests[0].settings.httpVersion, 'auto');
   assert.equal(autoCollection.requests[1].settings.httpVersion, 'auto');
-  assert.equal(exportPostmanCollection(autoCollection).item[0].request.protocolProfileBehavior, undefined);
+  assert.deepEqual(exportPostmanCollection(autoCollection).item[0].request.protocolProfileBehavior, { strictHttpParser: true });
 
   const collection = importPostmanCollection({
     info: {
@@ -272,7 +272,7 @@ test('imports and exports Postman request settings protocol profile controls', (
     followOriginalHttpMethod: false,
     followAuthorizationHeader: false,
     removeRefererHeaderOnRedirect: false,
-    strictHttpParser: false,
+    strictHttpParser: true,
     encodeUrlAutomatically: true,
     maxRedirects: 10,
     useServerCipherSuiteDuringHandshake: false,
@@ -286,6 +286,7 @@ test('imports and exports Postman request settings protocol profile controls', (
   assert.equal(profile.strictSSL, undefined);
   assert.equal(profile.httpVersion, undefined);
   assert.equal(profile.followRedirects, undefined);
+  assert.equal(profile.strictHttpParser, true);
   assert.equal(profile.disableUrlEncoding, undefined);
   assert.equal(profile.maxRedirects, undefined);
   assert.equal(profile.cipherSuiteSelection, undefined);

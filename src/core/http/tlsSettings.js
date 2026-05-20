@@ -45,7 +45,7 @@ function normalizeGlobalVerification(source = {}) {
       return true;
     }
   }
-  return false;
+  return true;
 }
 
 function normalizeManagedClientCertificates(certificates) {

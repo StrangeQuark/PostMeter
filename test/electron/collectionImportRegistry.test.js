@@ -189,6 +189,6 @@ test('collection import and export preserve Postman request settings through reg
   assert.equal(exportedAll.useServerCipherSuiteDuringHandshake, true);
   assert.deepEqual(exportedAll.disabledTlsProtocols, ['TLSv1', 'TLSv1.1']);
   assert.equal(exportedAll.cipherSuiteSelection, 'AES128-SHA');
-  assert.equal(exportedDefaults, undefined);
+  assert.deepEqual(exportedDefaults, { strictHttpParser: true });
   assert.equal(exportedHttp1.httpVersion, 'http1');
 });
