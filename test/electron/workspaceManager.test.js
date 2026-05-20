@@ -153,6 +153,14 @@ test('workspace manager discovers, unlocks, exports, duplicates, and imports enc
 
   const duplicateId = await lockedManager.duplicateWorkspace(loaded.activeWorkspaceId);
   assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(await fs.readFile(path.join(temp, duplicateId), 'utf8'))), true);
+  const duplicateItem = (await lockedManager.listWorkspaceItems()).find((item) => item.id === duplicateId);
+  assert.equal(duplicateItem.encrypted, true);
+  assert.equal(duplicateItem.locked, true);
+  assert.equal(duplicateItem.requestCount, 0);
+  await assert.rejects(
+    () => lockedManager.unlockWorkspace(duplicateId, 'secret1'),
+    /Only the active workspace can be unlocked/
+  );
 
   const importPath = path.join(importTemp, 'Shared.postmeter.json');
   await fs.writeFile(importPath, await fs.readFile(exportPath, 'utf8'));
@@ -162,6 +170,65 @@ test('workspace manager discovers, unlocks, exports, duplicates, and imports enc
   const importedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(importedText), 'secret1');
   assert.equal(Object.hasOwn(importedWorkspace, 'localsettings'), false);
   assert.equal(importedWorkspace.collections[0].requests[0].name, 'Updated SSN Request');
+});
+
+test('workspace manager only unlocks the active workspace and keeps export keys transient', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-active-unlock-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  const loaded = await manager.load();
+  const encryptedWorkspaceId = loaded.activeWorkspaceId;
+  loaded.workspace.collections.push({
+    id: 'collection-1',
+    name: 'Sensitive Collection',
+    description: '',
+    variables: [],
+    certificates: [],
+    requests: [{ id: 'request-1', name: 'Sensitive Request', method: 'GET', url: 'https://example.test/private' }],
+    folders: []
+  });
+  await manager.encryptWorkspace(encryptedWorkspaceId, loaded.workspace, 'secret1');
+  assert.equal(manager.encryptionKeyForWorkspace(encryptedWorkspaceId), 'secret1');
+
+  const plaintextWorkspaceId = await manager.createWorkspace({ name: 'Plain Workspace' });
+  const switchedToPlaintext = await manager.switchWorkspace(plaintextWorkspaceId);
+  assert.equal(switchedToPlaintext.activeWorkspaceId, plaintextWorkspaceId);
+  assert.equal(manager.encryptionKeyForWorkspace(encryptedWorkspaceId), '');
+  const inactiveEncrypted = switchedToPlaintext.workspaces.find((item) => item.id === encryptedWorkspaceId);
+  assert.equal(inactiveEncrypted.encrypted, true);
+  assert.equal(inactiveEncrypted.locked, true);
+  assert.equal(inactiveEncrypted.requestCount, 0);
+
+  await assert.rejects(
+    () => manager.unlockWorkspace(encryptedWorkspaceId, 'secret1'),
+    /Only the active workspace can be unlocked/
+  );
+  await assert.rejects(
+    () => manager.removeWorkspaceEncryption(encryptedWorkspaceId, 'secret1'),
+    /Only the active workspace can have encryption removed/
+  );
+
+  const exportPath = path.join(temp, 'inactive-encrypted-export.json');
+  await manager.exportWorkspaceById(encryptedWorkspaceId, exportPath, { encryptionKey: 'secret1' });
+  const exportedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(await fs.readFile(exportPath, 'utf8')), 'secret1');
+  assert.equal(exportedWorkspace.collections[0].requests[0].name, 'Sensitive Request');
+  assert.equal(manager.encryptionKeyForWorkspace(encryptedWorkspaceId), '');
+  const afterTransientExport = (await manager.listWorkspaceItems()).find((item) => item.id === encryptedWorkspaceId);
+  assert.equal(afterTransientExport.locked, true);
+  assert.equal(afterTransientExport.requestCount, 0);
+
+  const switchedToEncrypted = await manager.switchWorkspace(encryptedWorkspaceId);
+  assert.equal(switchedToEncrypted.activeWorkspaceId, encryptedWorkspaceId);
+  assert.equal(switchedToEncrypted.locked, true);
+  const unlocked = await manager.unlockWorkspace(encryptedWorkspaceId, 'secret1');
+  assert.equal(unlocked.locked, false);
+  assert.equal(unlocked.workspaces.find((item) => item.id === encryptedWorkspaceId).requestCount, 1);
+
+  const switchedAway = await manager.switchWorkspace(plaintextWorkspaceId);
+  assert.equal(switchedAway.activeWorkspaceId, plaintextWorkspaceId);
+  assert.equal(manager.encryptionKeyForWorkspace(encryptedWorkspaceId), '');
+  assert.equal(switchedAway.workspaces.find((item) => item.id === encryptedWorkspaceId).locked, true);
 });
 
 test('workspace manager can snapshot and restore a deleted managed workspace for rollback', async () => {

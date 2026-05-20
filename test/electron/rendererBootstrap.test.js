@@ -1863,6 +1863,21 @@ test('renderer bootstrap binds tutorial modal and overlay controls', () => {
   ]);
 });
 
+test('tutorial overlay captures background interactions while coach remains interactive', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const overlaysSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'styles', 'overlays.css'), 'utf8');
+  const rendererSource = await readRendererBundleSource(root);
+
+  assert.match(overlaysSource, /\.tutorial-overlay\s*\{[\s\S]*pointer-events:\s*auto;/);
+  assert.match(overlaysSource, /\.tutorial-target-frame\s*\{[\s\S]*pointer-events:\s*none;/);
+  assert.match(overlaysSource, /\.tutorial-coach\s*\{[\s\S]*pointer-events:\s*auto;/);
+  assert.match(rendererSource, /TUTORIAL_BACKGROUND_BLOCKED_EVENTS/);
+  assert.match(rendererSource, /document\.addEventListener\('keydown', tutorialBackgroundInteractionHandler, true\)/);
+  assert.match(rendererSource, /document\.addEventListener\('focusin', tutorialBackgroundInteractionHandler, true\)/);
+  assert.match(rendererSource, /document\.addEventListener\(eventName, tutorialBackgroundInteractionHandler, TUTORIAL_BACKGROUND_EVENT_OPTIONS\)/);
+  assert.match(rendererSource, /function trapTutorialCoachFocus\(event, coach\)/);
+});
+
 test('renderer bootstrap keeps active modals open when the backdrop is clicked by default', () => {
   let cancelCount = 0;
   const elements = new Map([

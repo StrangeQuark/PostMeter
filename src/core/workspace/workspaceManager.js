@@ -48,6 +48,7 @@ class WorkspaceManager {
     const catalog = await this.ensureCatalog(options.preferredWorkspaceId);
     this.currentWorkspaceId = catalog.currentWorkspaceId;
     this.currentWorkspacePath = this.absoluteWorkspacePath(catalog.currentWorkspaceId);
+    this.pruneWorkspaceEncryptionKeys(this.currentWorkspaceId);
     const store = this.currentStore();
     try {
       const loaded = await store.load({ encryptionKey: this.encryptionKeyForWorkspace(this.currentWorkspaceId) });
@@ -172,10 +173,6 @@ class WorkspaceManager {
         await fs.readFile(this.absoluteWorkspacePath(workspaceId), 'utf8'),
         catalog.files
       );
-      const sourceKey = this.encryptionKeyForWorkspace(workspaceId);
-      if (sourceKey) {
-        this.workspaceEncryptionKeys.set(duplicatedWorkspaceId, sourceKey);
-      }
       return duplicatedWorkspaceId;
     }
     const sourceWorkspace = await this.loadWorkspaceById(workspaceId);
@@ -291,13 +288,15 @@ class WorkspaceManager {
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
+    if (workspaceId !== this.currentWorkspaceId) {
+      throw new Error('Only the active workspace can be unlocked. Switch to the workspace before unlocking it.');
+    }
     const loaded = await new WorkspaceStore(this.absoluteWorkspacePath(workspaceId)).load({ encryptionKey });
     if (loaded.encrypted !== true) {
       throw new Error(`Workspace "${workspaceId}" is not encrypted.`);
     }
-    this.workspaceEncryptionKeys.set(workspaceId, encryptionKey);
-    this.currentWorkspaceId = workspaceId;
-    this.currentWorkspacePath = this.absoluteWorkspacePath(workspaceId);
+    this.workspaceEncryptionKeys.clear();
+    this.workspaceEncryptionKeys.set(this.currentWorkspaceId, encryptionKey);
     return this.describeCurrent(loaded.workspace, {
       encrypted: loaded.encrypted === true,
       locked: false
@@ -315,8 +314,9 @@ class WorkspaceManager {
       ? normalizeWorkspace(workspace)
       : await targetStore.load().then((loaded) => loaded.workspace);
     const saved = await targetStore.encryptWorkspace(sourceWorkspace, encryptionKey);
-    this.workspaceEncryptionKeys.set(workspaceId, encryptionKey);
     if (workspaceId === this.currentWorkspaceId) {
+      this.workspaceEncryptionKeys.clear();
+      this.workspaceEncryptionKeys.set(workspaceId, encryptionKey);
       return this.describeCurrent(saved, { encrypted: true, locked: false });
     }
     return this.describeCurrent(workspace, { encrypted: await this.isWorkspaceEncrypted(this.currentWorkspaceId), locked: false });
@@ -328,16 +328,13 @@ class WorkspaceManager {
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
+    if (workspaceId !== this.currentWorkspaceId) {
+      throw new Error('Only the active workspace can have encryption removed. Switch to the workspace before decrypting it.');
+    }
     const targetStore = new WorkspaceStore(this.absoluteWorkspacePath(workspaceId));
     const saved = await targetStore.removeEncryption(encryptionKey);
     this.workspaceEncryptionKeys.delete(workspaceId);
-    if (workspaceId === this.currentWorkspaceId) {
-      return this.describeCurrent(saved, { encrypted: false, locked: false });
-    }
-    return this.describeCurrent(currentWorkspace, {
-      encrypted: await this.isWorkspaceEncrypted(this.currentWorkspaceId),
-      locked: false
-    });
+    return this.describeCurrent(saved, { encrypted: false, locked: false });
   }
 
   async deleteWorkspace(workspaceId) {
@@ -369,16 +366,34 @@ class WorkspaceManager {
   }
 
   encryptionKeyForWorkspace(workspaceId) {
-    return this.workspaceEncryptionKeys.get(String(workspaceId || '')) || '';
+    const normalizedWorkspaceId = String(workspaceId || '');
+    if (!normalizedWorkspaceId || normalizedWorkspaceId !== this.currentWorkspaceId) {
+      return '';
+    }
+    return this.workspaceEncryptionKeys.get(normalizedWorkspaceId) || '';
   }
 
   setWorkspaceEncryptionKey(workspaceId, encryptionKey) {
     assertWorkspaceEncryptionKey(encryptionKey);
-    this.workspaceEncryptionKeys.set(String(workspaceId || this.currentWorkspaceId || ''), encryptionKey);
+    const normalizedWorkspaceId = String(workspaceId || this.currentWorkspaceId || '');
+    if (!normalizedWorkspaceId || normalizedWorkspaceId !== this.currentWorkspaceId) {
+      throw new Error('Only the active workspace can be unlocked.');
+    }
+    this.workspaceEncryptionKeys.clear();
+    this.workspaceEncryptionKeys.set(normalizedWorkspaceId, encryptionKey);
   }
 
   clearWorkspaceEncryptionKey(workspaceId) {
     this.workspaceEncryptionKeys.delete(String(workspaceId || this.currentWorkspaceId || ''));
+  }
+
+  pruneWorkspaceEncryptionKeys(activeWorkspaceId = this.currentWorkspaceId) {
+    const normalizedActiveWorkspaceId = String(activeWorkspaceId || '');
+    for (const workspaceId of this.workspaceEncryptionKeys.keys()) {
+      if (workspaceId !== normalizedActiveWorkspaceId) {
+        this.workspaceEncryptionKeys.delete(workspaceId);
+      }
+    }
   }
 
   absoluteWorkspacePath(filename) {

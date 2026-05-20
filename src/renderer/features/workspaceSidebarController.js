@@ -233,9 +233,9 @@ function workspaceNode(workspaceItem) {
     ['Duplicate', () => { void duplicateWorkspace(workspaceItem.id); }],
     ['Export', () => { void exportWorkspace(workspaceItem.id); }]
   ];
-  if (workspaceItem.encrypted === true && workspaceItem.locked === true) {
+  if (workspaceItem.encrypted === true && workspaceItem.locked === true && workspaceItem.current === true) {
     menuItems.splice(1, 0, ['Unlock Workspace', () => { void unlockWorkspace(workspaceItem.id); }]);
-  } else if (workspaceItem.encrypted === true) {
+  } else if (workspaceItem.encrypted === true && workspaceItem.locked !== true) {
     menuItems.splice(1, 0, ['Decrypt Workspace', () => { void removeWorkspaceEncryption(workspaceItem.id); }]);
   } else {
     menuItems.splice(1, 0, ['Encrypt Workspace', () => { void encryptWorkspace(workspaceItem.id); }]);
@@ -275,15 +275,17 @@ function renderWorkspacePanel() {
   title.setAttribute('aria-label', 'Workspace name');
   const encrypted = workspaceItem?.encrypted === true;
   const locked = workspaceItem?.locked === true;
-  $('switchWorkspacePanelButton').disabled = !workspaceItem || workspaceItem.current === true;
+  const switchButton = $('switchWorkspacePanelButton');
+  switchButton.textContent = workspaceItem?.current === true && encrypted && locked
+    ? 'Unlock Workspace'
+    : 'Switch to this Workspace';
+  switchButton.disabled = !workspaceItem || (workspaceItem.current === true && !(encrypted && locked));
   $('deleteWorkspacePanelButton').disabled = !workspaceItem || workspaceListItems().length <= 1;
   $('exportWorkspacePanelButton').disabled = !workspaceItem;
-  $('unlockWorkspacePanelButton').hidden = !encrypted || !locked;
-  $('unlockWorkspacePanelButton').disabled = !workspaceItem;
   $('encryptWorkspacePanelButton').hidden = encrypted;
   $('encryptWorkspacePanelButton').disabled = !workspaceItem || locked;
-  $('removeWorkspaceEncryptionPanelButton').hidden = !encrypted || locked;
-  $('removeWorkspaceEncryptionPanelButton').disabled = !workspaceItem;
+  $('removeWorkspaceEncryptionPanelButton').hidden = !encrypted;
+  $('removeWorkspaceEncryptionPanelButton').disabled = !workspaceItem || locked;
   if ($('trustedScriptSendRequestInput')) {
     $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
   }

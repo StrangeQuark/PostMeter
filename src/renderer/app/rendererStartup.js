@@ -111,7 +111,6 @@ function bindUi() {
     onRequestTlsSettingsChange: (event) => setActiveRequestTlsSettingsFromInputs(event),
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
-    onUnlockWorkspace: () => { void unlockWorkspace(); },
     onEncryptWorkspace: () => { void encryptWorkspace(); },
     onRemoveWorkspaceEncryption: () => { void removeWorkspaceEncryption(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },

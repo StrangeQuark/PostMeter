@@ -255,7 +255,6 @@
     bindClick(doc, 'setEnvironmentButton', options.onSetEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
-    bindClick(doc, 'unlockWorkspacePanelButton', options.onUnlockWorkspace);
     bindClick(doc, 'encryptWorkspacePanelButton', options.onEncryptWorkspace);
     bindClick(doc, 'removeWorkspaceEncryptionPanelButton', options.onRemoveWorkspaceEncryption);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);

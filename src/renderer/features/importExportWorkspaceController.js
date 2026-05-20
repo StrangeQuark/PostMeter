@@ -443,6 +443,9 @@ async function switchWorkspace(workspaceId, options = {}) {
       return null;
     }
     if (workspaceId === activeWorkspaceId) {
+      if (workspaceItem.encrypted === true && workspaceItem.locked === true) {
+        return unlockWorkspace(workspaceId, options);
+      }
       return selectWorkspaceItem(workspaceId);
     }
     if (!(await prepareForWorkspaceChange('switching workspaces'))) {
@@ -469,6 +472,9 @@ async function unlockWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     setStatus('Select a workspace before unlocking.');
     return null;
   }
+  if (workspaceId !== activeWorkspaceId) {
+    return switchWorkspace(workspaceId, { focus: options.focus || 'workspace' });
+  }
   const key = await promptWorkspaceEncryptionKey({
     mode: 'unlock',
     title: 'Unlock workspace',
@@ -480,9 +486,6 @@ async function unlockWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     return null;
   }
   try {
-    if (workspaceId !== activeWorkspaceId && !(await prepareForWorkspaceChange('unlocking a workspace'))) {
-      return null;
-    }
     const loaded = await window.postmeter.workspace.unlock(workspaceId, key);
     applyLoadedWorkspace(loaded, { focus: options.focus || 'workspace', selectedWorkspaceId: workspaceId });
     setStatus(`Unlocked workspace: ${workspaceDisplayName()}.`);
@@ -543,6 +546,9 @@ async function removeWorkspaceEncryption(workspaceId = selectedWorkspaceId || ac
   if (!workspaceItem) {
     setStatus('Select a workspace before removing encryption.');
     return null;
+  }
+  if (workspaceId !== activeWorkspaceId) {
+    return switchWorkspace(workspaceId, { focus: 'workspace' });
   }
   if (workspaceItem.encrypted !== true) {
     setStatus('Workspace is not encrypted.');

@@ -741,7 +741,7 @@
         {
           selector: '#encryptWorkspacePanelButton:not([hidden]), #removeWorkspaceEncryptionPanelButton:not([hidden])',
           title: 'Protect sensitive workspaces',
-          body: 'Encrypt Workspace saves plaintext workspaces encrypted at rest and removes old unencrypted backups. Decrypt Workspace is shown after an encrypted workspace is unlocked. PostMeter does not store the key.',
+          body: 'Encrypt Workspace saves plaintext workspaces encrypted at rest and removes old unencrypted backups. Decrypt Workspace appears for encrypted workspaces and is clickable after the workspace is unlocked. PostMeter does not store the key.',
           beforeStep: tutorialEnsureWorkspaceContext
         },
         {

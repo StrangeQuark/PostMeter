@@ -697,7 +697,7 @@
   position: fixed;
   inset: 0;
   z-index: 1200;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .tutorial-overlay[hidden] {
