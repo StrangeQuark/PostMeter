@@ -182,7 +182,7 @@ function runnerModel({
     name: normalizeName(name, 'Untitled Runner'),
     environmentId: normalizeRunnerEnvironmentId(environmentId),
     allowEnvironmentMutation: allowEnvironmentMutation === true,
-    stopOnFailure: stopOnFailure === true,
+    stopOnFailure: stopOnFailure !== false,
     capturePolicy: normalizeCapturePolicy(capturePolicy, 'runner'),
     authRefresh: normalizeAuthRefreshConfig(authRefresh),
     csvVariables: normalizeCsvVariableDataDefaultOff(csvVariables),

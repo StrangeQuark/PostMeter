@@ -397,7 +397,7 @@ function applyRunnerAuthRefreshRequestSaveToWorkspace(workspace, payload) {
       id: runnerId,
       name: payload.runnerShell.name || 'Untitled Runner',
       environmentId: payload.runnerShell.environmentId || 'none',
-      stopOnFailure: payload.runnerShell.stopOnFailure === true,
+      stopOnFailure: payload.runnerShell.stopOnFailure !== false,
       allowEnvironmentMutation: payload.runnerShell.allowEnvironmentMutation === true,
       authRefresh: cloneJson(payload.runnerShell.authRefresh || payload.authRefresh || {}),
       requests: Array.isArray(payload.runnerShell.requests) ? cloneJson(payload.runnerShell.requests) : []
@@ -476,7 +476,7 @@ function applyRunnerRequestSaveToWorkspace(workspace, payload) {
       id: runnerId,
       name: payload.runnerShell.name || 'Untitled Runner',
       environmentId: payload.runnerShell.environmentId || 'none',
-      stopOnFailure: payload.runnerShell.stopOnFailure === true,
+      stopOnFailure: payload.runnerShell.stopOnFailure !== false,
       allowEnvironmentMutation: payload.runnerShell.allowEnvironmentMutation === true,
       requests: []
     };

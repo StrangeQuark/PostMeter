@@ -97,7 +97,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 
 The desktop Help menu includes a Tutorials action that opens a renderer modal backed by static tutorial definitions in `src/renderer/renderer.js`. The modal is rendered in `src/renderer/index.html`, styled by `src/renderer/overlays.css`, and wired through `src/renderer/rendererBootstrap.js`. Tutorial start/end/step navigation is renderer-only state. The overlay highlights live DOM targets by selector and positions a coach panel beside the target. Step setup callbacks may create unsaved draft requests, environments, or runners so the user can inspect real controls without requiring saved fixture data.
 
-The current tutorial IDs are `request-basics`, `environment-variables`, and `runner-basics`. Future tutorial implementation notes and extension rules live in [TUTORIALS.md](../TUTORIALS.md).
+The current tutorial catalog uses full guided walkthroughs such as `request`, `environment-variables`, `runner`, and `performance`. Future tutorial implementation notes and extension rules live in [TUTORIALS.md](../TUTORIALS.md).
 
 ## Runtime Requirements
 
@@ -814,6 +814,7 @@ Runner behavior:
 - Models each runner as `{ id, name, environmentId, allowEnvironmentMutation, stopOnFailure, capturePolicy, requests }`.
 - Stores runner-owned requests as independent request objects. Importing collection requests deep-clones them into the runner with new runner-local IDs, so runner edits and executions do not mutate source collection requests.
 - Creates runners from `New` > `Runner` in the top toolbar or from the `New Runner` action in the empty Runners pane.
+- Enables stop-on-failure by default for new runners. Users can turn it off from the runner Advanced menu when a workflow should continue after failures.
 - Adds runner requests through either local `New Request` creation or an `Import` modal. The modal shows collections first, expands a collection only when selected, and supports Shift+click/Ctrl+click multi-select across collections and requests before adding.
 - Opens runner-owned request copies in normal request editor tabs through each row's `Edit` action. Saving that tab persists only the runner request copy, and discard/close reverts the runner row back to the saved runner request state.
 - Lets users set per-row iterations, delete, and reorder runner request rows. Drag/drop and row-order controls update runner-local order without touching source collections.

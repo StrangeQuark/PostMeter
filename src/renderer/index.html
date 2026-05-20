@@ -307,11 +307,11 @@
         <div id="headersTab" class="tab-panel" role="tabpanel" aria-labelledby="requestHeadersTabButton">
           <div class="table-actions">
             <button id="addHeaderButton">Add Header</button>
-            <label class="inline-toggle headers-auto-toggle" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
+            <label id="sendPostMeterTokenField" class="inline-toggle headers-auto-toggle" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
               <input id="sendPostMeterTokenInput" type="checkbox" title="Adds a generated PostMeter-Token header with a new random value when the request is sent. Use it to correlate requests without saving a fixed token.">
               <span>PostMeter token</span>
             </label>
-            <label class="inline-toggle headers-auto-toggle">
+            <label id="showGeneratedHeadersField" class="inline-toggle headers-auto-toggle">
               <input id="showGeneratedHeadersInput" type="checkbox">
               <span id="showGeneratedHeadersLabel">Show auto-generated headers</span>
             </label>
@@ -1056,7 +1056,7 @@
           <div class="request-settings-grid">
             <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
               <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-              <label class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+              <label id="requestSslCertificateVerificationField" class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                 <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                 <span>Enable SSL certificate verification</span>
               </label>
@@ -1243,9 +1243,9 @@
                   <button id="runnerEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
                 </div>
                 <div id="runnerAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Runner refreshing auth settings" hidden>
-                <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="runnerAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
+                <label id="runnerAuthRefreshCredentialTypeField" class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="runnerAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
                 <datalist id="runnerAuthRefreshVariableList"></datalist>
-                <div class="auth-refresh-request-card">
+                <div id="runnerAuthRefreshRequestCard" class="auth-refresh-request-card">
                   <div class="auth-refresh-request-copy">
                     <span>Auth request</span>
                     <strong id="runnerAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
@@ -1263,7 +1263,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer">
+                <div id="runnerAuthRefreshAccessTokenPanel" class="auth-refresh-type-panel" data-auth-refresh-types="bearer">
                   <div class="auth-refresh-field-grid">
                     <label class="field compact"><span>Read Access Token From</span><select id="runnerAuthRefreshAccessTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
                     <label id="runnerAuthRefreshAccessTokenPathField" class="field compact"><span id="runnerAuthRefreshAccessTokenPathLabel">Access Token Response Path</span><input id="runnerAuthRefreshAccessTokenPathInput" autocomplete="off" placeholder="access_token"></label>
@@ -1298,13 +1298,13 @@
                     <label id="runnerAuthRefreshCustomPathField" class="field compact"><span id="runnerAuthRefreshCustomPathLabel">Header Value Response Path</span><input id="runnerAuthRefreshCustomPathInput" autocomplete="off" placeholder="token"></label>
                   </div>
                 </div>
-                <div class="auth-refresh-field-grid auth-refresh-schedule-grid">
+                <div id="runnerAuthRefreshScheduleSection" class="auth-refresh-field-grid auth-refresh-schedule-grid">
                   <label class="field compact-number-field"><span>Refresh Every (s)</span><input id="runnerAuthRefreshIntervalSecondsInput" type="number" min="1" max="86400" step="1"></label>
                 </div>
-                <details class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie">
+                <details id="runnerAuthRefreshRefreshTokenDetails" class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie">
                   <summary>Refresh Token</summary>
                   <p>Use this when the access-token request needs a refreshed refresh token.</p>
-                  <div class="auth-refresh-request-card">
+                  <div id="runnerAuthRefreshTokenRequestCard" class="auth-refresh-request-card">
                     <div class="auth-refresh-request-copy">
                       <span>Refresh token request</span>
                       <strong id="runnerAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
@@ -1327,18 +1327,18 @@
                     <label id="runnerAuthRefreshRefreshTokenPathField" class="field compact"><span id="runnerAuthRefreshRefreshTokenPathLabel">Refresh Token Response Path</span><input id="runnerAuthRefreshRefreshTokenPathInput" autocomplete="off"></label>
                   </div>
                 </details>
-                <details class="auth-refresh-advanced">
+                <details id="runnerAuthRefreshAdvancedDetails" class="auth-refresh-advanced">
                   <summary>Advanced</summary>
                   <p>Use these when you need named variables or custom failure behavior.</p>
                   <div class="auth-refresh-field-grid">
-                    <label class="field compact" data-auth-refresh-types="bearer"><span id="runnerAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="runnerAuthRefreshAccessTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
-                    <label class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="runnerAuthRefreshCookieVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
-                    <label class="field compact" data-auth-refresh-types="bearer cookie"><span>Save Refresh Token To</span><input id="runnerAuthRefreshRefreshTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off"></label>
-                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="runnerAuthRefreshAwsAccessKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
-                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="runnerAuthRefreshAwsSecretKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
-                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="runnerAuthRefreshAwsSessionTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
-                    <label class="checkbox-line auth-refresh-before-run"><input id="runnerAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
-                    <label class="field compact"><span>On Failure</span><select id="runnerAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
+                    <label id="runnerAuthRefreshAccessTokenVariableField" class="field compact" data-auth-refresh-types="bearer"><span id="runnerAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="runnerAuthRefreshAccessTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                    <label id="runnerAuthRefreshCookieVariableField" class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="runnerAuthRefreshCookieVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
+                    <label id="runnerAuthRefreshRefreshTokenVariableField" class="field compact" data-auth-refresh-types="bearer cookie"><span>Save Refresh Token To</span><input id="runnerAuthRefreshRefreshTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off"></label>
+                    <label id="runnerAuthRefreshAwsAccessKeyVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="runnerAuthRefreshAwsAccessKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                    <label id="runnerAuthRefreshAwsSecretKeyVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="runnerAuthRefreshAwsSecretKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                    <label id="runnerAuthRefreshAwsSessionTokenVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="runnerAuthRefreshAwsSessionTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
+                    <label id="runnerAuthRefreshBeforeRunOption" class="checkbox-line auth-refresh-before-run"><input id="runnerAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
+                    <label id="runnerAuthRefreshFailurePolicyField" class="field compact"><span>On Failure</span><select id="runnerAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
                   </div>
                 </details>
                 </div>
@@ -1346,11 +1346,11 @@
               <div class="capture-settings-menu-group runner-advanced-settings-menu-group">
                 <button id="runnerAdvancedSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerAdvancedSettingsPanel">Advanced</button>
                 <div id="runnerAdvancedSettingsPanel" class="capture-settings-panel runner-advanced-settings-panel" role="group" aria-label="Runner advanced settings" hidden>
-                  <label class="checkbox-line">
+                  <label id="runnerStopOnFailureField" class="checkbox-line">
                     <input id="runnerStopOnFailure" type="checkbox">
                     <span>Stop on failure</span>
                   </label>
-                  <label class="checkbox-line">
+                  <label id="runnerAllowEnvironmentMutationField" class="checkbox-line">
                     <input id="runnerAllowEnvironmentMutation" type="checkbox">
                     <span>Allow runner to modify environment</span>
                   </label>
@@ -1478,9 +1478,9 @@
                                 <button id="performanceEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
                               </div>
                               <div id="performanceAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Performance refreshing auth settings" hidden>
-                                <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="performanceAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
+                                <label id="performanceAuthRefreshCredentialTypeField" class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="performanceAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
                                 <datalist id="performanceAuthRefreshVariableList"></datalist>
-                                <div class="auth-refresh-request-card">
+                                <div id="performanceAuthRefreshRequestCard" class="auth-refresh-request-card">
                                   <div class="auth-refresh-request-copy">
                                     <span>Auth request</span>
                                     <strong id="performanceAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
@@ -1498,7 +1498,7 @@
                                     </div>
                                   </div>
                                 </div>
-                                <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer">
+                                <div id="performanceAuthRefreshAccessTokenPanel" class="auth-refresh-type-panel" data-auth-refresh-types="bearer">
                                   <div class="auth-refresh-field-grid">
                                     <label class="field compact"><span>Read Access Token From</span><select id="performanceAuthRefreshAccessTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
                                     <label id="performanceAuthRefreshAccessTokenPathField" class="field compact"><span id="performanceAuthRefreshAccessTokenPathLabel">Access Token Response Path</span><input id="performanceAuthRefreshAccessTokenPathInput" autocomplete="off" placeholder="access_token"></label>
@@ -1533,13 +1533,13 @@
                                     <label id="performanceAuthRefreshCustomPathField" class="field compact"><span id="performanceAuthRefreshCustomPathLabel">Header Value Response Path</span><input id="performanceAuthRefreshCustomPathInput" autocomplete="off" placeholder="token"></label>
                                   </div>
                                 </div>
-                                <div class="auth-refresh-field-grid auth-refresh-schedule-grid">
+                                <div id="performanceAuthRefreshScheduleSection" class="auth-refresh-field-grid auth-refresh-schedule-grid">
                                   <label class="field compact-number-field"><span>Refresh Every (s)</span><input id="performanceAuthRefreshIntervalSecondsInput" type="number" min="1" max="86400" step="1"></label>
                                 </div>
-                                <details class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie">
+                                <details id="performanceAuthRefreshRefreshTokenDetails" class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie">
                                   <summary>Refresh Token</summary>
                                   <p>Use this when the access-token request needs a refreshed refresh token.</p>
-                                  <div class="auth-refresh-request-card">
+                                  <div id="performanceAuthRefreshTokenRequestCard" class="auth-refresh-request-card">
                                     <div class="auth-refresh-request-copy">
                                       <span>Refresh token request</span>
                                       <strong id="performanceAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
@@ -1562,18 +1562,18 @@
                                     <label id="performanceAuthRefreshRefreshTokenPathField" class="field compact"><span id="performanceAuthRefreshRefreshTokenPathLabel">Refresh Token Response Path</span><input id="performanceAuthRefreshRefreshTokenPathInput" autocomplete="off"></label>
                                   </div>
                                 </details>
-                                <details class="auth-refresh-advanced">
+                                <details id="performanceAuthRefreshAdvancedDetails" class="auth-refresh-advanced">
                                   <summary>Advanced</summary>
                                   <p>Use these when you need named variables or custom failure behavior.</p>
                                   <div class="auth-refresh-field-grid">
-                                    <label class="field compact" data-auth-refresh-types="bearer"><span id="performanceAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="performanceAuthRefreshAccessTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
-                                    <label class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="performanceAuthRefreshCookieVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
-                                    <label class="field compact" data-auth-refresh-types="bearer cookie"><span>Save Refresh Token To</span><input id="performanceAuthRefreshRefreshTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off"></label>
-                                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="performanceAuthRefreshAwsAccessKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
-                                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="performanceAuthRefreshAwsSecretKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
-                                    <label class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="performanceAuthRefreshAwsSessionTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
-                                    <label class="checkbox-line auth-refresh-before-run"><input id="performanceAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
-                                    <label class="field compact"><span>On Failure</span><select id="performanceAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
+                                    <label id="performanceAuthRefreshAccessTokenVariableField" class="field compact" data-auth-refresh-types="bearer"><span id="performanceAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="performanceAuthRefreshAccessTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                                    <label id="performanceAuthRefreshCookieVariableField" class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="performanceAuthRefreshCookieVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
+                                    <label id="performanceAuthRefreshRefreshTokenVariableField" class="field compact" data-auth-refresh-types="bearer cookie"><span>Save Refresh Token To</span><input id="performanceAuthRefreshRefreshTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off"></label>
+                                    <label id="performanceAuthRefreshAwsAccessKeyVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="performanceAuthRefreshAwsAccessKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                                    <label id="performanceAuthRefreshAwsSecretKeyVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="performanceAuthRefreshAwsSecretKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                                    <label id="performanceAuthRefreshAwsSessionTokenVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="performanceAuthRefreshAwsSessionTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
+                                    <label id="performanceAuthRefreshBeforeRunOption" class="checkbox-line auth-refresh-before-run"><input id="performanceAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
+                                    <label id="performanceAuthRefreshFailurePolicyField" class="field compact"><span>On Failure</span><select id="performanceAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
                                   </div>
                                 </details>
                               </div>
@@ -1581,7 +1581,7 @@
               <div class="capture-settings-menu-group performance-advanced-settings-menu-group">
                 <button id="performanceAdvancedSettingsButton" class="capture-settings-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="performanceAdvancedSettingsPanel">Advanced</button>
                 <div id="performanceAdvancedSettingsPanel" class="capture-settings-panel performance-advanced-settings-panel" role="group" aria-label="Advanced performance settings" hidden>
-                  <label class="checkbox-line performance-mutation-option">
+                  <label id="performanceAllowEnvironmentMutationField" class="checkbox-line performance-mutation-option">
                     <input id="performanceAllowEnvironmentMutationInput" data-performance-mutation type="checkbox" />
                     <span>Allow performance test to modify environment</span>
                   </label>
@@ -2465,7 +2465,7 @@
               <div class="request-settings-grid">
                 <section class="request-settings-section" aria-labelledby="performanceCertificatesSettingsTitle">
                   <h3 id="performanceCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-                  <label class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
+                  <label id="performanceRequestSslCertificateVerificationField" class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                     <input id="performanceRequestSslCertificateVerificationInput" type="checkbox" data-performance-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
                     <span>Enable SSL certificate verification</span>
                   </label>
@@ -2822,7 +2822,7 @@
             <h3>Certificates</h3>
             <div class="settings-card">
               <div class="settings-card-title">Server Certificates</div>
-              <label class="settings-toggle">
+              <label id="sslCertificateVerificationField" class="settings-toggle">
                 <input id="sslCertificateVerificationInput" type="checkbox">
                 <span>SSL certificate verification</span>
               </label>
@@ -3250,7 +3250,7 @@
             <button id="toggleClientCertificatePassphraseButton" type="button" aria-controls="clientCertificatePassphraseInput" aria-pressed="false" aria-label="Show client certificate passphrase">Show</button>
           </div>
         </div>
-        <label class="checkbox-line client-certificate-enabled-field">
+        <label id="clientCertificateEnabledField" class="checkbox-line client-certificate-enabled-field">
           <input id="clientCertificateEnabledInput" type="checkbox">
           <span>Enable certificate</span>
         </label>
@@ -3273,7 +3273,7 @@
           <span>Variable schema</span>
           <input id="csvVariablesSchemaInput" type="text" spellcheck="false" autocomplete="off" data-variable-highlight="false" placeholder="requestName,requestUrl,requestBody">
         </label>
-        <section class="csv-variables-section" aria-labelledby="csvVariablesSourceTitle">
+        <section id="csvVariablesSourceSection" class="csv-variables-section" aria-labelledby="csvVariablesSourceTitle">
           <div class="csv-variables-section-heading">
             <h3 id="csvVariablesSourceTitle">CSV data source</h3>
             <div class="csv-variables-source-pills" role="group" aria-label="Active CSV data source">
@@ -3313,19 +3313,19 @@
             </div>
           </div>
         </section>
-        <section class="csv-variables-section csv-variables-row-section" aria-labelledby="csvVariablesRowHandlingTitle">
+        <section id="csvVariablesRowSection" class="csv-variables-section csv-variables-row-section" aria-labelledby="csvVariablesRowHandlingTitle">
           <div class="csv-variables-section-heading">
             <h3 id="csvVariablesRowHandlingTitle">CSV row usage</h3>
           </div>
-          <label class="checkbox-line csv-variables-loop-option">
+          <label id="csvVariablesReuseFirstRowOption" class="checkbox-line csv-variables-loop-option">
             <input id="csvVariablesReuseFirstRowInput" type="checkbox">
             <span>Use the first CSV row for every request</span>
           </label>
-          <label class="checkbox-line csv-variables-loop-option">
+          <label id="csvVariablesLoopRowsOption" class="checkbox-line csv-variables-loop-option">
             <input id="csvVariablesLoopRowsInput" type="checkbox">
             <span>Loop CSV rows when the run needs more rows than the data provides</span>
           </label>
-          <label class="checkbox-line csv-variables-loop-option">
+          <label id="csvVariablesContinueWithoutRowsOption" class="checkbox-line csv-variables-loop-option">
             <input id="csvVariablesContinueWithoutRowsInput" type="checkbox">
             <span>Continue remaining requests without CSV data if rows run out</span>
           </label>

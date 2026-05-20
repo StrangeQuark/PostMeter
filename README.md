@@ -64,7 +64,7 @@ The legacy Load Test panel has been removed. Distributed/cloud load execution, J
 
 ## Tutorials
 
-Use `Help > Tutorials` in the desktop app to open guided walkthroughs. The current tutorials cover sending a basic request, using environment variables, and running a request series. Each tutorial highlights the relevant controls in the app and advances at your pace.
+Use `Help > Tutorials` in the desktop app to open guided walkthroughs. The tutorial catalog covers requests, environments, runners, performance tests, workspaces, cookies, vault/packages/secrets, and SSL certificates. Runner and performance walkthroughs include their CSV variable and refreshing auth controls. Each tutorial highlights the relevant controls in the app and advances at your pace.
 
 ## Data And Privacy
 

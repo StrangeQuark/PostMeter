@@ -6434,6 +6434,10 @@
       assertUiSmoke(runner.requests[0].id === firstRequestId, 'Runner request move up did not reorder rows.');
       deleteRunnerRequest(runner, 0);
       assertUiSmoke(!runner.requests.some((request) => request.id === firstRequestId), 'Runner request delete did not remove the row.');
+      assertUiSmoke($('runnerStopOnFailure').checked === true, 'New runners should default stop-on-failure on.');
+      $('runnerStopOnFailure').checked = false;
+      dispatchChange($('runnerStopOnFailure'));
+      assertUiSmoke(runner.stopOnFailure === false, 'Runner stop-on-failure setting did not persist when disabled.');
       $('runnerStopOnFailure').checked = true;
       dispatchChange($('runnerStopOnFailure'));
       $('runnerAllowEnvironmentMutation').checked = true;
