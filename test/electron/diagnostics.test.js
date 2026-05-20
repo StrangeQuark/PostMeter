@@ -22,11 +22,11 @@ const {
   sanitizeDiagnosticEvent,
   sanitizeSettingsSummary,
   workspaceSummary
-} = require('../../src/core/diagnostics');
+} = require('../../src/core/diagnostics-release/diagnostics');
 const {
   startupFailureDiagnosticEvent,
   workspaceRecoveryDiagnosticEvent
-} = require('../../electron/mainDiagnostics');
+} = require('../../electron/app-shell/mainDiagnostics');
 
 const EXACT_REQUEST_RESPONSE_ALIAS_CATEGORIES = Object.freeze({
   body: 'bodies',

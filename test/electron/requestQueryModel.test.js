@@ -4,7 +4,7 @@ const {
   queryParamsFromUrl,
   urlQueryMatchesPairs,
   urlWithQueryParams
-} = require('../../src/core/requestQueryModel');
+} = require('../../src/core/workspace/requestQueryModel');
 
 test('query params are parsed from URL text while preserving order and duplicates', () => {
   assert.deepEqual(queryParamsFromUrl('google.com?tag=one&tag=two&empty='), [

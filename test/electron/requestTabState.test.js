@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { MAX_OPEN_TABS, createRendererState } = require('../../src/renderer/rendererState');
-const { createRequestTabState } = require('../../src/renderer/requestTabState');
+const { MAX_OPEN_TABS, createRendererState } = require('../../src/renderer/app/rendererState');
+const { createRequestTabState } = require('../../src/renderer/app/requestTabState');
 
 test('request tab state opens a saved request tab with a snapshot and folder metadata', () => {
   const state = createRendererState();

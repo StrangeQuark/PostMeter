@@ -14,16 +14,16 @@ const {
   scriptWorkerMaxOldSpaceMb,
   scriptWorkerRequiresNodePermission,
   supportsNodePermissionFlags
-} = require('../../src/core/scriptSandbox');
+} = require('../../src/core/sandbox/scriptSandbox');
 const {
   createOsSandboxedProcessLaunch,
   createScriptWorkerLaunch,
   cleanupPrivateTempDir
-} = require('../../src/core/osSandbox');
+} = require('../../src/core/sandbox/osSandbox');
 const {
   MemoryVaultStore
-} = require('../../src/core/vaultStore');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
+} = require('../../src/core/sandbox/vaultStore');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
 
 test('runs scripts in an isolated worker and returns variable mutations', async () => {
   const environment = { variables: [{ enabled: true, key: 'token', value: 'old' }] };
@@ -214,7 +214,7 @@ test('falls back in auto mode when a Linux OS sandbox backend exists but cannot 
   await fs.writeFile(failingBwrap, '#!/bin/sh\necho "probe failed" >&2\nexit 1\n', { mode: 0o755 });
 
   const autoLaunch = createScriptWorkerLaunch(
-    path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
+    path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
     [],
     scriptWorkerEnv(),
     { osSandboxMode: OS_SANDBOX_MODES.AUTO, bubblewrapPath: failingBwrap }
@@ -223,7 +223,7 @@ test('falls back in auto mode when a Linux OS sandbox backend exists but cannot 
 
   assert.throws(
     () => createScriptWorkerLaunch(
-      path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
+      path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
       [],
       scriptWorkerEnv(),
       { osSandboxMode: OS_SANDBOX_MODES.REQUIRED, bubblewrapPath: failingBwrap }
@@ -235,7 +235,7 @@ test('falls back in auto mode when a Linux OS sandbox backend exists but cannot 
 test('records OS sandbox backend selection diagnostics for script workers', async () => {
   const events = [];
   const launch = createScriptWorkerLaunch(
-    path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
+    path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
     [],
     scriptWorkerEnv(),
     {
@@ -267,7 +267,7 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
 
   assert.throws(
     () => createScriptWorkerLaunch(
-      path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
+      path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
       [],
       scriptWorkerEnv(),
       {

@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { registerOAuthIpc } = require('../../electron/oauthIpc');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
+const { registerOAuthIpc } = require('../../electron/ipc/oauthIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
 
 test('OAuth IPC registers stable OAuth channels', () => {
   const handlers = new Map();

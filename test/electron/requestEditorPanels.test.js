@@ -9,7 +9,7 @@ const {
   sortAvailableVariableRows,
   syncOauth1SignatureFields,
   syncRefreshingAuthSelectOptions
-} = require('../../src/renderer/requestEditorPanels');
+} = require('../../src/renderer/ui/requestEditorPanels');
 
 function oauth1EditorValues(prefix = '', overrides = {}) {
   const base = prefix ? `${prefix}AuthOauth1` : 'authOauth1';

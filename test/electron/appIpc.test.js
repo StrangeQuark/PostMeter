@@ -6,8 +6,8 @@ const {
   registerAppIpc,
   releaseChannelForVersion,
   safeExternalUrl
-} = require('../../electron/appIpc');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
+} = require('../../electron/ipc/appIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
 
 test('app IPC registers stable app channels', () => {
   const handlers = new Map();

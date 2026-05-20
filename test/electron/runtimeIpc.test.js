@@ -4,9 +4,9 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { registerRuntimeIpc } = require('../../electron/runtimeIpc');
-const { defaultPerformanceTest } = require('../../src/core/models');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
+const { registerRuntimeIpc } = require('../../electron/ipc/runtimeIpc');
+const { defaultPerformanceTest } = require('../../src/core/workspace/models');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
 
 test('runtime IPC registers stable runner channels', async () => {
   const handlers = new Map();

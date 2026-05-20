@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedFrom": "src/core/osSandboxPlatformMatrix.js",
+  "generatedFrom": "src/core/sandbox/osSandboxPlatformMatrix.js",
   "deterministic": true,
   "target": {
     "claim": "Implemented tier-one OS sandbox backend coverage for script workers",
@@ -26,21 +26,17 @@
       "title": "PostMeter Script Sandbox Contract",
       "path": "docs/SANDBOX_CONTRACT.md"
     },
-    "nextSteps": {
-      "title": "PostMeter Next Steps",
-      "path": "NEXT_STEPS.MD"
-    },
     "osSandbox": {
       "title": "OS sandbox launch backend",
-      "path": "src/core/osSandbox.js"
+      "path": "src/core/sandbox/osSandbox.js"
     },
     "seccompPolicy": {
       "title": "Linux seccomp syscall policy",
-      "path": "src/core/seccompPolicy.js"
+      "path": "src/core/sandbox/seccompPolicy.js"
     },
     "runtimeValidation": {
       "title": "Sandbox runtime validation",
-      "path": "src/core/sandboxRuntimeValidation.js"
+      "path": "src/core/sandbox/sandboxRuntimeValidation.js"
     },
     "releaseGate": {
       "title": "Sandbox release gate manifest validation",
@@ -70,8 +66,7 @@
       "claimBlocking": false,
       "securityDecision": "Do not imply partial scripted high-volume execution compatibility until the future feature has its own sandbox contract.",
       "sourceRefs": [
-        "sandboxContract",
-        "nextSteps"
+        "sandboxContract"
       ],
       "verificationRefs": [
         "docs/SANDBOX_CONTRACT.md high-volume execution decision",
@@ -153,11 +148,9 @@
       "securityDecision": "Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; track a deny-by-default allowlist only as optional future hardening.",
       "sourceRefs": [
         "sandboxContract",
-        "nextSteps",
         "seccompPolicy"
       ],
       "verificationRefs": [
-        "NEXT_STEPS.MD Questions For Maintainer After Implementation",
         "npm run sandbox:validate",
         "test/electron/scriptSandbox.test.js"
       ],
@@ -174,7 +167,6 @@
       "securityDecision": "Keep packaged macOS OS-sandbox validation in CI, manual native release validation, and release workflows before shipping artifacts.",
       "sourceRefs": [
         "sandboxContract",
-        "nextSteps",
         "runtimeValidation",
         "ciWorkflow",
         "releaseValidationWorkflow",
@@ -199,14 +191,13 @@
       "securityDecision": "Use the platform seatbelt launcher where available and fail closed in required validation if the profile cannot launch or does not enforce the expected boundary.",
       "sourceRefs": [
         "sandboxContract",
-        "nextSteps",
         "osSandbox",
         "runtimeValidation",
         "ciWorkflow",
         "releaseWorkflow"
       ],
       "verificationRefs": [
-        "macos-seatbelt launcher path in src/core/osSandbox.js",
+        "macos-seatbelt launcher path in src/core/sandbox/osSandbox.js",
         "npm run sandbox:validate on macos-latest",
         "test/electron/scriptSandbox.test.js"
       ],
@@ -222,8 +213,7 @@
       "claimBlocking": false,
       "securityDecision": "Keep compatibility gaps and platform OS sandbox gaps on separate claim gates so one cannot mask the other.",
       "sourceRefs": [
-        "sandboxContract",
-        "nextSteps"
+        "sandboxContract"
       ],
       "verificationRefs": [
         "npm run postman:parity:validate",
@@ -246,8 +236,7 @@
       "sourceRefs": [
         "releaseGate",
         "ciWorkflow",
-        "releaseWorkflow",
-        "nextSteps"
+        "releaseWorkflow"
       ],
       "verificationRefs": [
         "npm run sandbox:platform:validate",
@@ -268,7 +257,6 @@
       "securityDecision": "Use a release-owned AppContainer helper instead of relying on node:vm alone; source and packaged Windows validation must fail closed if the helper is missing or cannot launch.",
       "sourceRefs": [
         "sandboxContract",
-        "nextSteps",
         "osSandbox",
         "runtimeValidation",
         "ciWorkflow",
@@ -293,7 +281,6 @@
       "securityDecision": "Keep packaged Windows OS-sandbox validation in CI, manual native release validation, and release workflows before shipping artifacts.",
       "sourceRefs": [
         "sandboxContract",
-        "nextSteps",
         "runtimeValidation",
         "ciWorkflow",
         "releaseValidationWorkflow",

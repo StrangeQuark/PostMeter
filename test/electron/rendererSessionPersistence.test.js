@@ -1,11 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createRendererState } = require('../../src/renderer/rendererState');
-const { findFolder, findRequest } = require('../../src/renderer/collectionModel');
+const { createRendererState } = require('../../src/renderer/app/rendererState');
+const { findFolder, findRequest } = require('../../src/renderer/models/collectionModel');
 const {
   buildRendererSession,
   restoreRendererSession
-} = require('../../src/renderer/sessionPersistence');
+} = require('../../src/renderer/app/sessionPersistence');
 
 test('renderer session persistence serializes active tabs, drafts, and dirty tab state', () => {
   const state = createRendererState();

@@ -4,7 +4,7 @@ const {
   validateCommittedOsSandboxPlatformClaim,
   validateCommittedOsSandboxPlatformMatrix,
   writeOsSandboxPlatformMatrix
-} = require('../src/core/osSandboxPlatformHarness');
+} = require('../src/core/sandbox/osSandboxPlatformHarness');
 
 async function main() {
   const command = process.argv[2] || 'validate';

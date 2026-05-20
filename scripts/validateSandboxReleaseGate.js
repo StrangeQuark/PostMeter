@@ -16,8 +16,8 @@ const releaseWorkflowDocument = parseWorkflow('Release workflow', releaseWorkflo
 const releaseValidationWorkflowDocument = parseWorkflow('Manual native release validation workflow', releaseValidationWorkflow);
 const validateSandboxRuntimeScript = readText('scripts/validateSandboxRuntime.js');
 const validatePackagedSandboxRuntimeScript = readText('scripts/validatePackagedSandboxRuntime.js');
-const productionSupportMatricesSource = readText('src/core/productionSupportMatrices.js');
-const productionReadinessMatrixSource = readText('src/core/productionReadinessMatrix.js');
+const productionSupportMatricesSource = readText('src/core/diagnostics-release/productionSupportMatrices.js');
+const productionReadinessMatrixSource = readText('src/core/diagnostics-release/productionReadinessMatrix.js');
 
 requireScript('check', [
   'npm test',

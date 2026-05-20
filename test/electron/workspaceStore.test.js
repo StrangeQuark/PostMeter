@@ -3,14 +3,19 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { CURRENT_SCHEMA_VERSION, normalizeSettings } = require('../../src/core/models');
-const { moveFileNoOverwrite, temporaryJsonPath, writeTextFileAtomic } = require('../../src/core/workspacePersistence');
+const { CURRENT_SCHEMA_VERSION, normalizeSettings } = require('../../src/core/workspace/models');
+const { moveFileNoOverwrite, temporaryJsonPath, writeTextFileAtomic } = require('../../src/core/workspace/workspacePersistence');
 const {
   WorkspaceRecoveryError,
   WorkspaceStore,
   defaultWorkspacePath,
   looksLikeNativeWorkspace
-} = require('../../src/core/workspaceStore');
+} = require('../../src/core/workspace/workspaceStore');
+const {
+  WorkspaceEncryptionKeyRequiredError,
+  WorkspaceUnlockFailedError,
+  isEncryptedWorkspaceEnvelope
+} = require('../../src/core/workspace/workspaceEncryption');
 
 test('creates a default current-schema workspace when no file exists', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
@@ -1033,7 +1038,7 @@ test('workspace import ignores local settings from native files', async () => {
     payloadIdentifiers: false
   });
   assert.deepEqual(imported.localsettings.request, {
-    sslCertificateVerification: false,
+    sslCertificateVerification: true,
     caCertificatePath: '',
     clientCertificates: []
   });
@@ -1089,7 +1094,7 @@ test('workspace export strips workspace-local TLS trust settings', async () => {
 
   const imported = await store.importWorkspace(exportPath);
   assert.deepEqual(imported.localsettings.request, {
-    sslCertificateVerification: false,
+    sslCertificateVerification: true,
     caCertificatePath: '',
     clientCertificates: []
   });
@@ -1117,6 +1122,77 @@ test('detects native workspace shape explicitly', () => {
   assert.equal(looksLikeNativeWorkspace({ schemaVersion: 6 }), true);
   assert.equal(looksLikeNativeWorkspace({ collections: [] }), true);
   assert.equal(looksLikeNativeWorkspace({ info: {}, item: [] }), false);
+});
+
+test('encrypts workspace files at rest and requires the key to load them', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-encrypted-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const store = new WorkspaceStore(workspacePath);
+  const workspace = {
+    schemaVersion: 6,
+    collections: [{
+      id: 'c1',
+      name: 'PII Requests',
+      requests: [{
+        id: 'r1',
+        name: 'Lookup Person',
+        method: 'POST',
+        url: 'https://api.example.test/person/123-45-6789',
+        headers: [{ enabled: true, key: 'Authorization', value: 'Bearer sensitive-token' }],
+        queryParams: [],
+        bodyType: 'RAW_JSON',
+        body: '{"ssn":"123-45-6789"}'
+      }],
+      folders: []
+    }],
+    environments: [],
+    cookies: [],
+    history: []
+  };
+
+  await store.encryptWorkspace(workspace, 'secret1');
+  const rawText = await fs.readFile(workspacePath, 'utf8');
+  const raw = JSON.parse(rawText);
+  assert.equal(isEncryptedWorkspaceEnvelope(raw), true);
+  assert.doesNotMatch(rawText, /123-45-6789|sensitive-token|Lookup Person/);
+  await assert.rejects(() => store.load(), WorkspaceEncryptionKeyRequiredError);
+  await assert.rejects(() => store.load({ encryptionKey: 'wrong1' }), WorkspaceUnlockFailedError);
+
+  const loaded = await store.load({ encryptionKey: 'secret1' });
+  assert.equal(loaded.encrypted, true);
+  assert.equal(loaded.workspace.collections[0].requests[0].url, 'https://api.example.test/person/123-45-6789');
+
+  loaded.workspace.collections[0].requests[0].name = 'Updated Person Lookup';
+  await store.save(loaded.workspace, { encryptionKey: 'secret1' });
+  const savedText = await fs.readFile(workspacePath, 'utf8');
+  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(savedText)), true);
+  assert.doesNotMatch(savedText, /Updated Person Lookup|123-45-6789/);
+});
+
+test('encrypting and removing encryption deletes obsolete workspace backups', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-encrypted-backups-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const store = new WorkspaceStore(workspacePath);
+  const workspace = {
+    schemaVersion: 6,
+    collections: [{ id: 'c1', name: 'Backup Secrets', requests: [], folders: [] }],
+    environments: [],
+    cookies: [],
+    history: []
+  };
+  await store.save(workspace);
+  const plaintextBackup = await store.createBackup('manual.backup');
+
+  await store.encryptWorkspace(workspace, 'secret1');
+  await assert.rejects(() => fs.access(plaintextBackup));
+  const encryptedBackup = await store.createBackup('manual.backup');
+  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(await fs.readFile(encryptedBackup, 'utf8'))), true);
+
+  await store.removeEncryption('secret1');
+  await assert.rejects(() => fs.access(encryptedBackup));
+  const raw = JSON.parse(await fs.readFile(workspacePath, 'utf8'));
+  assert.equal(isEncryptedWorkspaceEnvelope(raw), false);
+  assert.equal(raw.collections[0].name, 'Backup Secrets');
 });
 
 test('persists and exports workspace values as plain JSON', async () => {

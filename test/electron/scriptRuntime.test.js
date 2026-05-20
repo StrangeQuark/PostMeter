@@ -7,8 +7,8 @@ const {
   runPostmanScriptAsync,
   scriptPackageBundleIntegrity,
   scriptPackageIntegrity
-} = require('../../src/core/scriptRuntime');
-const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
+} = require('../../src/core/sandbox/scriptRuntime');
+const { resolveEnvironmentValue } = require('../../src/core/workspace/environmentResolver');
 
 test('runs Postman-style tests and response helpers', () => {
   const result = runPostmanScript(`
@@ -1111,7 +1111,7 @@ test('tracks Postman package references for reviewed cache workflows', () => {
     collectSandboxPackageReferencesFromText,
     sandboxPackageCacheStatus,
     scriptPackageIntegrity
-  } = require('../../src/core/sandboxPackageCache');
+  } = require('../../src/core/sandbox/sandboxPackageCache');
   const references = collectSandboxPackageReferencesFromText(`
     const team = pm.require('@postmeter/tools');
     const pinned = require('npm:@postmeter/example@1.2.3');

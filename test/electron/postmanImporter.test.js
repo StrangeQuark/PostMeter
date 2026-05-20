@@ -2,10 +2,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { importCollectionFromContent } = require('../../src/core/collectionImportRegistry');
-const { runCollection } = require('../../src/core/collectionRunner');
-const { walkRequests } = require('../../src/core/models');
-const { exportPostmanCollection, importPostmanCollection } = require('../../src/core/postmanImporter');
+const { importCollectionFromContent } = require('../../src/core/import-export/collectionImportRegistry');
+const { runCollection } = require('../../src/core/runtime/collectionRunner');
+const { walkRequests } = require('../../src/core/workspace/models');
+const { exportPostmanCollection, importPostmanCollection } = require('../../src/core/import-export/postmanImporter');
 
 test('imports common Postman auth helpers with collection and folder inheritance', () => {
   const collection = importPostmanCollection({
@@ -193,7 +193,7 @@ test('imports and exports Postman request settings protocol profile controls', (
   });
   assert.equal(autoCollection.requests[0].settings.httpVersion, 'auto');
   assert.equal(autoCollection.requests[1].settings.httpVersion, 'auto');
-  assert.equal(exportPostmanCollection(autoCollection).item[0].request.protocolProfileBehavior, undefined);
+  assert.deepEqual(exportPostmanCollection(autoCollection).item[0].request.protocolProfileBehavior, { strictHttpParser: true });
 
   const collection = importPostmanCollection({
     info: {
@@ -272,7 +272,7 @@ test('imports and exports Postman request settings protocol profile controls', (
     followOriginalHttpMethod: false,
     followAuthorizationHeader: false,
     removeRefererHeaderOnRedirect: false,
-    strictHttpParser: false,
+    strictHttpParser: true,
     encodeUrlAutomatically: true,
     maxRedirects: 10,
     useServerCipherSuiteDuringHandshake: false,
@@ -286,6 +286,7 @@ test('imports and exports Postman request settings protocol profile controls', (
   assert.equal(profile.strictSSL, undefined);
   assert.equal(profile.httpVersion, undefined);
   assert.equal(profile.followRedirects, undefined);
+  assert.equal(profile.strictHttpParser, true);
   assert.equal(profile.disableUrlEncoding, undefined);
   assert.equal(profile.maxRedirects, undefined);
   assert.equal(profile.cipherSuiteSelection, undefined);

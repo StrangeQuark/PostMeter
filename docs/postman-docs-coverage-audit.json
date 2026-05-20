@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedFrom": "src/core/postmanDocsCoverageAudit.js",
+  "generatedFrom": "src/core/diagnostics-release/postmanDocsCoverageAudit.js",
   "generatedAtPolicy": "Live artifact. Regenerate with npm run postman:docs:write after official Postman/Newman docs sweeps.",
   "target": {
     "postmanDocs": "Official learning.postman.com scripting/Newman docs plus official postmanlabs.com/postman-collection SDK references discovered from the live sitemap.",

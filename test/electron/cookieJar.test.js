@@ -6,7 +6,7 @@ const {
   mergeCookieHeader,
   parseSetCookie,
   updateCookiesFromResponse
-} = require('../../src/core/cookieJar');
+} = require('../../src/core/http/cookieJar');
 
 test('matches cookies by domain, path, secure flag, and longest path first', () => {
   const url = new URL('https://api.example.test/v1/users');

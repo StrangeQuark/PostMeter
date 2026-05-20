@@ -7,12 +7,12 @@ const {
   closeToolbarMenus,
   initializeRenderer,
   positionToolbarMenu
-} = require('../../src/renderer/rendererBootstrap');
-const { setContextMenuPeerCloser, showContextMenu } = require('../../src/renderer/contextMenu');
+} = require('../../src/renderer/app/rendererBootstrap');
+const { setContextMenuPeerCloser, showContextMenu } = require('../../src/renderer/ui/contextMenu');
 const {
   formatShortcutForDisplay,
   recordShortcutFromEvent
-} = require('../../src/core/keyboardShortcuts');
+} = require('../../src/core/contracts/keyboardShortcuts');
 
 function selectOptionValues(source, id) {
   const match = source.match(new RegExp(`<select id="${id}">([\\s\\S]*?)</select>`));
@@ -231,13 +231,13 @@ test('renderer bootstrap closes toolbar menus and resets trigger aria state', ()
 test('renderer accessibility source keeps splitters body editor and pane save recovery wired', async () => {
   const root = path.join(__dirname, '..', '..');
   const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
-  const themeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'theme.css'), 'utf8');
-  const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
-  const editorPanelsSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'editorPanels.css'), 'utf8');
-  const overlaysSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'overlays.css'), 'utf8');
-  const layoutSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'layoutControls.js'), 'utf8');
-  const bootstrapSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'rendererBootstrap.js'), 'utf8');
-  const rendererSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
+  const themeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'styles', 'theme.css'), 'utf8');
+  const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'styles', 'chrome.css'), 'utf8');
+  const editorPanelsSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'styles', 'editorPanels.css'), 'utf8');
+  const overlaysSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'styles', 'overlays.css'), 'utf8');
+  const layoutSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'ui', 'layoutControls.js'), 'utf8');
+  const bootstrapSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'app', 'rendererBootstrap.js'), 'utf8');
+  const rendererSource = await readRendererBundleSource(root);
 
   assert.match(indexSource, /id="bodyInput"[^>]+aria-label="Request body"/);
   assert.match(indexSource, /id="graphqlOperationNameField"[\s\S]*id="graphqlOperationNameInput"[\s\S]*id="beautifyBodyButton"/);
@@ -284,7 +284,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="authRefreshAutoDetectModal"[^>]+auth-refresh-auto-detect-modal/);
   assert.match(indexSource, /id="authRefreshAutoDetectList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmAuthRefreshAutoDetectButton"[^>]+disabled/);
-  assert.match(indexSource, /src="authRefreshAutoDetectModel\.js"/);
+  assert.match(indexSource, /src="models\/authRefreshAutoDetectModel\.js"/);
   assert.match(chromeSource, /\.auth-refresh-menu-group > \.auth-refresh-trigger\.auth-refresh-active[\s\S]*border-color:\s*var\(--green\)/);
   assert.match(overlaysSource, /\.auth-refresh-auto-detect-modal\s*\{[\s\S]*width:\s*min\(720px/);
   assert.match(chromeSource, /\.auth-refresh-manage-menu-group \.toolbar-menu[\s\S]*right:\s*0/);
@@ -743,7 +743,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /Reset all keyboard shortcuts to their default values\?/);
   assert.match(rendererSource, /const input = event\?\.target\?\.closest\?\.\('\[data-shortcut-action\]'\) \|\| event\?\.target;/);
   assert.match(rendererSource, /setMenuShortcutsIgnored/);
-  assert.match(indexSource, /src="\.\.\/core\/keyboardShortcuts\.js"/);
+  assert.match(indexSource, /src="\.\.\/core\/contracts\/keyboardShortcuts\.js"/);
   assert.match(indexSource, /id="themeDarkButton"[^>]+data-theme-option="dark"/);
   assert.match(indexSource, /id="interfaceFontSelect"/);
   assert.match(indexSource, /id="interfaceFontSelect"[\s\S]*value="system-mono"/);
@@ -756,7 +756,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.deepEqual(selectOptionValues(indexSource, 'interfaceFontSelect'), selectOptionValues(indexSource, 'editorFontSelect'));
   assert.match(indexSource, /id="showEditorLineNumbersInput"/);
   assert.match(indexSource, /src="vendor\/markdown-it\.min\.js"/);
-  assert.match(indexSource, /src="markdownRenderer\.js"/);
+  assert.match(indexSource, /src="formatting\/markdownRenderer\.js"/);
   assert.match(indexSource, /id="docsPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="collectionDescriptionPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestSslCertificateVerificationInput"/);
@@ -1101,6 +1101,45 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('cancelRunnerImportButton').dispatch('click');
 
   assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, 'stop', 'cancel', 'update', null, null, 'auth-auto-detect-confirm', true, true, null]);
+});
+
+test('renderer bootstrap submits workspace encryption modal inputs on Enter', () => {
+  const calls = {
+    confirm: 0,
+    resolved: []
+  };
+  const elements = new Map([
+    ['workspaceEncryptionKeyInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
+    ['workspaceEncryptionConfirmInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
+    ['confirmWorkspaceEncryptionButton', createElement()],
+    ['cancelWorkspaceEncryptionButton', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onConfirmWorkspaceEncryptionModal: () => { calls.confirm += 1; },
+    onResolveActiveModal: (value) => calls.resolved.push(value)
+  });
+
+  elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('workspaceEncryptionConfirmInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Tab' });
+  elements.get('confirmWorkspaceEncryptionButton').dispatch('click');
+  elements.get('cancelWorkspaceEncryptionButton').dispatch('click');
+
+  assert.equal(calls.confirm, 3);
+  assert.deepEqual(calls.resolved, [null]);
 });
 
 test('renderer bootstrap binds workspace cookie manager controls', () => {
@@ -2718,7 +2757,7 @@ test('renderer bootstrap binds vault prompt decision buttons', () => {
 });
 
 test('renderer supplies handlers for all workspace sandbox controls', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
   for (const optionName of [
     'onAddSandboxPackage',
     'onFetchSandboxPackage',
@@ -2742,17 +2781,10 @@ test('renderer supplies handlers for all workspace sandbox controls', () => {
 });
 
 test('renderer Step 11 workflows do not rely on native prompt alert or confirm dialogs', () => {
-  for (const relativePath of [
-    'src/renderer/renderer.js',
-    'src/renderer/rendererWorkflows.js',
-    'src/renderer/rendererBootstrap.js',
-    'src/renderer/requestTabState.js',
-    'src/renderer/contextMenu.js',
-    'src/renderer/codeEditor.js',
-    'src/renderer/variableAutocomplete.js',
-    'src/renderer/requestTabs.js'
-  ]) {
-    const source = fs.readFileSync(path.join(__dirname, '../..', relativePath), 'utf8');
+  const root = path.join(__dirname, '../..');
+  for (const filePath of rendererBundleSourceFiles(root)) {
+    const relativePath = path.relative(root, filePath);
+    const source = fs.readFileSync(filePath, 'utf8');
     assert.doesNotMatch(
       source,
       /(^|[^A-Za-z0-9_$.])(?:prompt|alert|confirm)\s*\(/,
@@ -2762,7 +2794,7 @@ test('renderer Step 11 workflows do not rely on native prompt alert or confirm d
 });
 
 test('renderer cancels active OAuth flow when loaded workspace context resets', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
   assert.match(rendererSource, /function cancelActiveOauthFlowForContextReset\(\)/);
   assert.match(rendererSource, /window\.postmeter\.oauth\.cancelFlow\(flowId\)/);
   assert.match(rendererSource, /function applyLoadedWorkspace\(loaded, options = \{\}\) \{\s*cancelActiveOauthFlowForContextReset\(\);/);
@@ -2771,7 +2803,7 @@ test('renderer cancels active OAuth flow when loaded workspace context resets', 
 });
 
 test('renderer clears and scopes vault metadata to the active workspace context', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
   assert.match(rendererSource, /let lastVaultMetadataWorkspaceId = null/);
   assert.match(rendererSource, /lastVaultMetadata = null;\s*lastVaultMetadataWorkspaceId = null;\s*activeOauthFlowId = null;\s*activeRunnerId = null;/);
   assert.match(rendererSource, /const metadataWorkspaceId = activeWorkspaceId \|\| ''/);
@@ -2781,7 +2813,7 @@ test('renderer clears and scopes vault metadata to the active workspace context'
 });
 
 test('renderer commits client-certificate passphrase secret changes only after settings saves', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
   assert.match(rendererSource, /const certificateId = existing\?\.id \|\| \(crypto\.randomUUID/);
   assert.match(rendererSource, /let plainPassphrase = existing\?\.passphrase \|\| ''/);
   assert.match(rendererSource, /passphraseSecretKey = await bindClientCertificatePassphrase\(certificateId, values\.passphrase\)/);
@@ -2798,7 +2830,7 @@ test('renderer commits client-certificate passphrase secret changes only after s
 });
 
 test('renderer treats canceled certificate file pickers as cancellation', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
   const workspaceStart = rendererSource.indexOf('async function chooseWorkspaceCaCertificate');
   const workspaceSource = rendererSource.slice(workspaceStart, rendererSource.indexOf('async function clearWorkspaceCaCertificate', workspaceStart));
 
@@ -2809,8 +2841,8 @@ test('renderer treats canceled certificate file pickers as cancellation', () => 
 });
 
 test('renderer exposes Network response diagnostics for TLS results', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
-  const workflowSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/rendererWorkflows.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
+  const workflowSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/app/rendererWorkflows.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
 
   assert.match(indexHtml, /id="resultsNetworkTabButton"[\s\S]*aria-controls="responseNetworkTab"/);
@@ -2822,7 +2854,7 @@ test('renderer exposes Network response diagnostics for TLS results', () => {
 });
 
 test('renderer supplies explicit collection export format handlers', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
   for (const [optionName, format] of [
     ['onExportCollection', 'postmeter'],
     ['onExportPostman', 'postman'],
@@ -2842,9 +2874,18 @@ test('renderer supplies explicit collection export format handlers', () => {
   assert.match(rendererSource, /onExportPerformanceTest: \(\) => \{ void exportPerformanceTestFromPicker\(\); \}/);
 });
 
+test('renderer prompts for locked encrypted workspace export keys', () => {
+  const rendererSource = readRendererBundleSourceSync();
+  assert.match(
+    rendererSource,
+    /workspaceItem\.locked === true[\s\S]*promptWorkspaceEncryptionKey\([\s\S]*title: 'Export encrypted workspace'/
+  );
+  assert.match(rendererSource, /exportWorkspaceBoundary\(null, workspaceItem\.id, encryptionKey\)/);
+});
+
 test('renderer exposes first-class runner UI and sends runner payloads through runtime IPC', () => {
-  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
-  const bootstrapSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/rendererBootstrap.js'), 'utf8');
+  const rendererSource = readRendererBundleSourceSync();
+  const bootstrapSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/app/rendererBootstrap.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
 
   assert.match(indexHtml, /id="runnersPanelTab"[^>]*>Runners<\/button>/);
@@ -2894,7 +2935,7 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
 
 test('renderer loads vault prompt queue before the app renderer', () => {
   const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
-  const queueIndex = indexHtml.indexOf('src="vaultPromptQueue.js"');
+  const queueIndex = indexHtml.indexOf('src="ui/vaultPromptQueue.js"');
   const rendererIndex = indexHtml.indexOf('src="renderer.js"');
   assert.ok(queueIndex >= 0, 'vaultPromptQueue.js should be loaded');
   assert.ok(rendererIndex >= 0, 'renderer.js should be loaded');
@@ -2903,8 +2944,8 @@ test('renderer loads vault prompt queue before the app renderer', () => {
 
 test('renderer loads code editor helpers before request editor panels and renderer bootstrap', () => {
   const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
-  const codeEditorIndex = indexHtml.indexOf('src="codeEditor.js"');
-  const requestPanelsIndex = indexHtml.indexOf('src="requestEditorPanels.js"');
+  const codeEditorIndex = indexHtml.indexOf('src="ui/codeEditor.js"');
+  const requestPanelsIndex = indexHtml.indexOf('src="ui/requestEditorPanels.js"');
   const rendererIndex = indexHtml.indexOf('src="renderer.js"');
   assert.ok(codeEditorIndex >= 0, 'codeEditor.js should be loaded');
   assert.ok(requestPanelsIndex >= 0, 'requestEditorPanels.js should be loaded');
@@ -2960,4 +3001,31 @@ function createElement({ tagName = 'BUTTON', value = '', closest = null } = {}) 
       }
     }
   };
+}
+
+async function readRendererBundleSource(root) {
+  const sources = await Promise.all(rendererBundleSourceFiles(root).map((filePath) => (
+    fs.promises.readFile(filePath, 'utf8')
+  )));
+  return sources.join('\n');
+}
+
+function readRendererBundleSourceSync(root = path.join(__dirname, '../..')) {
+  return rendererBundleSourceFiles(root)
+    .map((filePath) => fs.readFileSync(filePath, 'utf8'))
+    .join('\n');
+}
+
+function rendererBundleSourceFiles(root = path.join(__dirname, '../..')) {
+  const rendererRoot = path.join(root, 'src', 'renderer');
+  const indexSource = fs.readFileSync(path.join(rendererRoot, 'index.html'), 'utf8');
+  const files = [];
+  for (const match of indexSource.matchAll(/<script src="([^"]+)"><\/script>/g)) {
+    const scriptSrc = match[1];
+    if (scriptSrc.startsWith('../core/') || scriptSrc.startsWith('vendor/') || scriptSrc.startsWith('smoke/')) {
+      continue;
+    }
+    files.push(path.join(rendererRoot, scriptSrc));
+  }
+  return files;
 }

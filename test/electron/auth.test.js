@@ -5,6 +5,7 @@ const test = require('node:test');
 const {
   createOAuthPkceSession,
   exchangeOAuthAuthorizationCode,
+  isLoopbackOAuthUrl,
   normalizeAuth,
   pkceChallengeForVerifier,
   pollOAuthDeviceToken,
@@ -16,8 +17,8 @@ const {
   shouldRequestClientCredentialsToken,
   shouldRequestPasswordCredentialsToken,
   validateAuth
-} = require('../../src/core/auth');
-const { sendRequest } = require('../../src/core/httpClient');
+} = require('../../src/core/http/auth');
+const { sendRequest } = require('../../src/core/http/httpClient');
 
 const DIGEST_ALGORITHM_OPTIONS = [
   'MD5',
@@ -1755,6 +1756,20 @@ test('creates OAuth 2.0 authorization-code and PKCE sessions', () => {
   });
   assert.equal(new URL(customSchemeSession.authorizationUrl).searchParams.get('redirect_uri'), 'postmeter://oauth/callback');
 
+  const loopbackSession = createOAuthPkceSession({
+    type: 'oauth2',
+    grantType: 'authorizationCode',
+    authorizationUrl: 'http://localhost:49153/authorize',
+    tokenUrl: 'https://auth.example.test/token',
+    clientId: 'client-id'
+  }, null, {
+    redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+    state: 'loopback-state'
+  });
+  assert.equal(new URL(loopbackSession.authorizationUrl).origin, 'http://localhost:49153');
+  assert.equal(isLoopbackOAuthUrl(new URL('http://127.42.0.1:49153/token')), true);
+  assert.equal(isLoopbackOAuthUrl(new URL('http://[::1]:49153/token')), true);
+
   assert.throws(
     () => createOAuthPkceSession({
       type: 'oauth2',
@@ -1768,6 +1783,33 @@ test('creates OAuth 2.0 authorization-code and PKCE sessions', () => {
       codeVerifier
     }),
     /OAuth 2\.0 authorization URL must use http or https/
+  );
+  assert.throws(
+    () => createOAuthPkceSession({
+      type: 'oauth2',
+      grantType: 'authorizationCodePkce',
+      authorizationUrl: 'http://auth.example.test/authorize',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'client-id'
+    }, null, {
+      redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+      state: 'bad-http-state',
+      codeVerifier
+    }),
+    /OAuth 2\.0 authorization URL must use https unless it targets a loopback address/
+  );
+});
+
+test('rejects OAuth 2.0 token endpoints over HTTP outside loopback', async () => {
+  await assert.rejects(
+    () => requestOAuthClientCredentialsToken({
+      type: 'oauth2',
+      grantType: 'clientCredentials',
+      tokenUrl: 'http://auth.example.test/token',
+      clientId: 'client-id',
+      clientSecret: 'client-secret'
+    }, null),
+    /OAuth 2\.0 token URL must use https unless it targets a loopback address/
   );
 });
 

@@ -17,7 +17,7 @@ const {
   toggleCollectionTreeItemCollapsed,
   uniqueName,
   walkCollectionRequests
-} = require('../../src/renderer/collectionModel');
+} = require('../../src/renderer/models/collectionModel');
 
 function nestedCollection() {
   return {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "electron-security",
-  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "generatedFrom": "src/core/diagnostics-release/productionSupportMatrices.js",
   "deterministic": true,
   "rows": [
     {
@@ -10,8 +10,8 @@
       "target": "Renderer-controlled top-level navigation is limited to the exact initial packaged custom-protocol renderer URL; external, arbitrary file, unexpected app-protocol path, and unexpected app-protocol query navigations are denied.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/mainWindow.js",
-        "electron/appProtocol.js"
+        "electron/app-shell/mainWindow.js",
+        "electron/app-shell/appProtocol.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js"
@@ -25,7 +25,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/mainWindow.js"
+        "electron/app-shell/mainWindow.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js"
@@ -38,7 +38,7 @@
       "target": "Renderer runs with nodeIntegration disabled, contextIsolation enabled, sandbox enabled, webSecurity enabled, and insecure content disabled.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/mainWindow.js"
+        "electron/app-shell/mainWindow.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js",
@@ -52,7 +52,7 @@
       "target": "Renderer webview attachment is denied so untrusted embedded content cannot gain a new Electron surface.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/mainWindow.js"
+        "electron/app-shell/mainWindow.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js"
@@ -65,7 +65,7 @@
       "target": "Renderer-created windows are denied through setWindowOpenHandler.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/mainWindow.js"
+        "electron/app-shell/mainWindow.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js"
@@ -79,7 +79,7 @@
       "status": "documented-gap",
       "evidenceRefs": [
         "docs/SECURITY.md",
-        "docs/RELEASE_READINESS.md"
+        "docs/TECH_SPECS.md"
       ],
       "tests": [
         "npm run release:gate"
@@ -92,8 +92,8 @@
       "target": "General app/help external URL IPC only opens credential-free HTTPS GitHub URLs after payload validation.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/appIpc.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js"
@@ -106,9 +106,9 @@
       "target": "OAuth authorization and device verification browser launches are sourced from validated OAuth URLs and rechecked for credential-free http/https at the shell boundary rather than arbitrary renderer open-external calls.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/oauthFlows.js",
-        "src/core/auth.js",
-        "electron/oauthIpc.js"
+        "electron/services/oauthFlows.js",
+        "src/core/http/auth.js",
+        "electron/ipc/oauthIpc.js"
       ],
       "tests": [
         "test/electron/auth.test.js",
@@ -123,9 +123,9 @@
       "target": "Collection import/export and collection-run export dialogs are main-process owned, use constrained filters/default filenames, validate selected path shape, and validate cancellation/result payloads.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/runtimeIpc.js",
-        "electron/fileDialogs.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/fileDialogs.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -140,8 +140,8 @@
       "target": "Workspace import/export dialogs are main-process owned, use JSON filters/defaults, validate selected path shape, and validate cancellation/result payloads.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/fileDialogs.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/fileDialogs.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -155,8 +155,8 @@
       "target": "App/version/update/external-link IPC channels validate renderer payloads before main-process actions.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/appIpc.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js",
@@ -170,10 +170,10 @@
       "target": "renderer-to-main channel `app:auto-update-status`: Automatic update status query returns validated service state without accepting renderer update metadata.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "electron/preload.js",
-        "electron/autoUpdateService.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/appIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/services/autoUpdateService.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js",
@@ -188,9 +188,9 @@
       "target": "renderer-to-main channel `app:check-updates`: Update-check request with validated prerelease options.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/appIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js",
@@ -204,10 +204,10 @@
       "target": "renderer-to-main channel `app:install-update`: Automatic update install request is available only after the main-process update service has downloaded a validated update.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "electron/preload.js",
-        "electron/autoUpdateService.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/appIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/services/autoUpdateService.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js",
@@ -222,9 +222,9 @@
       "target": "renderer-to-main channel `app:open-external`: External URL request limited to validated credential-free HTTPS GitHub URLs.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/appIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js",
@@ -238,9 +238,9 @@
       "target": "renderer-to-main channel `app:set-menu-shortcuts-ignored`: Shortcut editor focus can temporarily suppress native menu accelerators so user-assigned shortcuts are captured in the renderer.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "electron/preload.js",
-        "electron/mainWindow.js"
+        "electron/ipc/appIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/mainWindow.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js",
@@ -255,8 +255,8 @@
       "target": "renderer-to-main channel `app:versions`: Version metadata query with no renderer payload.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "electron/preload.js"
+        "electron/ipc/appIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/appIpc.test.js"
@@ -269,8 +269,8 @@
       "target": "renderer-to-main channel `clipboard:writeText`: Explicit user copy actions send bounded text to the main-process clipboard API through the trusted renderer IPC wrapper.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appIpc.js",
-        "electron/preload.js",
+        "electron/ipc/appIpc.js",
+        "electron/app-shell/preload.js",
         "src/renderer/renderer.js"
       ],
       "tests": [
@@ -285,10 +285,10 @@
       "target": "renderer-to-main channel `collection:export`: Collection export validates collection payload and export format before a main-process save picker.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -302,9 +302,9 @@
       "target": "renderer-to-main channel `collection:import`: Collection import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process picker constrained to supported collection formats.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -318,9 +318,9 @@
       "target": "renderer-to-main channel `diagnostics:export`: Diagnostic export opens a main-process save dialog and writes a sanitized local bundle only to the selected path.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/diagnosticsIpc.js",
-        "electron/preload.js",
-        "src/core/diagnostics.js"
+        "electron/ipc/diagnosticsIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/diagnostics-release/diagnostics.js"
       ],
       "tests": [
         "test/electron/diagnosticsIpc.test.js",
@@ -334,11 +334,11 @@
       "target": "renderer-to-main channel `environment:export`: Environment export validates environment payloads and writes native PostMeter or Postman environment JSON through a main-process save picker.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/environmentFormats.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/import-export/environmentFormats.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -353,11 +353,11 @@
       "target": "renderer-to-main channel `environment:import`: Environment import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a JSON picker, then validates native or Postman environment payloads.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/environmentFormats.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/import-export/environmentFormats.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -371,8 +371,8 @@
       "target": "renderer-to-main channel `file-export:cancelPrepared`: Picker-first export cancellation terminates active export preparation and clears prepared content if the user cancels the picker.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/exportIpc.js",
-        "electron/preload.js"
+        "electron/ipc/exportIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/exportIpc.test.js"
@@ -385,9 +385,9 @@
       "target": "renderer-to-main channel `file-export:choosePath`: Picker-first export opens a save dialog from lightweight metadata before expensive export preparation.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/exportIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js"
+        "electron/ipc/exportIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js"
       ],
       "tests": [
         "test/electron/exportIpc.test.js"
@@ -400,10 +400,10 @@
       "target": "renderer-to-main channel `file-export:prepare`: Picker-first export preparation validates and serializes export payloads in a worker while the save dialog is open.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/exportIpc.js",
-        "electron/exportPreparationWorker.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/exportIpc.js",
+        "electron/workers/exportPreparationWorker.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/exportIpc.test.js"
@@ -416,10 +416,10 @@
       "target": "renderer-to-main channel `file-export:writePrepared`: Picker-first export writes a prepared export only to the user-selected validated save path.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/exportIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/workspacePersistence.js"
+        "electron/ipc/exportIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/workspace/workspacePersistence.js"
       ],
       "tests": [
         "test/electron/exportIpc.test.js"
@@ -433,8 +433,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/appMenu.js",
-        "electron/preload.js"
+        "electron/app-shell/appMenu.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js"
@@ -447,9 +447,9 @@
       "target": "renderer-to-main channel `oauth:cancel`: OAuth cancellation validates the flow ID before aborting.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/oauthIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/oauthIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/oauthIpc.test.js"
@@ -462,9 +462,9 @@
       "target": "renderer-to-main channel `oauth:device:cancel`: OAuth device cancellation validates the flow ID before aborting.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/oauthIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/oauthIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/oauthIpc.test.js"
@@ -477,9 +477,9 @@
       "target": "renderer-to-main channel `oauth:device:start`: OAuth device start validates ID, auth, and environment before flow orchestration.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/oauthIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/oauthIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/oauthIpc.test.js",
@@ -493,9 +493,9 @@
       "target": "renderer-to-main channel `oauth:pkce:start`: OAuth PKCE start validates ID, auth, environment, and strategy before flow orchestration.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/oauthIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/oauthIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/oauthIpc.test.js",
@@ -510,8 +510,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/oauthIpc.test.js",
@@ -525,10 +525,10 @@
       "target": "renderer-to-main channel `performance:calibrate`: Performance calibration validates a runtime ID, starts a temporary 127.0.0.1 loopback server, streams progress, and returns bounded target-rate probe plus short edge-verification results with local latency-knee rejection for local client capacity.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/performanceCalibration.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/performanceCalibration.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -542,10 +542,10 @@
       "target": "renderer-to-main channel `performance:calibrate:cancel`: Performance calibration cancellation validates the active calibration ID before aborting loopback requests and closing the temporary server.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/performanceCalibration.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/performanceCalibration.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -559,9 +559,9 @@
       "target": "renderer-to-main channel `performance:cancel`: Performance-test cancellation validates the active run ID before aborting the local run.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -575,10 +575,10 @@
       "target": "renderer-to-main channel `performance:estimateResultStore`: Performance result-store estimation validates the saved test payload before returning a rough SQLite size estimate, effective available disk space, and whether the renderer must block Continue.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -593,11 +593,11 @@
       "target": "renderer-to-main channel `performance:export`: Performance-test export validates a saved test definition before writing native performance-test JSON through a main-process save picker.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/ipcValidation.js",
-        "src/core/performanceFormats.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/import-export/performanceFormats.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -612,13 +612,13 @@
       "target": "renderer-to-main channel `performance:exportResult`: Performance-result export validates bounded run output before writing JSON, CSV, or HTML through a main-process save picker and streams store-backed exports from the current runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/ipcValidation.js",
-        "src/core/performanceFormats.js",
-        "src/core/runtimeResultStore.js",
-        "src/core/resultHtmlReport.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/import-export/performanceFormats.js",
+        "src/core/runtime/runtimeResultStore.js",
+        "src/core/import-export/resultHtmlReport.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -635,10 +635,10 @@
       "target": "renderer-to-main channel `performance:import`: Performance-test import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process picker constrained to native performance-test JSON files.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/performanceFormats.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/import-export/performanceFormats.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -652,9 +652,9 @@
       "target": "main-to-renderer channel `performance:progress`: Performance-test and calibration progress events are asserted before delivery to the renderer subscription.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -668,10 +668,10 @@
       "target": "renderer-to-main channel `performance:resultDetail`: Performance result detail lookup validates the active result ID and row index before returning one captured sample detail row from the reusable runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -686,10 +686,10 @@
       "target": "renderer-to-main channel `performance:resultPage`: Performance result paging validates the active result ID and bounded page query before reading a renderer-sized sample page from the reusable runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -704,12 +704,12 @@
       "target": "renderer-to-main channel `performance:start`: Performance-test start validates ID, saved test payload, environment, capture settings, safety limits, and progress payloads before local execution writes high-volume samples to the reusable local runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/performanceRunner.js",
-        "src/core/runtimeResultStore.js",
-        "src/core/resultCapturePolicy.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/performanceRunner.js",
+        "src/core/runtime/runtimeResultStore.js",
+        "src/core/workspace/resultCapturePolicy.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -725,11 +725,11 @@
       "target": "renderer-to-main channel `request:export`: Standalone request export validates request payloads and writes native PostMeter request JSON or curl through a main-process save picker.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/requestFormats.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/import-export/requestFormats.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -743,10 +743,10 @@
       "target": "renderer-to-main channel `request:exportText`: Standalone request export preview validates request payloads and returns native PostMeter request JSON or curl text for copyable renderer display.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/requestFormats.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/import-export/requestFormats.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -760,11 +760,11 @@
       "target": "renderer-to-main channel `request:import`: Standalone request import accepts direct pasted text or a renderer-selected file path, then validates curl or native PostMeter request JSON before returning an unsaved request payload.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/requestFormats.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/import-export/requestFormats.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -778,9 +778,9 @@
       "target": "renderer-to-main channel `request:send`: Single request send validates request/environment payloads and validates response payloads before returning.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/requestIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/requestIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/requestIpc.test.js",
@@ -794,9 +794,9 @@
       "target": "renderer-to-main channel `request:validate`: Single request validation validates request and environment payloads.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/requestIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/requestIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/requestIpc.test.js",
@@ -810,9 +810,9 @@
       "target": "renderer-to-main channel `runner:cancel`: Collection-run cancellation validates the active run ID before aborting.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -826,10 +826,10 @@
       "target": "renderer-to-main channel `runner:estimateResultStore`: Collection-run result-store estimation validates runner/config payloads before returning a rough SQLite size estimate, effective available disk space, and whether the renderer must block Continue.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -844,12 +844,12 @@
       "target": "renderer-to-main channel `runner:export`: Collection-run export validates result/format payloads before a main-process save picker and streams store-backed CSV/JSON/HTML exports from the current runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js",
-        "src/core/resultHtmlReport.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js",
+        "src/core/import-export/resultHtmlReport.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -865,11 +865,11 @@
       "target": "renderer-to-main channel `runner:exportDefinition`: Runner definition export validates a saved runner payload before writing native runner JSON through a main-process save picker.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/runnerFormats.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/import-export/runnerFormats.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -884,11 +884,11 @@
       "target": "renderer-to-main channel `runner:importDefinition`: Runner definition import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a JSON picker, then validates native runner payloads.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/runnerFormats.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/import-export/runnerFormats.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -902,9 +902,9 @@
       "target": "main-to-renderer channel `runner:progress`: Collection-run progress events are asserted before delivery to the renderer subscription.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -918,10 +918,10 @@
       "target": "renderer-to-main channel `runner:resultDetail`: Collection-run result detail lookup validates the active result ID and row index before returning one captured detail row from the reusable runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -936,10 +936,10 @@
       "target": "renderer-to-main channel `runner:resultPage`: Collection-run result paging validates the active result ID and bounded page query before reading a renderer-sized page from the reusable runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -954,11 +954,11 @@
       "target": "renderer-to-main channel `runner:start`: Collection-run start validates ID, collection, environment, capture settings, and config payloads before writing high-volume results to the reusable local runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js",
-        "src/core/resultCapturePolicy.js"
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/runtime/runtimeResultStore.js",
+        "src/core/workspace/resultCapturePolicy.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -973,8 +973,8 @@
       "target": "renderer-to-main channel `sandbox-package:fetch`: Sandbox package review fetch normalizes source URL inputs and returns bounded reviewed package metadata.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/sandboxPackageIpc.js",
-        "electron/preload.js"
+        "electron/ipc/sandboxPackageIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/sandboxPackageIpc.test.js",
@@ -988,8 +988,8 @@
       "target": "renderer-to-main channel `session:load`: UI session load through the trusted renderer IPC wrapper.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/sessionIpc.js",
-        "electron/preload.js"
+        "electron/ipc/sessionIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/sessionIpc.test.js",
@@ -1003,8 +1003,8 @@
       "target": "renderer-to-main channel `session:save`: Asynchronous UI session save through the trusted renderer IPC wrapper.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/sessionIpc.js",
-        "electron/preload.js"
+        "electron/ipc/sessionIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/sessionIpc.test.js",
@@ -1018,8 +1018,8 @@
       "target": "renderer-to-main-sync channel `session:saveSync`: Synchronous shutdown UI session save through the trusted renderer IPC wrapper.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/sessionIpc.js",
-        "electron/preload.js"
+        "electron/ipc/sessionIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/sessionIpc.test.js",
@@ -1034,9 +1034,9 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/preload.js",
-        "electron/autoUpdateService.js",
-        "src/core/ipcValidation.js"
+        "electron/app-shell/preload.js",
+        "electron/services/autoUpdateService.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/preloadMenuActions.test.js",
@@ -1052,7 +1052,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/preload.js"
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/vaultStore.test.js"
@@ -1066,7 +1066,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/preload.js"
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/vaultStore.test.js"
@@ -1079,8 +1079,8 @@
       "target": "main-to-renderer channel `vault:prompt`: Vault prompt events carry metadata only and never include secret values.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/vaultPrompt.js",
-        "electron/preload.js"
+        "electron/ipc/vaultPrompt.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/vaultPrompt.test.js",
@@ -1094,8 +1094,8 @@
       "target": "renderer-to-main channel `vault:prompt-response`: Vault prompt responses must come from the original trusted renderer sender and normalize grant decisions.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/vaultPrompt.js",
-        "electron/preload.js"
+        "electron/ipc/vaultPrompt.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/vaultPrompt.test.js",
@@ -1110,7 +1110,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/preload.js"
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/vaultStore.test.js"
@@ -1124,7 +1124,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/preload.js"
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/vaultStore.test.js"
@@ -1137,8 +1137,8 @@
       "target": "renderer-to-main channel `workspace:create`: Workspace creation remains main-process owned.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
@@ -1151,8 +1151,8 @@
       "target": "renderer-to-main channel `workspace:delete`: Workspace delete validates non-empty workspace IDs before destructive store operations.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
@@ -1165,11 +1165,28 @@
       "target": "renderer-to-main channel `workspace:duplicate`: Workspace duplication validates non-empty workspace IDs before creating a separate workspace file.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-encrypt",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:encrypt`: Workspace encryption validates workspace IDs, workspace payloads, and bounded keys before writing an encrypted workspace envelope.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceStore.test.js"
       ],
       "notes": ""
     },
@@ -1179,10 +1196,10 @@
       "target": "renderer-to-main channel `workspace:export`: Workspace export validates optional workspace payload/ID before a main-process JSON save picker.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1196,9 +1213,38 @@
       "target": "renderer-to-main channel `workspace:import`: Workspace import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process JSON picker, then returns a validated file-operation result.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "electron/app-shell/fileDialogs.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-key-prompt",
+      "area": "IPC channel",
+      "target": "main-to-renderer channel `workspace:key-prompt`: Workspace key prompts carry workspace metadata only and never include stored keys or workspace contents.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceKeyPrompt.js",
+        "electron/app-shell/preload.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-key-prompt-response",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:key-prompt-response`: Workspace key prompt responses are scoped to the prompting renderer and bounded before the main process validates the key.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceKeyPrompt.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
@@ -1211,13 +1257,30 @@
       "target": "renderer-to-main channel `workspace:load`: Workspace load returns schema-validated workspace metadata.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
         "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-removeencryption",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:removeEncryption`: Workspace encryption removal validates workspace IDs and bounded keys before saving the workspace as plaintext and deleting encrypted backups.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceStore.test.js"
       ],
       "notes": ""
     },
@@ -1227,8 +1290,8 @@
       "target": "renderer-to-main channel `workspace:rename`: Workspace rename validates workspace ID and bounded name input.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
@@ -1241,9 +1304,9 @@
       "target": "renderer-to-main channel `workspace:save`: Whole-workspace save validates the workspace payload before persistence.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1257,9 +1320,9 @@
       "target": "renderer-to-main channel `workspace:saveCollection`: Targeted collection save validates collection payload shape.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1273,9 +1336,9 @@
       "target": "renderer-to-main channel `workspace:saveEnvironment`: Targeted environment save validates environment payload shape.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1289,9 +1352,9 @@
       "target": "renderer-to-main channel `workspace:saveFolder`: Targeted folder save validates folder payload shape.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1305,9 +1368,9 @@
       "target": "renderer-to-main channel `workspace:saveRequest`: Targeted request save validates request, variables, and cookie payload shape.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1321,10 +1384,10 @@
       "target": "renderer-to-main channel `workspace:saveSettings`: Local settings save validates settings-only payloads, persists app-wide preferences in settings.json, and persists workspace-local preferences in managed workspace localsettings outside portable workspace exports.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js",
-        "src/core/appSettingsStore.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js",
+        "src/core/workspace/appSettingsStore.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1339,9 +1402,9 @@
       "target": "renderer-to-main-sync channel `workspace:saveSync`: Synchronous shutdown workspace save validates the workspace payload and skips stale full-workspace writes while queued workspace mutations are pending.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1355,11 +1418,28 @@
       "target": "renderer-to-main channel `workspace:switch`: Workspace switch validates non-empty workspace IDs before loading.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/preload.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-unlock",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:unlock`: Encrypted workspace unlock validates workspace IDs and bounded keys before decrypting in the main process.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceStore.test.js"
       ],
       "notes": ""
     },
@@ -1369,9 +1449,9 @@
       "target": "Diagnostics export IPC is save-dialog-only and writes sanitized local diagnostic bundles without accepting renderer-provided paths or upload destinations.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/diagnosticsIpc.js",
-        "src/core/diagnostics.js",
-        "electron/preload.js"
+        "electron/ipc/diagnosticsIpc.js",
+        "src/core/diagnostics-release/diagnostics.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/diagnosticsIpc.test.js",
@@ -1385,8 +1465,8 @@
       "target": "OAuth IPC validates IDs, auth payloads, environments, and cancellation requests before entering OAuth flow orchestration.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/oauthIpc.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/oauthIpc.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/oauthIpc.test.js",
@@ -1400,8 +1480,8 @@
       "target": "Single-request validation/send IPC validates request, environment, and response payloads before mutating workspace state.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/requestIpc.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/requestIpc.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/requestIpc.test.js",
@@ -1415,8 +1495,8 @@
       "target": "Collection-run IPC validates start/cancel/export payloads and progress events while keeping cancellation state parent-owned.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/runtimeIpc.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
@@ -1430,8 +1510,8 @@
       "target": "Sandbox package fetch IPC keeps package review/fetching parent-owned and validates reviewed source inputs before caching packages.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/sandboxPackageIpc.js",
-        "src/core/sandboxPackageCache.js"
+        "electron/ipc/sandboxPackageIpc.js",
+        "src/core/sandbox/sandboxPackageCache.js"
       ],
       "tests": [
         "test/electron/sandboxPackageIpc.test.js",
@@ -1447,7 +1527,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/ipcSecurity.js"
+        "electron/security/ipcSecurity.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js"
@@ -1460,9 +1540,9 @@
       "target": "Renderer session load/save channels validate persisted UI-session payloads, including the synchronous shutdown flush path.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/sessionIpc.js",
-        "electron/sessionStore.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/sessionIpc.js",
+        "electron/services/sessionStore.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/sessionIpc.test.js",
@@ -1478,8 +1558,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/vaultPrompt.js",
-        "electron/preload.js"
+        "electron/ipc/vaultPrompt.js",
+        "electron/app-shell/preload.js"
       ],
       "tests": [
         "test/electron/vaultPrompt.test.js",
@@ -1494,9 +1574,9 @@
       "target": "Workspace and collection IPC channels validate payloads and route native file dialogs through main-process handlers.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/fileDialogs.js",
-        "src/core/ipcValidation.js"
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/fileDialogs.js",
+        "src/core/contracts/ipcValidation.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
@@ -1544,7 +1624,7 @@
       "target": "Electron permission checks and permission requests are denied by default.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/mainWindow.js"
+        "electron/app-shell/mainWindow.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js"
@@ -1557,7 +1637,7 @@
       "target": "Renderer access is restricted to explicit contextBridge APIs; IPC channel names remain compatibility contracts.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/preload.js",
+        "electron/app-shell/preload.js",
         "docs/ARCHITECTURE.md"
       ],
       "tests": [
@@ -1571,8 +1651,8 @@
       "target": "The preload exposes window.postmeter only in the main app frame so sandboxed iframes and future subframe preload behavior cannot receive privileged APIs.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/preload.js",
-        "electron/ipcSecurity.js"
+        "electron/app-shell/preload.js",
+        "electron/security/ipcSecurity.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js",
@@ -1586,9 +1666,9 @@
       "target": "The renderer is served through the secure standard postmeter-app:// custom protocol with a narrow allowlist for renderer assets, reviewed shared browser-safe core files, the app icon, and known renderer smoke query keys instead of loading the UI with file://; the handler uses no renderer fetch privilege and adds no-store, nosniff, no-referrer, and CSP response headers.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/appProtocol.js",
+        "electron/app-shell/appProtocol.js",
         "electron/main.js",
-        "electron/mainWindow.js"
+        "electron/app-shell/mainWindow.js"
       ],
       "tests": [
         "test/electron/appChrome.test.js",
@@ -1605,7 +1685,7 @@
       "target": "The postmeter:// OAuth callback scheme is registered through the main process and callback URLs are accepted only for the expected oauth/callback route with an active matching OAuth state.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/oauthFlows.js",
+        "electron/services/oauthFlows.js",
         "package.json",
         "scripts/validateWindowsProtocolRegistration.ps1",
         "scripts/validateMacProtocolRegistration.sh"
@@ -1625,7 +1705,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "electron/appProtocol.js",
+        "electron/app-shell/appProtocol.js",
         "docs/TECH_SPECS.md"
       ],
       "tests": [
@@ -1640,7 +1720,7 @@
       "target": "Visualizer iframe output remains sandboxed with CSP/reviewed asset controls and no unreviewed remote script loading.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/scriptRuntime.js",
+        "src/core/sandbox/scriptRuntime.js",
         "docs/SANDBOX_CONTRACT.md"
       ],
       "tests": [

@@ -2,13 +2,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { runCollection } = require('../../src/core/collectionRunner');
-const { importPostmanCollection } = require('../../src/core/postmanImporter');
+const { runCollection } = require('../../src/core/runtime/collectionRunner');
+const { importPostmanCollection } = require('../../src/core/import-export/postmanImporter');
 const {
   prepareGraphqlHttpRequest,
   runScriptedRequestLifecycle,
   createScriptedRequestState
-} = require('../../src/core/scriptedRequestLifecycle');
+} = require('../../src/core/runtime/scriptedRequestLifecycle');
 
 const fixturePath = path.join(__dirname, '../fixtures/postman/protocol-script-hooks.collection.json');
 

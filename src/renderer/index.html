@@ -5,9 +5,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self' about: data:; child-src 'self' about: data:; connect-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; worker-src 'none'; media-src 'none';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PostMeter</title>
-  <link rel="stylesheet" href="theme.css">
-  <link rel="stylesheet" href="base.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles/theme.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/styles.css">
 </head>
 <body>
   <header class="topbar">
@@ -1181,6 +1181,9 @@
           </div>
           <div class="workspace-actions">
             <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
+            <button id="unlockWorkspacePanelButton" type="button" hidden>Unlock Workspace</button>
+            <button id="encryptWorkspacePanelButton" type="button">Encrypt Workspace</button>
+            <button id="removeWorkspaceEncryptionPanelButton" type="button">Decrypt Workspace</button>
             <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
             <button id="deleteWorkspacePanelButton" class="danger-button" type="button">Delete Workspace</button>
           </div>
@@ -1196,7 +1199,6 @@
           <h2>Select a workspace</h2>
         </div>
       </section>
-
       <section id="runnerMainPanel" class="panel runner-main-panel" role="tabpanel" hidden>
         <div id="runnerEditorSection" class="runner-editor-section">
           <div class="runner-main-header">
@@ -3204,6 +3206,25 @@
       </div>
     </section>
 
+    <section id="workspaceEncryptionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="workspaceEncryptionTitle" aria-describedby="workspaceEncryptionMessage workspaceEncryptionWarning workspaceEncryptionError" hidden>
+      <h2 id="workspaceEncryptionTitle">Workspace encryption</h2>
+      <p id="workspaceEncryptionMessage">Enter the workspace key.</p>
+      <p id="workspaceEncryptionWarning" class="file-picker-error" role="note">Losing this key permanently loses access to the encrypted workspace. PostMeter does not store it.</p>
+      <label class="field">
+        <span id="workspaceEncryptionKeyLabel">Key</span>
+        <input id="workspaceEncryptionKeyInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <label id="workspaceEncryptionConfirmField" class="field" hidden>
+        <span>Confirm key</span>
+        <input id="workspaceEncryptionConfirmInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <p id="workspaceEncryptionError" class="file-picker-error" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelWorkspaceEncryptionButton" type="button">Cancel</button>
+        <button id="confirmWorkspaceEncryptionButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
     <section id="clientCertificateModal" class="modal client-certificate-modal" role="dialog" aria-modal="true" aria-labelledby="clientCertificateModalTitle" aria-describedby="clientCertificateModalMessage" hidden>
       <div class="modal-title-row">
         <h2 id="clientCertificateModalTitle">Add client certificate</h2>
@@ -3460,7 +3481,6 @@
       </div>
     </section>
   </div>
-
   <div id="contextMenu" class="context-menu" role="menu" aria-label="Item actions" hidden></div>
   <div id="fileSourceMenu" class="context-menu file-source-menu" role="menu" aria-label="File source actions" hidden>
     <button id="fileSourceChooseButton" type="button" role="menuitem">Choose File...</button>
@@ -3481,43 +3501,64 @@
     </section>
   </div>
 
-  <script src="responseFormatting.js"></script>
-  <script src="contextMenu.js"></script>
-  <script src="layoutControls.js"></script>
-  <script src="../core/payloadSchemas.js"></script>
-  <script src="../core/csvVariables.js"></script>
-  <script src="../core/resultCapturePolicy.js"></script>
-  <script src="../core/requestQueryModel.js"></script>
-  <script src="../core/authModel.js"></script>
-  <script src="../core/cookieModel.js"></script>
-  <script src="collectionModel.js"></script>
-  <script src="cookieModel.js"></script>
-  <script src="performanceTestModel.js"></script>
-  <script src="variableHighlighter.js"></script>
-  <script src="codeEditor.js"></script>
-  <script src="requestEditorPanels.js"></script>
-  <script src="variableAutocomplete.js"></script>
-  <script src="rendererState.js"></script>
-  <script src="sessionPersistence.js"></script>
-  <script src="requestTabs.js"></script>
-  <script src="requestTabState.js"></script>
-  <script src="authRefreshAutoDetectModel.js"></script>
-  <script src="rendererBootstrap.js"></script>
-  <script src="vaultPromptQueue.js"></script>
-  <script src="../core/keyboardShortcuts.js"></script>
-  <script src="rendererWorkflows.js"></script>
-  <script src="runResultFormatting.js"></script>
+  <script src="formatting/responseFormatting.js"></script>
+  <script src="ui/contextMenu.js"></script>
+  <script src="ui/layoutControls.js"></script>
+  <script src="../core/contracts/payloadSchemas.js"></script>
+  <script src="../core/workspace/csvVariables.js"></script>
+  <script src="../core/workspace/resultCapturePolicy.js"></script>
+  <script src="../core/workspace/requestQueryModel.js"></script>
+  <script src="../core/http/authModel.js"></script>
+  <script src="../core/http/cookieModel.js"></script>
+  <script src="models/collectionModel.js"></script>
+  <script src="models/cookieModel.js"></script>
+  <script src="models/performanceTestModel.js"></script>
+  <script src="ui/variableHighlighter.js"></script>
+  <script src="ui/codeEditor.js"></script>
+  <script src="ui/requestEditorPanels.js"></script>
+  <script src="ui/variableAutocomplete.js"></script>
+  <script src="app/rendererState.js"></script>
+  <script src="app/sessionPersistence.js"></script>
+  <script src="ui/requestTabs.js"></script>
+  <script src="app/requestTabState.js"></script>
+  <script src="models/authRefreshAutoDetectModel.js"></script>
+  <script src="app/rendererBootstrap.js"></script>
+  <script src="ui/vaultPromptQueue.js"></script>
+  <script src="../core/contracts/keyboardShortcuts.js"></script>
+  <script src="app/rendererWorkflows.js"></script>
+  <script src="formatting/runResultFormatting.js"></script>
   <script src="vendor/markdown-it.min.js"></script>
-  <script src="markdownRenderer.js"></script>
+  <script src="formatting/markdownRenderer.js"></script>
+  <script src="features/tutorialCatalog.js"></script>
+  <script src="features/entityDisplay.js"></script>
+  <script src="ui/rendererUiUtilities.js"></script>
+  <script src="app/rendererStartup.js"></script>
+  <script src="ui/titleEditors.js"></script>
+  <script src="app/appMenuAndTabs.js"></script>
+  <script src="ui/modalController.js"></script>
+  <script src="features/tutorialController.js"></script>
+  <script src="ui/localFilePickerController.js"></script>
+  <script src="features/vaultPromptController.js"></script>
+  <script src="app/workspaceLifecycle.js"></script>
+  <script src="features/settingsController.js"></script>
+  <script src="features/workspaceSidebarController.js"></script>
+  <script src="features/authRefreshController.js"></script>
+  <script src="features/performanceController.js"></script>
+  <script src="features/runnerController.js"></script>
+  <script src="features/diagnosticsWorkspaceController.js"></script>
+  <script src="ui/requestEditorController.js"></script>
+  <script src="features/runtimeResultsController.js"></script>
+  <script src="features/importExportWorkspaceController.js"></script>
+  <script src="app/editorCollectors.js"></script>
   <script src="renderer.js"></script>
-  <script src="uiSmokeCommon.js"></script>
-  <script src="uiWorkflowSmoke.js"></script>
-  <script src="uiRegressionSmoke.js"></script>
-  <script src="uiSnapshotSmoke.js"></script>
-  <script src="uiTypographySmoke.js"></script>
-  <script src="uiOauthSmoke.js"></script>
-  <script src="uiHawkSmoke.js"></script>
-  <script src="uiAwsSmoke.js"></script>
-  <script src="uiSmoke.js"></script>
+  <script src="smoke/uiSmokeCommon.js"></script>
+  <script src="smoke/uiWorkflowSmoke.js"></script>
+  <script src="smoke/uiRegressionSmoke.js"></script>
+  <script src="smoke/uiSnapshotSmoke.js"></script>
+  <script src="smoke/uiTypographySmoke.js"></script>
+  <script src="smoke/uiOauthSmoke.js"></script>
+  <script src="smoke/uiHawkSmoke.js"></script>
+  <script src="smoke/uiAwsSmoke.js"></script>
+  <script src="smoke/uiSmoke.js"></script>
 </body>
 </html>

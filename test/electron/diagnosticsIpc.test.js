@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   redactedDiagnosticsExportError,
   registerDiagnosticsIpc
-} = require('../../electron/diagnosticsIpc');
+} = require('../../electron/ipc/diagnosticsIpc');
 
 test('diagnostics IPC registers export channel and returns cancel without exporting', async () => {
   const handlers = new Map();

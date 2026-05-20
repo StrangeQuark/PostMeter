@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedFrom": "src/core/oauthProviderCertification.js",
+  "generatedFrom": "src/core/diagnostics-release/oauthProviderCertification.js",
   "deterministic": true,
   "providers": [
     {

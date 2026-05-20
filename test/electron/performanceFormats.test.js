@@ -6,8 +6,8 @@ const {
   importPerformanceTestDocument,
   importPerformanceTestFromText,
   performanceResultToCsv
-} = require('../../src/core/performanceFormats');
-const { performanceTestModel } = require('../../src/core/models');
+} = require('../../src/core/import-export/performanceFormats');
+const { performanceTestModel } = require('../../src/core/workspace/models');
 
 test('exports and imports native performance test documents with schema validation', () => {
   const performanceTest = performanceTestModel({

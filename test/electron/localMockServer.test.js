@@ -3,14 +3,14 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const test = require('node:test');
-const { collectionModel, requestModel } = require('../../src/core/models');
-const { importPostmanCollection } = require('../../src/core/postmanImporter');
+const { collectionModel, requestModel } = require('../../src/core/workspace/models');
+const { importPostmanCollection } = require('../../src/core/import-export/postmanImporter');
 const {
   MockStateStore,
   handleLocalMockRequest,
   matchMockRequest,
   startLocalMockServer
-} = require('../../src/core/localMockServer');
+} = require('../../src/core/runtime/localMockServer');
 
 function localMockOptions(stateStore) {
   return {

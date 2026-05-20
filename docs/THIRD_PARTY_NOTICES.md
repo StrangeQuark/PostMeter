@@ -2,7 +2,7 @@
 
 ## Postman Sandbox Bootcode
 
-`src/core/postmanSandboxBootcodeBundle.js` contains a gzip-compressed generated artifact derived from `postman-sandbox@6.2.2` `.cache/bootcode.browser.js`.
+`src/core/sandbox/postmanSandboxBootcodeBundle.js` contains a gzip-compressed generated artifact derived from `postman-sandbox@6.2.2` `.cache/bootcode.browser.js`.
 
 - Source package: `postman-sandbox@6.2.2`
 - Source license: Apache-2.0
@@ -15,7 +15,7 @@ Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0
 
 ## Handlebars Visualizer Runtime
 
-`src/core/visualizerHandlebarsBundle.js` contains a gzip-compressed generated artifact derived from `handlebars@4.7.9` `dist/handlebars.js`.
+`src/core/sandbox/visualizerHandlebarsBundle.js` contains a gzip-compressed generated artifact derived from `handlebars@4.7.9` `dist/handlebars.js`.
 
 - Source package: `handlebars@4.7.9`
 - Source license: MIT

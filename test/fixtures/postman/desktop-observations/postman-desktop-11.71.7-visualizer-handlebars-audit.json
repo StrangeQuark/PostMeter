@@ -38,7 +38,7 @@
         "Postman Desktop 11.71.7 packages handlebars@4.7.8 through the visualizer runtime path."
       ],
       "postmeterEvidence": [
-        "src/core/visualizerHandlebarsBundle.js",
+        "src/core/sandbox/visualizerHandlebarsBundle.js",
         "test/electron/scriptRuntime.test.js",
         "test/electron/postmanSandboxAdversarial.test.js"
       ]
@@ -83,7 +83,7 @@
     "artifactPaths": [
       "/snap/postman/360/usr/share/postman/resources/app/package.json",
       "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
-      "src/core/visualizerHandlebarsBundle.js",
+      "src/core/sandbox/visualizerHandlebarsBundle.js",
       "test/electron/scriptRuntime.test.js",
       "test/electron/postmanSandboxAdversarial.test.js",
       "test/electron/postmanSandboxCorpus.test.js",
@@ -98,7 +98,7 @@
     },
     "postmeterRuntime": {
       "handlebars": "4.7.9",
-      "reason": "Handlebars 4.7.8 is the audited Postman Desktop 11.71.7 line, but current npm advisories cover <=4.7.8. PostMeter uses the patched 4.7-compatible browser runtime and records the vendored source SHA-256 in src/core/visualizerHandlebarsBundle.js."
+      "reason": "Handlebars 4.7.8 is the audited Postman Desktop 11.71.7 line, but current npm advisories cover <=4.7.8. PostMeter uses the patched 4.7-compatible browser runtime and records the vendored source SHA-256 in src/core/sandbox/visualizerHandlebarsBundle.js."
     },
     "coveredBehavior": [
       "pm.visualizer.set and pm.visualizer.clear capture bounded isolated render output",

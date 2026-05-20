@@ -10,10 +10,10 @@ const {
   validateFixtureArtifacts,
   validateParityMatrix,
   validateProductionClaim
-} = require('../../src/core/postmanParityHarness');
+} = require('../../src/core/diagnostics-release/postmanParityHarness');
 const {
   buildPostmanParityMatrix
-} = require('../../src/core/postmanParityMatrix');
+} = require('../../src/core/diagnostics-release/postmanParityMatrix');
 
 test('validates the committed Postman sandbox parity matrix', async () => {
   const result = await validateCommittedParityMatrix();

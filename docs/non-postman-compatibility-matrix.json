@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "non-postman-compatibility",
-  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "generatedFrom": "src/core/diagnostics-release/productionSupportMatrices.js",
   "deterministic": true,
   "rows": [
     {
@@ -10,7 +10,7 @@
       "target": "curl import/export covers common Linux/macOS/Windows quoting forms, including cmd.exe caret line continuations, and repeated headers without claiming every shell dialect.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/curlFormats.js",
+        "src/core/import-export/curlFormats.js",
         "docs/COMPATIBILITY.md"
       ],
       "tests": [
@@ -24,8 +24,8 @@
       "target": "curl import/export covers common method, URL, generated names, header, auth, repeated data, query-data, cookie, redirect, compression, file/binary, and quoting variants for collections and standalone requests; generated collection shell scripts include collection/request comments and warnings for PostMeter-only request behavior that curl cannot represent.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/curlFormats.js",
-        "src/core/requestFormats.js",
+        "src/core/import-export/curlFormats.js",
+        "src/core/import-export/requestFormats.js",
         "docs/COMPATIBILITY.md"
       ],
       "tests": [
@@ -42,8 +42,8 @@
       "evidenceRefs": [
         "docs/COMPATIBILITY.md",
         "docs/TECH_SPECS.md",
-        "src/core/performanceFormats.js",
-        "electron/runtimeIpc.js"
+        "src/core/import-export/performanceFormats.js",
+        "electron/ipc/runtimeIpc.js"
       ],
       "tests": [
         "test/electron/performanceFeatureCoverage.test.js",
@@ -58,8 +58,8 @@
       "target": "Native workspace round trips preserve auth, variables, docs, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/workspaceStore.js",
-        "src/core/workspacePersistence.js"
+        "src/core/workspace/workspaceStore.js",
+        "src/core/workspace/workspacePersistence.js"
       ],
       "tests": [
         "test/electron/workspaceStore.test.js",
@@ -73,7 +73,7 @@
       "target": "OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover common local references, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data, auth, binary body hints, and request bodies where representable.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/openApiFormats.js",
+        "src/core/import-export/openApiFormats.js",
         "docs/COMPATIBILITY.md"
       ],
       "tests": [
@@ -87,7 +87,7 @@
       "target": "Invalid-but-common OpenAPI and structured collection variants fail with clear parser or fallback errors instead of crashing or producing misleading collections.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/openApiFormats.js",
+        "src/core/import-export/openApiFormats.js",
         "test/electron/collectionFormats.test.js"
       ],
       "tests": [
@@ -102,7 +102,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "docs/COMPATIBILITY.md",
-        "NEXT_STEPS.MD"
+        "docs/TECH_SPECS.md"
       ],
       "tests": [
         "npm run compatibility:non-postman:validate"

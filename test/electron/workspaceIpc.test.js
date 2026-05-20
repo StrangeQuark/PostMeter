@@ -8,17 +8,17 @@ const {
   selectedOpenFilePath,
   selectedSaveFilePath,
   validateDialogFilePath
-} = require('../../electron/fileDialogs');
-const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
-const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
-const { normalizeSettings, normalizeWorkspaceLocalSettings } = require('../../src/core/models');
+} = require('../../electron/app-shell/fileDialogs');
+const { registerWorkspaceIpc } = require('../../electron/ipc/workspaceIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
+const { normalizeSettings, normalizeWorkspaceLocalSettings } = require('../../src/core/workspace/models');
 
 test('file dialog helpers validate selected paths before IPC file operations', () => {
   assert.deepEqual(collectionImportFilters(), [
     { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'sh'] },
     { name: 'All Files', extensions: ['*'] }
   ]);
-  assert.deepEqual(require('../../electron/fileDialogs').requestImportFilters(), [
+  assert.deepEqual(require('../../electron/app-shell/fileDialogs').requestImportFilters(), [
     { name: 'Requests', extensions: ['json', 'sh', 'txt'] },
     { name: 'All Files', extensions: ['*'] }
   ]);
@@ -136,9 +136,11 @@ test('workspace IPC registers stable workspace, collection, and request channels
     'workspace:create',
     'workspace:delete',
     'workspace:duplicate',
+    'workspace:encrypt',
     'workspace:export',
     'workspace:import',
     'workspace:load',
+    'workspace:removeEncryption',
     'workspace:rename',
     'workspace:save',
     'workspace:saveCollection',
@@ -146,7 +148,8 @@ test('workspace IPC registers stable workspace, collection, and request channels
     'workspace:saveFolder',
     'workspace:saveRequest',
     'workspace:saveSettings',
-    'workspace:switch'
+    'workspace:switch',
+    'workspace:unlock'
   ]);
   assert.deepEqual([...syncHandlers.keys()].sort(), ['workspace:saveSync']);
   await handlers.get('workspace:rename')({}, 'Local Workspace.json', 'Renamed Workspace');
@@ -640,6 +643,7 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
   const handlers = new Map();
   const syncHandlers = new Map();
   let exportedWorkspaceId = null;
+  let exportedOptions = null;
   registerWorkspaceIpc({
     dialog: {
       showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
@@ -651,8 +655,9 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
     getWorkspaceStore: () => ({
       describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] }),
       exportWorkspace: async () => '/tmp/current-export.json',
-      exportWorkspaceById: async (workspaceId) => {
+      exportWorkspaceById: async (workspaceId, _filePath, options) => {
         exportedWorkspaceId = workspaceId;
+        exportedOptions = options;
         return '/tmp/export.json';
       }
     }),
@@ -673,6 +678,52 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
   const result = await handlers.get('workspace:export')(null, null, 'Workspace.json');
 
   assert.equal(exportedWorkspaceId, 'Workspace.json');
+  assert.deepEqual(exportedOptions, { encryptionKey: '' });
+  assert.deepEqual(result, { cancelled: false, path: '/tmp/export.json' });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC passes export-only keys for locked encrypted workspace exports', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  let exportedWorkspaceId = null;
+  let exportedOptions = null;
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: false, filePath: '/tmp/export.json' })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspaceStore: () => ({
+      exportWorkspace: async () => '/tmp/current-export.json',
+      exportWorkspaceById: async (workspaceId, _filePath, options) => {
+        exportedWorkspaceId = workspaceId;
+        exportedOptions = options;
+        return '/tmp/export.json';
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
+    selectedOpenFilePath,
+    selectedSaveFilePath,
+    setWorkspace: () => {}
+  });
+
+  const result = await handlers.get('workspace:export')(null, null, 'Locked Workspace.json', 'secret1');
+
+  assert.equal(exportedWorkspaceId, 'Locked Workspace.json');
+  assert.deepEqual(exportedOptions, { encryptionKey: 'secret1' });
   assert.deepEqual(result, { cancelled: false, path: '/tmp/export.json' });
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });

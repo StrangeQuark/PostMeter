@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { checkForUpdates, compareVersions, normalizeVersion } = require('../../src/core/updateChecker');
+const { checkForUpdates, compareVersions, normalizeVersion } = require('../../src/core/diagnostics-release/updateChecker');
 
 test('compares and normalizes release versions', () => {
   assert.equal(normalizeVersion('v1.2.3-beta+build'), '1.2.3');

@@ -5,7 +5,7 @@ const {
   runtimeEnvironment,
   setVariable,
   unsetVariable
-} = require('../../src/core/variableScope');
+} = require('../../src/core/workspace/variableScope');
 
 test('builds runtime environment with request variables overriding folder, collection, and environment variables', () => {
   const runtime = runtimeEnvironment(

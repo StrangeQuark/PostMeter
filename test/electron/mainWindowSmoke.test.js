@@ -24,13 +24,13 @@ const {
   validateSmokeUserDataPath,
   writeStartupSmokeFailureArtifacts,
   writeUiSmokeFailureArtifacts
-} = require('../../electron/mainWindow');
+} = require('../../electron/app-shell/mainWindow');
 const {
   APP_PROTOCOL_HOST,
   APP_PROTOCOL_SCHEME,
   APP_RENDERER_CSP,
   APP_RENDERER_PATHNAME
-} = require('../../electron/appProtocol');
+} = require('../../electron/app-shell/appProtocol');
 
 function cmdOrCtrlModifier() {
   return process.platform === 'darwin' ? { meta: true } : { control: true };

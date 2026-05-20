@@ -1,0 +1,289 @@
+    <section id="textInputModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="textInputModalTitle" aria-describedby="textInputModalMessage" hidden>
+      <h2 id="textInputModalTitle">Provide value</h2>
+      <p id="textInputModalMessage">Enter a value to continue.</p>
+      <label class="field">
+        <span id="textInputModalLabel">Value</span>
+        <input id="textInputModalSingleLineInput" type="text" spellcheck="false" data-variable-highlight="false" hidden>
+        <textarea id="textInputModalInput" rows="4" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button id="cancelTextInputModalButton" type="button">Cancel</button>
+        <button id="confirmTextInputModalButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <section id="workspaceEncryptionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="workspaceEncryptionTitle" aria-describedby="workspaceEncryptionMessage workspaceEncryptionWarning workspaceEncryptionError" hidden>
+      <h2 id="workspaceEncryptionTitle">Workspace encryption</h2>
+      <p id="workspaceEncryptionMessage">Enter the workspace key.</p>
+      <p id="workspaceEncryptionWarning" class="file-picker-error" role="note">Losing this key permanently loses access to the encrypted workspace. PostMeter does not store it.</p>
+      <label class="field">
+        <span id="workspaceEncryptionKeyLabel">Key</span>
+        <input id="workspaceEncryptionKeyInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <label id="workspaceEncryptionConfirmField" class="field" hidden>
+        <span>Confirm key</span>
+        <input id="workspaceEncryptionConfirmInput" type="password" autocomplete="new-password" spellcheck="false" data-variable-highlight="false">
+      </label>
+      <p id="workspaceEncryptionError" class="file-picker-error" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelWorkspaceEncryptionButton" type="button">Cancel</button>
+        <button id="confirmWorkspaceEncryptionButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <section id="clientCertificateModal" class="modal client-certificate-modal" role="dialog" aria-modal="true" aria-labelledby="clientCertificateModalTitle" aria-describedby="clientCertificateModalMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="clientCertificateModalTitle">Add client certificate</h2>
+        <button id="closeClientCertificateModalButton" type="button" class="modal-close-button" aria-label="Close client certificate editor">X</button>
+      </div>
+      <p id="clientCertificateModalMessage">Configure the host match and local certificate files for HTTPS client authentication.</p>
+      <div class="client-certificate-form">
+        <label class="field">
+          <span>Name</span>
+          <input id="clientCertificateNameInput" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Host</span>
+          <input id="clientCertificateHostInput" autocomplete="off" placeholder="api.example.com or *.example.com">
+        </label>
+        <label class="field">
+          <span>Port</span>
+          <input id="clientCertificatePortInput" autocomplete="off" inputmode="numeric" placeholder="443">
+        </label>
+        <label class="field">
+          <span>Format</span>
+          <select id="clientCertificateFormatSelect">
+            <option value="pem">PEM certificate and key</option>
+            <option value="pfx">PFX/P12 bundle</option>
+          </select>
+        </label>
+        <div class="field client-certificate-pem-field">
+          <span>CRT file</span>
+          <div class="client-certificate-path-row">
+            <input id="clientCertificateCertPathInput" autocomplete="off" placeholder="/path/to/client.crt">
+            <button id="chooseClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathInput" aria-label="Choose CRT file">Choose</button>
+          </div>
+        </div>
+        <div class="field client-certificate-pem-field">
+          <span>KEY file</span>
+          <div class="client-certificate-path-row">
+            <input id="clientCertificateKeyPathInput" autocomplete="off" placeholder="/path/to/client.key">
+            <button id="chooseClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathInput" aria-label="Choose KEY file">Choose</button>
+          </div>
+        </div>
+        <div class="field client-certificate-pfx-field">
+          <span>PFX/P12 file</span>
+          <div class="client-certificate-path-row">
+            <input id="clientCertificatePfxPathInput" autocomplete="off" placeholder="/path/to/client.p12">
+            <button id="chooseClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathInput" aria-label="Choose PFX or P12 file">Choose</button>
+          </div>
+        </div>
+        <div class="field client-certificate-passphrase-field">
+          <span>Passphrase</span>
+          <div class="client-certificate-passphrase-row">
+            <input id="clientCertificatePassphraseInput" type="password" autocomplete="new-password">
+            <button id="toggleClientCertificatePassphraseButton" type="button" aria-controls="clientCertificatePassphraseInput" aria-pressed="false" aria-label="Show client certificate passphrase">Show</button>
+          </div>
+        </div>
+        <label id="clientCertificateEnabledField" class="checkbox-line client-certificate-enabled-field">
+          <input id="clientCertificateEnabledInput" type="checkbox">
+          <span>Enable certificate</span>
+        </label>
+      </div>
+      <p id="clientCertificateModalError" class="file-picker-error" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelClientCertificateModalButton" type="button">Cancel</button>
+        <button id="saveClientCertificateModalButton" type="button" class="primary">Save Certificate</button>
+      </div>
+    </section>
+
+    <section id="csvVariablesModal" class="modal csv-variables-modal" role="dialog" aria-modal="true" aria-labelledby="csvVariablesModalTitle" aria-describedby="csvVariablesModalMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="csvVariablesModalTitle">CSV variables</h2>
+        <button id="closeCsvVariablesModalButton" type="button" class="modal-close-button" aria-label="Close CSV variables">X</button>
+      </div>
+      <p id="csvVariablesModalMessage">Define a comma-separated schema and provide CSV data rows for request executions.</p>
+      <div class="csv-variables-body">
+        <label class="field">
+          <span>Variable schema</span>
+          <input id="csvVariablesSchemaInput" type="text" spellcheck="false" autocomplete="off" data-variable-highlight="false" placeholder="requestName,requestUrl,requestBody">
+        </label>
+        <section id="csvVariablesSourceSection" class="csv-variables-section" aria-labelledby="csvVariablesSourceTitle">
+          <div class="csv-variables-section-heading">
+            <h3 id="csvVariablesSourceTitle">CSV data source</h3>
+            <div class="csv-variables-source-pills" role="group" aria-label="Active CSV data source">
+              <button id="csvVariablesFileSourceButton" class="csv-variables-source-pill" type="button">File reference</button>
+              <button id="csvVariablesInlineSourceButton" class="csv-variables-source-pill" type="button">Inline rows</button>
+            </div>
+          </div>
+          <div class="csv-variables-source-row">
+            <div class="csv-variables-source-copy">
+              <strong>Imported file</strong>
+              <div id="csvVariablesFileStatus" class="csv-variables-file-status" role="status">No CSV file selected.</div>
+            </div>
+            <div class="csv-variables-source-actions">
+              <button id="csvVariablesImportButton" type="button">Import CSV</button>
+              <button id="clearCsvVariablesFileButton" type="button">Clear File</button>
+            </div>
+          </div>
+          <div id="csvVariablesImportChoice" class="csv-variables-import-choice" hidden>
+            <p id="csvVariablesImportChoiceMessage">Load this CSV file into the editor?</p>
+            <div class="modal-actions csv-variables-choice-actions">
+              <button id="csvVariablesKeepFileButton" type="button">Keep File Reference</button>
+              <button id="csvVariablesLoadFileButton" type="button" class="primary">Load Into Editor</button>
+            </div>
+          </div>
+          <div class="csv-variables-disclosure">
+            <button id="csvVariablesValuesToggle" class="csv-variables-disclosure-header" type="button" aria-expanded="false" aria-controls="csvVariablesValuesPanel">
+              <span>Inline CSV values</span>
+              <small id="csvVariablesValuesSummary">No inline rows</small>
+              <span class="csv-variables-disclosure-icon" aria-hidden="true"></span>
+            </button>
+            <div id="csvVariablesValuesPanel" class="csv-variables-disclosure-panel" hidden>
+              <label class="field">
+                <span>CSV rows</span>
+                <textarea id="csvVariablesValuesInput" rows="10" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text"></textarea>
+              </label>
+              <p class="csv-variables-inline-note">Inline rows can be saved alongside a file reference. Use the source buttons above to choose which one runs.</p>
+            </div>
+          </div>
+        </section>
+        <section id="csvVariablesRowSection" class="csv-variables-section csv-variables-row-section" aria-labelledby="csvVariablesRowHandlingTitle">
+          <div class="csv-variables-section-heading">
+            <h3 id="csvVariablesRowHandlingTitle">CSV row usage</h3>
+          </div>
+          <label id="csvVariablesReuseFirstRowOption" class="checkbox-line csv-variables-loop-option">
+            <input id="csvVariablesReuseFirstRowInput" type="checkbox">
+            <span>Use the first CSV row for every request</span>
+          </label>
+          <label id="csvVariablesLoopRowsOption" class="checkbox-line csv-variables-loop-option">
+            <input id="csvVariablesLoopRowsInput" type="checkbox">
+            <span>Loop CSV rows when the run needs more rows than the data provides</span>
+          </label>
+          <label id="csvVariablesContinueWithoutRowsOption" class="checkbox-line csv-variables-loop-option">
+            <input id="csvVariablesContinueWithoutRowsInput" type="checkbox">
+            <span>Continue remaining requests without CSV data if rows run out</span>
+          </label>
+        </section>
+      </div>
+      <p id="csvVariablesError" class="file-picker-error" role="alert" hidden></p>
+      <input id="csvVariablesFileInput" type="file" accept=".csv,text/csv,text/plain" hidden>
+      <div class="modal-actions">
+        <button id="cancelCsvVariablesModalButton" type="button">Cancel</button>
+        <button id="saveCsvVariablesModalButton" type="button" class="primary">Save Variables</button>
+      </div>
+    </section>
+
+    <section id="confirmActionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmActionModalTitle" aria-describedby="confirmActionModalMessage" hidden>
+      <h2 id="confirmActionModalTitle">Confirm action</h2>
+      <p id="confirmActionModalMessage">Continue?</p>
+      <div class="modal-actions">
+        <button id="cancelConfirmActionButton" type="button">Cancel</button>
+        <button id="confirmActionButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <section id="updateReminderModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="updateReminderModalTitle" aria-describedby="updateReminderModalMessage" hidden>
+      <h2 id="updateReminderModalTitle">Update available</h2>
+      <p id="updateReminderModalMessage">A new PostMeter release is available.</p>
+      <div class="modal-actions">
+        <button id="stopUpdateReminderButton" type="button">Stop reminder</button>
+        <button id="cancelUpdateReminderButton" type="button">Cancel</button>
+        <button id="updateNowButton" type="button" class="primary">Update now</button>
+      </div>
+    </section>
+
+    <section id="authRefreshAutoDetectModal" class="modal auth-refresh-auto-detect-modal" role="dialog" aria-modal="true" aria-labelledby="authRefreshAutoDetectTitle" aria-describedby="authRefreshAutoDetectMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="authRefreshAutoDetectTitle">Auto-Detect</h2>
+        <button id="closeAuthRefreshAutoDetectModalButton" type="button" class="modal-close-button" aria-label="Close auth auto-detect">X</button>
+      </div>
+      <p id="authRefreshAutoDetectMessage">Select the response item PostMeter should use.</p>
+      <div id="authRefreshAutoDetectList" class="collection-pick-list auth-refresh-auto-detect-list" role="radiogroup" aria-label="Detected response options"></div>
+      <p id="authRefreshAutoDetectEmpty" class="test-result-empty" hidden>No response options found.</p>
+      <div class="modal-actions">
+        <button id="cancelAuthRefreshAutoDetectButton" type="button">Cancel</button>
+        <button id="confirmAuthRefreshAutoDetectButton" type="button" class="primary" disabled>Confirm</button>
+      </div>
+    </section>
+
+    <section id="notificationModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="notificationModalTitle" aria-describedby="notificationModalMessage" hidden>
+      <h2 id="notificationModalTitle">PostMeter</h2>
+      <p id="notificationModalMessage">Notification</p>
+      <div class="modal-actions">
+        <button id="closeNotificationModalButton" type="button" class="primary">OK</button>
+      </div>
+    </section>
+
+    <section id="performanceCalibrationModal" class="modal performance-calibration-modal" role="dialog" aria-modal="true" aria-labelledby="performanceCalibrationTitle" aria-describedby="performanceCalibrationBody" hidden>
+      <div class="modal-title-row">
+        <h2 id="performanceCalibrationTitle">Performance calibration</h2>
+        <button id="closePerformanceCalibrationModalButton" type="button" class="modal-close-button" aria-label="Close performance calibration">X</button>
+      </div>
+      <div id="performanceCalibrationBody" class="performance-calibration-body" role="status" aria-live="polite">
+        <div class="performance-calibration-running">
+          <span class="performance-calibration-spinner" aria-hidden="true"></span>
+          <span>Running extended local calibration...</span>
+        </div>
+        <p class="performance-calibration-note">This usually finishes in about two minutes while PostMeter runs warmup, bounded target-rate probes, and short verification passes.</p>
+      </div>
+    </section>
+
+    <section id="filePickerModal" class="modal file-picker-modal" role="dialog" aria-modal="true" aria-labelledby="filePickerTitle" aria-describedby="filePickerMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="filePickerTitle">Choose file</h2>
+        <button id="filePickerCloseButton" type="button" class="modal-close-button" aria-label="Close file picker">X</button>
+      </div>
+      <p id="filePickerMessage">Drop a file here or choose a file from this computer.</p>
+      <div id="filePickerDropZone" class="file-picker-dropzone" role="button" tabindex="0">
+        <strong>Drop file here</strong>
+        <span>or choose a file from this computer.</span>
+      </div>
+      <label id="filePickerManualPathField" class="field file-picker-manual-field">
+        <span>Manual path</span>
+        <input id="filePickerManualPathInput" autocomplete="off" spellcheck="false" placeholder="/path/to/file">
+      </label>
+      <p id="filePickerError" class="file-picker-error" role="alert" hidden></p>
+      <input id="filePickerInput" type="file" hidden>
+      <div class="modal-actions">
+        <button id="filePickerCancelButton" type="button">Cancel</button>
+        <button id="filePickerUsePathButton" type="button">Use Path</button>
+        <button id="filePickerBrowseButton" type="button" class="primary">Choose File</button>
+      </div>
+    </section>
+
+    <section id="vaultPromptModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="vaultPromptTitle" aria-describedby="vaultPromptMessage vaultPromptWarning" hidden>
+      <h2 id="vaultPromptTitle">Allow script vault access?</h2>
+      <p id="vaultPromptMessage">A request script is asking for a vault secret.</p>
+      <dl class="vault-prompt-details">
+        <div>
+          <dt>Request</dt>
+          <dd id="vaultPromptRequestName">-</dd>
+        </div>
+        <div>
+          <dt>Collection</dt>
+          <dd id="vaultPromptCollectionName">-</dd>
+        </div>
+        <div>
+          <dt>Workspace</dt>
+          <dd id="vaultPromptWorkspaceName">-</dd>
+        </div>
+        <div>
+          <dt>Secret</dt>
+          <dd id="vaultPromptSecretKey">-</dd>
+        </div>
+        <div>
+          <dt>Operation</dt>
+          <dd id="vaultPromptOperation">-</dd>
+        </div>
+      </dl>
+      <p id="vaultPromptWarning" class="vault-prompt-warning">Secret values, vault file paths, and encryption keys stay in the main process. Imported collections cannot grant vault access without this prompt or existing workspace settings.</p>
+      <div class="modal-actions vault-prompt-actions">
+        <button id="resetVaultPromptGrantsButton" type="button">Reset grants</button>
+        <button id="denyVaultPromptButton" type="button" class="danger-button">Deny</button>
+        <button id="allowVaultPromptRequestButton" type="button" class="primary">Allow request</button>
+        <button id="allowVaultPromptCollectionButton" type="button">Allow collection</button>
+        <button id="allowVaultPromptWorkspaceButton" type="button">Allow workspace</button>
+      </div>
+    </section>
+  </div>

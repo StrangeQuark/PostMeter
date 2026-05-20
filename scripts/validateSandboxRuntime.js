@@ -8,7 +8,7 @@ const WINDOWS_TIMEOUT_MILLIS = 120_000;
 
 if (require.main === module) {
   if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
-    const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
+    const { validateSandboxRuntime } = require('../src/core/sandbox/sandboxRuntimeValidation');
     validateSandboxRuntime()
       .then(() => {
         console.log('PostMeter sandbox runtime validation passed.');

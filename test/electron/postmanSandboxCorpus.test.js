@@ -2,13 +2,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const test = require('node:test');
-const { runCollection } = require('../../src/core/collectionRunner');
-const { importPostmanCollection } = require('../../src/core/postmanImporter');
+const { runCollection } = require('../../src/core/runtime/collectionRunner');
+const { importPostmanCollection } = require('../../src/core/import-export/postmanImporter');
 const {
   scriptPackageBundleIntegrity,
   scriptPackageIntegrity
-} = require('../../src/core/scriptRuntime');
-const { MemoryVaultStore } = require('../../src/core/vaultStore');
+} = require('../../src/core/sandbox/scriptRuntime');
+const { MemoryVaultStore } = require('../../src/core/sandbox/vaultStore');
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'postman');
 

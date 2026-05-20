@@ -9,7 +9,7 @@ const {
   normalizeCsvVariableDataDefaultOff,
   parseCsvRecords,
   parseCsvVariableSchema
-} = require('../../src/core/csvVariables');
+} = require('../../src/core/workspace/csvVariables');
 
 test('parses CSV variable schema and values into iteration rows', () => {
   const definition = {

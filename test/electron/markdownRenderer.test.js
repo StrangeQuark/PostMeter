@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { renderMarkdown } = require('../../src/renderer/markdownRenderer');
+const { renderMarkdown } = require('../../src/renderer/formatting/markdownRenderer');
 
 test('markdown renderer supports common markdown blocks and inline formatting', () => {
   const html = renderMarkdown([

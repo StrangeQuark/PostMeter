@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   captureUiSnapshotState,
   queueUiSmokeRun
-} = require('../../src/renderer/uiSmokeCommon');
+} = require('../../src/renderer/smoke/uiSmokeCommon');
 
 test('ui smoke common helper skips suites that were not requested', () => {
   const scheduled = [];

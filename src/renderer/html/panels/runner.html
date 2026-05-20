@@ -1,0 +1,233 @@
+      <section id="runnerMainPanel" class="panel runner-main-panel" role="tabpanel" hidden>
+        <div id="runnerEditorSection" class="runner-editor-section">
+          <div class="runner-main-header">
+            <div>
+              <div id="runnerMainTitle" class="runner-main-title editable-title" tabindex="0" aria-label="Runner name">Select a runner</div>
+            </div>
+            <div class="runner-actions">
+              <button id="saveRunnerButton" type="button">Save Runner</button>
+              <button id="deleteRunnerButton" class="danger-button" type="button">Delete Runner</button>
+            </div>
+          </div>
+          <div class="runner-control-row">
+            <div class="runner-settings">
+              <div class="toolbar-group menu-group csv-variables-menu-group" aria-label="Runner CSV variables">
+                <button id="runnerCsvVariablesButton" class="menu-trigger csv-variables-trigger" type="button" aria-haspopup="menu" aria-expanded="false">CSV Variables: Off</button>
+                <div id="runnerCsvVariablesMenu" class="toolbar-menu csv-variables-menu" role="menu" aria-labelledby="runnerCsvVariablesButton" hidden>
+                  <button id="runnerToggleCsvVariablesButton" type="button" role="menuitem">Turn On</button>
+                  <button id="runnerEditCsvVariablesButton" type="button" role="menuitem">Edit</button>
+                </div>
+              </div>
+              <div class="capture-settings-menu-group">
+                <button id="runnerCaptureSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerCaptureSettingsPanel">Capture Settings</button>
+                <div id="runnerCaptureSettingsPanel" class="capture-settings-panel" role="group" aria-label="Runner capture settings" hidden>
+                  <label class="field compact">
+                    <span>Response Body</span>
+                    <select id="runnerCaptureResponseBodySelect">
+                      <option value="all">All</option>
+                      <option value="failed">Failed only</option>
+                      <option value="sampled">Sampled</option>
+                      <option value="none">None</option>
+                    </select>
+                  </label>
+                  <label class="field compact-number-field"><span>Preview Bytes</span><input id="runnerCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+                  <label class="checkbox-line"><input id="runnerCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+                  <label class="checkbox-line"><input id="runnerCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+                  <label class="checkbox-line"><input id="runnerCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+                  <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
+                </div>
+              </div>
+              <div class="capture-settings-menu-group toolbar-group menu-group auth-refresh-menu-group" aria-label="Runner refreshing auth">
+                <button id="runnerAuthRefreshButton" class="menu-trigger auth-refresh-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Refreshing Auth: Off</button>
+                <div id="runnerAuthRefreshMenu" class="toolbar-menu auth-refresh-menu" role="menu" aria-labelledby="runnerAuthRefreshButton" hidden>
+                  <button id="runnerToggleAuthRefreshButton" type="button" role="menuitem">Turn On</button>
+                  <button id="runnerEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
+                </div>
+                <div id="runnerAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Runner refreshing auth settings" hidden>
+                <label id="runnerAuthRefreshCredentialTypeField" class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="runnerAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
+                <datalist id="runnerAuthRefreshVariableList"></datalist>
+                <div id="runnerAuthRefreshRequestCard" class="auth-refresh-request-card">
+                  <div class="auth-refresh-request-copy">
+                    <span>Auth request</span>
+                    <strong id="runnerAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
+                  </div>
+                  <div class="auth-refresh-request-actions">
+                    <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage auth request">
+                      <button id="runnerAuthRefreshManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                      <div id="runnerAuthRefreshManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="runnerAuthRefreshManageRequestButton" hidden>
+                        <button id="runnerAuthRefreshOpenRequestButton" type="button" role="menuitem">Open</button>
+                        <button id="runnerAuthRefreshAutoDetectRequestButton" type="button" role="menuitem">Auto-Detect</button>
+                        <button id="runnerAuthRefreshNewRequestButton" type="button" role="menuitem">New Request</button>
+                        <button id="runnerAuthRefreshImportButton" type="button" role="menuitem">Import</button>
+                        <button id="runnerAuthRefreshRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div id="runnerAuthRefreshAccessTokenPanel" class="auth-refresh-type-panel" data-auth-refresh-types="bearer">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Read Access Token From</span><select id="runnerAuthRefreshAccessTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                    <label id="runnerAuthRefreshAccessTokenPathField" class="field compact"><span id="runnerAuthRefreshAccessTokenPathLabel">Access Token Response Path</span><input id="runnerAuthRefreshAccessTokenPathInput" autocomplete="off" placeholder="access_token"></label>
+                  </div>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="apiKey">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Read API Key From</span><select id="runnerAuthRefreshApiKeySourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                    <label id="runnerAuthRefreshApiKeyPathField" class="field compact"><span id="runnerAuthRefreshApiKeyPathLabel">API Key Response Path</span><input id="runnerAuthRefreshApiKeyPathInput" autocomplete="off" placeholder="api_key"></label>
+                    <label class="field compact"><span>Send API Key As</span><select id="runnerAuthRefreshApiKeyLocationSelect"><option value="header">Header</option><option value="query">Query Param</option></select></label>
+                    <label class="field compact"><span>API Key Name</span><input id="runnerAuthRefreshApiKeyNameInput" autocomplete="off" placeholder="X-API-Key"></label>
+                  </div>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="cookie">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Cookie Name</span><input id="runnerAuthRefreshCookieNameInput" autocomplete="off" placeholder="session"></label>
+                  </div>
+                  <p class="auth-refresh-panel-note">Response cookies are stored when the auth request has response cookie storage enabled.</p>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="aws">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact auth-refresh-full"><span>Read Credentials From</span><select id="runnerAuthRefreshAwsCredentialsSourceSelect"><option value="body">JSON body paths</option><option value="header">Response headers</option><option value="cookie">Response cookies</option></select></label>
+                    <label id="runnerAuthRefreshAwsAccessKeyPathField" class="field compact"><span id="runnerAuthRefreshAwsAccessKeyPathLabel">Access Key ID Response Path</span><input id="runnerAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
+                    <label id="runnerAuthRefreshAwsSecretKeyPathField" class="field compact"><span id="runnerAuthRefreshAwsSecretKeyPathLabel">Secret Access Key Response Path</span><input id="runnerAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
+                    <label id="runnerAuthRefreshAwsSessionTokenPathField" class="field compact"><span id="runnerAuthRefreshAwsSessionTokenPathLabel">Session Token Response Path</span><input id="runnerAuthRefreshAwsSessionTokenPathInput" autocomplete="off" placeholder="credentials.sessionToken"></label>
+                  </div>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="custom">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Save Header Value To</span><input id="runnerAuthRefreshCustomVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AUTH_VALUE"></label>
+                    <label class="field compact"><span>Read Header Value From</span><select id="runnerAuthRefreshCustomSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                    <label id="runnerAuthRefreshCustomPathField" class="field compact"><span id="runnerAuthRefreshCustomPathLabel">Header Value Response Path</span><input id="runnerAuthRefreshCustomPathInput" autocomplete="off" placeholder="token"></label>
+                  </div>
+                </div>
+                <div id="runnerAuthRefreshScheduleSection" class="auth-refresh-field-grid auth-refresh-schedule-grid">
+                  <label class="field compact-number-field"><span>Refresh Every (s)</span><input id="runnerAuthRefreshIntervalSecondsInput" type="number" min="1" max="86400" step="1"></label>
+                </div>
+                <details id="runnerAuthRefreshRefreshTokenDetails" class="auth-refresh-refresh-token" data-auth-refresh-types="bearer cookie">
+                  <summary>Refresh Token</summary>
+                  <p>Use this when the access-token request needs a refreshed refresh token.</p>
+                  <div id="runnerAuthRefreshTokenRequestCard" class="auth-refresh-request-card">
+                    <div class="auth-refresh-request-copy">
+                      <span>Refresh token request</span>
+                      <strong id="runnerAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
+                    </div>
+                    <div class="auth-refresh-request-actions">
+                      <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage refresh token request">
+                        <button id="runnerAuthRefreshTokenManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                        <div id="runnerAuthRefreshTokenManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="runnerAuthRefreshTokenManageRequestButton" hidden>
+                          <button id="runnerAuthRefreshTokenOpenRequestButton" type="button" role="menuitem">Open</button>
+                          <button id="runnerAuthRefreshTokenAutoDetectRequestButton" type="button" role="menuitem">Auto-Detect</button>
+                          <button id="runnerAuthRefreshTokenNewRequestButton" type="button" role="menuitem">New Request</button>
+                          <button id="runnerAuthRefreshTokenImportButton" type="button" role="menuitem">Import</button>
+                          <button id="runnerAuthRefreshTokenRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Read Refresh Token From</span><select id="runnerAuthRefreshRefreshTokenSourceSelect"><option value="body">JSON body path</option><option value="rawBody">Entire response body</option><option value="header">Response header</option><option value="cookie">Response cookie</option></select></label>
+                    <label id="runnerAuthRefreshRefreshTokenPathField" class="field compact"><span id="runnerAuthRefreshRefreshTokenPathLabel">Refresh Token Response Path</span><input id="runnerAuthRefreshRefreshTokenPathInput" autocomplete="off"></label>
+                  </div>
+                </details>
+                <details id="runnerAuthRefreshAdvancedDetails" class="auth-refresh-advanced">
+                  <summary>Advanced</summary>
+                  <p>Use these when you need named variables or custom failure behavior.</p>
+                  <div class="auth-refresh-field-grid">
+                    <label id="runnerAuthRefreshAccessTokenVariableField" class="field compact" data-auth-refresh-types="bearer"><span id="runnerAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="runnerAuthRefreshAccessTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                    <label id="runnerAuthRefreshCookieVariableField" class="field compact" data-auth-refresh-types="cookie"><span>Save Cookie Value To</span><input id="runnerAuthRefreshCookieVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
+                    <label id="runnerAuthRefreshRefreshTokenVariableField" class="field compact" data-auth-refresh-types="bearer cookie"><span>Save Refresh Token To</span><input id="runnerAuthRefreshRefreshTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off"></label>
+                    <label id="runnerAuthRefreshAwsAccessKeyVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Access Key ID To</span><input id="runnerAuthRefreshAwsAccessKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                    <label id="runnerAuthRefreshAwsSecretKeyVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Secret Access Key To</span><input id="runnerAuthRefreshAwsSecretKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                    <label id="runnerAuthRefreshAwsSessionTokenVariableField" class="field compact" data-auth-refresh-types="aws"><span>Save Session Token To</span><input id="runnerAuthRefreshAwsSessionTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
+                    <label id="runnerAuthRefreshBeforeRunOption" class="checkbox-line auth-refresh-before-run"><input id="runnerAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
+                    <label id="runnerAuthRefreshFailurePolicyField" class="field compact"><span>On Failure</span><select id="runnerAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
+                  </div>
+                </details>
+                </div>
+              </div>
+              <div class="capture-settings-menu-group runner-advanced-settings-menu-group">
+                <button id="runnerAdvancedSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerAdvancedSettingsPanel">Advanced</button>
+                <div id="runnerAdvancedSettingsPanel" class="capture-settings-panel runner-advanced-settings-panel" role="group" aria-label="Runner advanced settings" hidden>
+                  <label id="runnerStopOnFailureField" class="checkbox-line">
+                    <input id="runnerStopOnFailure" type="checkbox">
+                    <span>Stop on failure</span>
+                  </label>
+                  <label id="runnerAllowEnvironmentMutationField" class="checkbox-line">
+                    <input id="runnerAllowEnvironmentMutation" type="checkbox">
+                    <span>Allow runner to modify environment</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="runner-run-actions">
+              <button id="runCollectionButton" type="button" class="primary">Run</button>
+              <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
+            </div>
+          </div>
+          <div class="runner-requests-header">
+            <h3>Requests</h3>
+            <div class="runner-request-actions">
+              <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
+            </div>
+          </div>
+          <div id="runnerRequestList" class="runner-request-list" aria-label="Runner requests"></div>
+        </div>
+        <div id="runnerResultsResize" class="splitter horizontal runner-results-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+        <div id="runnerResultsShell" class="runner-results-shell">
+          <div class="runner-results-header">
+            <div class="runner-results-heading">
+              <h3>Results</h3>
+              <span id="runnerResultsSummary" class="test-results-summary">No runner run yet.</span>
+            </div>
+            <div class="toolbar-group menu-group result-export-menu-group" aria-label="Runner result export">
+              <button id="exportRunnerResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
+              <div id="exportRunnerResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRunnerResultsButton" hidden>
+                <button id="exportRunnerHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
+                <button id="exportRunnerJsonButton" type="button" role="menuitem" disabled>JSON</button>
+                <button id="exportRunnerCsvButton" type="button" role="menuitem" disabled>CSV</button>
+              </div>
+            </div>
+          </div>
+          <div id="runnerResults" class="runner-results" role="status" aria-live="polite">
+            <div class="runner-execution-grid">
+              <section class="script-results-section runner-execution-section" aria-labelledby="runnerExecutionTitle">
+                <div class="script-results-header">
+                  <div class="script-results-title-row">
+                    <h3 id="runnerExecutionTitle">Execution</h3>
+                    <label class="runner-execution-filter">
+                      <span>Status</span>
+                      <select id="runnerExecutionStatusFilter" aria-label="Filter runner requests by status code">
+                        <option value="all">All</option>
+                      </select>
+                    </label>
+                  </div>
+                  <span id="runnerExecutionSummary" class="script-results-count">No requests</span>
+                </div>
+                <div id="runnerExecutionList" class="runner-execution-list" aria-live="polite">
+                  <p class="test-result-empty">No runner execution yet.</p>
+                </div>
+                <div id="runnerExecutionPagination" class="runner-execution-pagination" hidden></div>
+              </section>
+              <section class="script-results-section runner-detail-section" aria-labelledby="runnerExecutionDetailsTitle">
+                <div class="script-results-header">
+                  <h3 id="runnerExecutionDetailsTitle">Request details</h3>
+                  <span id="runnerExecutionDetailsStatus" class="script-results-count">No selection</span>
+                </div>
+                <div id="runnerExecutionDetails" class="runner-execution-details">
+                  <p class="test-result-empty">Select a completed request to inspect its execution details.</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="runnerEmptyPanel" class="panel request-empty-panel runner-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon runner-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Create a runner</h2>
+          <button id="emptyCreateRunnerButton" type="button" class="primary">New Runner</button>
+        </div>
+      </section>
+

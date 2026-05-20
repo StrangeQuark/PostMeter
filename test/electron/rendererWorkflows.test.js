@@ -1,8 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { AUTH_TYPE_VALUES } = require('../../src/core/payloadSchemas');
-const { createRendererState } = require('../../src/renderer/rendererState');
-const { createRendererWorkflows } = require('../../src/renderer/rendererWorkflows');
+const { AUTH_TYPE_VALUES } = require('../../src/core/contracts/payloadSchemas');
+const { createRendererState } = require('../../src/renderer/app/rendererState');
+const { createRendererWorkflows } = require('../../src/renderer/app/rendererWorkflows');
 
 test('renderer workflows prompt to save an active draft before saving the workspace', async () => {
   const state = createRendererState();

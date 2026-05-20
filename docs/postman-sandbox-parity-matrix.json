@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedFrom": "src/core/postmanParityMatrix.js",
+  "generatedFrom": "src/core/diagnostics-release/postmanParityMatrix.js",
   "generatedAtPolicy": "Deterministic. Regenerate with npm run postman:parity:write.",
   "target": {
     "postmanDocsVersion": "Latest (v12)",

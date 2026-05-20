@@ -8,7 +8,7 @@ const {
   MENU_ID,
   menuPositionFromAnchor,
   replaceVariableToken
-} = require('../../src/renderer/variableAutocomplete');
+} = require('../../src/renderer/ui/variableAutocomplete');
 
 test('variable autocomplete only applies to editable non-script text inputs', () => {
   assert.equal(isVariableAutocompleteEligible({ tagName: 'INPUT', type: 'text', id: 'urlInput' }), true);

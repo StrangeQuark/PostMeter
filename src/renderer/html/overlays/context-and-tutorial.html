@@ -1,0 +1,20 @@
+  <div id="contextMenu" class="context-menu" role="menu" aria-label="Item actions" hidden></div>
+  <div id="fileSourceMenu" class="context-menu file-source-menu" role="menu" aria-label="File source actions" hidden>
+    <button id="fileSourceChooseButton" type="button" role="menuitem">Choose File...</button>
+  </div>
+
+  <div id="tutorialOverlay" class="tutorial-overlay" hidden>
+    <div id="tutorialTargetFrame" class="tutorial-target-frame" aria-hidden="true"></div>
+    <section id="tutorialCoach" class="tutorial-coach" role="dialog" aria-live="polite" aria-labelledby="tutorialCoachTitle">
+      <p id="tutorialCoachProgress" class="tutorial-coach-progress"></p>
+      <h2 id="tutorialCoachTitle">Tutorial</h2>
+      <p id="tutorialCoachBody">Step details</p>
+      <p id="tutorialCoachHint" class="tutorial-coach-hint"></p>
+      <div class="tutorial-coach-actions">
+        <button id="endTutorialButton" type="button">End</button>
+        <button id="previousTutorialStepButton" type="button">Back</button>
+        <button id="nextTutorialStepButton" type="button" class="primary">Next</button>
+      </div>
+    </section>
+  </div>
+

@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   RAW_BODY_PATH,
   buildAuthRefreshAutoDetectCandidates
-} = require('../../src/renderer/authRefreshAutoDetectModel');
+} = require('../../src/renderer/models/authRefreshAutoDetectModel');
 
 test('auth refresh auto-detect exposes body header and cookie response options', () => {
   const candidates = buildAuthRefreshAutoDetectCandidates({

@@ -9,7 +9,7 @@ const {
   parseCookieHeaderForJar,
   postmanCookieMetadataByName,
   rendererCookieMatchesHost
-} = require('../../src/renderer/cookieModel');
+} = require('../../src/renderer/models/cookieModel');
 
 test('renderer cookie model creates workspace cookies with stable defaults', () => {
   const originalRandomUuid = globalThis.crypto?.randomUUID;

@@ -180,7 +180,7 @@ function loadPreloadHarness(options = {}) {
     },
     URL
   };
-  const preloadPath = path.join(__dirname, '..', '..', 'electron', 'preload.js');
+  const preloadPath = path.join(__dirname, '..', '..', 'electron', 'app-shell', 'preload.js');
   vm.runInNewContext(fs.readFileSync(preloadPath, 'utf8'), sandbox, { filename: preloadPath });
   return {
     api: exposed.postmeter,

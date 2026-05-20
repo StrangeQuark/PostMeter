@@ -8,11 +8,11 @@ const {
   productionReadinessSummary,
   rowWaivedForReleaseLevel,
   validateProductionReadinessMatrix
-} = require('../../src/core/productionReadinessMatrix');
+} = require('../../src/core/diagnostics-release/productionReadinessMatrix');
 const {
   buildMatrix,
   validateMatrix
-} = require('../../src/core/productionSupportMatrices');
+} = require('../../src/core/diagnostics-release/productionSupportMatrices');
 const {
   validateEvidenceRefs: validateSupportEvidenceRefs,
   validateTestRefs: validateSupportTestRefs
@@ -103,7 +103,7 @@ test('production readiness matrix tracks release areas and stable-release blocke
           waiver: {
             releaseLevels: ['rc'],
             reason: 'Temporary release-candidate waiver documented for maintainer review.',
-            docs: ['docs/RELEASE_READINESS.md']
+            docs: ['docs/SECURITY.md']
           }
         }
       : row)
@@ -194,7 +194,7 @@ test('production readiness validator rejects missing required rows and malformed
     validateProductionReadinessMatrix({
       ...matrix,
       rows: matrix.rows.map((row) => row.id === 'release.dashboard'
-        ? { ...row, evidenceRefs: ['docs/RELEASE_READINESS.md', null] }
+        ? { ...row, evidenceRefs: ['README.md', null] }
         : row)
     }).join('\n'),
     /evidenceRefs must contain only non-empty strings/

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "workspace-durability",
-  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "generatedFrom": "src/core/diagnostics-release/productionSupportMatrices.js",
   "deterministic": true,
   "rows": [
     {
@@ -10,7 +10,7 @@
       "target": "Vault values are encrypted outside workspace JSON, vault file rename/delete is parent-owned and no-overwrite, and vault access fails closed when OS encryption is unavailable.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/vaultStore.js",
+        "src/core/sandbox/vaultStore.js",
         "electron/main.js"
       ],
       "tests": [
@@ -24,10 +24,10 @@
       "target": "Workspace, collection, example, and collection-run exports write through same-directory temporary files before replacing the selected output path.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/workspacePersistence.js",
-        "src/core/workspaceStore.js",
-        "electron/workspaceIpc.js",
-        "electron/runtimeIpc.js"
+        "src/core/workspace/workspacePersistence.js",
+        "src/core/workspace/workspaceStore.js",
+        "electron/ipc/workspaceIpc.js",
+        "electron/ipc/runtimeIpc.js"
       ],
       "tests": [
         "test/electron/workspaceStore.test.js",
@@ -43,9 +43,9 @@
       "target": "Workspace JSON, session, and backup writes use collision-resistant same-directory temporary files, fsync file contents where supported, and directory-fsync after rename.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/workspacePersistence.js",
-        "src/core/workspaceStore.js",
-        "electron/sessionStore.js"
+        "src/core/workspace/workspacePersistence.js",
+        "src/core/workspace/workspaceStore.js",
+        "electron/services/sessionStore.js"
       ],
       "tests": [
         "test/electron/workspaceStore.test.js",
@@ -59,8 +59,8 @@
       "target": "Unreadable workspace JSON is quarantined with a collision-resistant sibling path, the containing directory is fsynced where supported, and recovered default publication is no-overwrite so newer replacement data is preserved.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/workspaceStore.js",
-        "src/core/workspaceManager.js",
+        "src/core/workspace/workspaceStore.js",
+        "src/core/workspace/workspaceManager.js",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [
@@ -75,8 +75,8 @@
       "target": "Import/export picker cancellation and failed parse paths return explicit results without clobbering the active workspace.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "src/core/workspaceStore.js",
+        "electron/ipc/workspaceIpc.js",
+        "src/core/workspace/workspaceStore.js",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [
@@ -92,7 +92,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "test/electron/workspaceDurabilityPerformance.test.js",
-        "src/renderer/uiRegressionSmoke.js",
+        "src/renderer/smoke/uiRegressionSmoke.js",
         "test/electron/uiRegressionSmoke.js"
       ],
       "tests": [
@@ -107,7 +107,7 @@
       "target": "Managed workspace discovery is source-of-truth filesystem discovery; stale legacy manifests, stale temp files, missing workspace files, and unrecognized existing JSON files cannot silently replace or be overwritten by default creation, create/import/rename, publication races, or active-workspace recovery.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/workspaceManager.js",
+        "src/core/workspace/workspaceManager.js",
         "docs/TECH_SPECS.md",
         "docs/TROUBLESHOOTING.md"
       ],
@@ -125,9 +125,9 @@
       "evidenceRefs": [
         "docs/TECH_SPECS.md",
         "docs/ARCHITECTURE.md",
-        "src/core/models.js",
-        "src/core/workspaceMigrations.js",
-        "src/core/performanceFormats.js"
+        "src/core/workspace/models.js",
+        "src/core/workspace/workspaceMigrations.js",
+        "src/core/import-export/performanceFormats.js"
       ],
       "tests": [
         "test/electron/performanceFeatureCoverage.test.js",
@@ -144,7 +144,7 @@
       "target": "Workspace schema migrations preserve imported Postman metadata, globals, cookies, vault grants, package cache metadata, and protocol profiles.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/workspaceMigrations.js",
+        "src/core/workspace/workspaceMigrations.js",
         "docs/TECH_SPECS.md"
       ],
       "tests": [
@@ -158,7 +158,7 @@
       "target": "Sandbox variable/cookie side effects are merged by delta with workspace identity guards.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceMutations.js"
+        "electron/services/workspaceMutations.js"
       ],
       "tests": [
         "test/electron/workspaceMutations.test.js"

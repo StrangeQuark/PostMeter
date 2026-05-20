@@ -3,8 +3,8 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { splitCommandLine } = require('../../src/core/curlFormats');
-const { WorkspaceStore } = require('../../src/core/workspaceStore');
+const { splitCommandLine } = require('../../src/core/import-export/curlFormats');
+const { WorkspaceStore } = require('../../src/core/workspace/workspaceStore');
 
 test('imports and exports OpenAPI collections', async () => {
   const { store, dir } = await tempStore();

@@ -22,7 +22,7 @@ const {
   validatePersistenceArtifacts,
   writeSmokeLog
 } = require('../../scripts/validatePackagedAppSmoke');
-const { postMeterWorkspaceDirectory } = require('../../src/core/workspacePersistence');
+const { postMeterWorkspaceDirectory } = require('../../src/core/workspace/workspacePersistence');
 
 test('packaged smoke validation accepts managed workspace filenames', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-smoke-test-'));
@@ -114,11 +114,11 @@ test('packaged smoke uses Electron node mode for Windows packaged validation', a
     assert.equal(packagedSmokeStdioMode('win32', 'node-main-process'), undefined);
     assert.equal(packagedSmokeTimeoutMillis('', 'win32'), 90_000);
     assert.deepEqual(packagedSmokeLaunchArgs(executable, { mode: 'node-main-process' }), [
-      path.join(resources, 'app.asar', 'electron', 'packagedStartupSmokeNode.js')
+      path.join(resources, 'app.asar', 'electron', 'packaging', 'packagedStartupSmokeNode.js')
     ]);
     assert.equal(
-      packagedAppResourcePath(executable, ['electron', 'packagedStartupSmokeNode.js']),
-      path.join(resources, 'app.asar', 'electron', 'packagedStartupSmokeNode.js')
+      packagedAppResourcePath(executable, ['electron', 'packaging', 'packagedStartupSmokeNode.js']),
+      path.join(resources, 'app.asar', 'electron', 'packaging', 'packagedStartupSmokeNode.js')
     );
   } finally {
     await fs.rm(directory, { recursive: true, force: true });

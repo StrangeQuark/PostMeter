@@ -1,0 +1,185 @@
+    <section id="tutorialsModal" class="modal tutorials-modal" role="dialog" aria-modal="true" aria-labelledby="tutorialsModalTitle" aria-describedby="tutorialsModalMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="tutorialsModalTitle">Tutorials</h2>
+        <button id="closeTutorialsModalButton" type="button" class="modal-close-button" aria-label="Close tutorials">X</button>
+      </div>
+      <p id="tutorialsModalMessage">Pick a guided walkthrough. Tutorials highlight the controls in PostMeter and let you move at your own pace.</p>
+      <div class="tutorials-layout">
+        <div id="tutorialList" class="tutorial-list" role="listbox" aria-label="Tutorials"></div>
+        <section class="tutorial-detail" aria-labelledby="tutorialDetailTitle">
+          <p id="tutorialDetailLevel" class="tutorial-kicker"></p>
+          <h3 id="tutorialDetailTitle">Select a tutorial</h3>
+          <p id="tutorialDetailSummary">Choose a tutorial from the list.</p>
+          <ol id="tutorialDetailSteps" class="tutorial-step-list"></ol>
+        </section>
+      </div>
+      <div class="modal-actions">
+        <button id="startTutorialButton" type="button" class="primary">Start Tutorial</button>
+      </div>
+    </section>
+
+    <section id="cookiesModal" class="modal cookies-manager-modal" role="dialog" aria-modal="true" aria-labelledby="cookiesModalTitle" hidden>
+      <div class="modal-title-row">
+        <h2 id="cookiesModalTitle">Cookies</h2>
+        <button id="closeCookiesModalButton" type="button" class="modal-close-button" aria-label="Close cookies">X</button>
+      </div>
+      <div class="cookies-modal-tabs" role="tablist" aria-label="Cookie manager views">
+        <button type="button" class="cookie-modal-tab is-active" aria-selected="true">Manage Cookies</button>
+      </div>
+      <div class="cookie-domain-add-row">
+        <input id="cookiesDomainInput" type="text" autocomplete="off" spellcheck="false" placeholder="Type a domain name" aria-label="Domain name">
+        <button id="cookiesAddDomainButton" type="button">Add domain</button>
+        <div class="toolbar-group menu-group cookie-clear-menu-group">
+          <button id="cookiesClearMenuButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Clear</button>
+          <div id="cookiesClearMenu" class="toolbar-menu cookie-clear-menu" role="menu" aria-labelledby="cookiesClearMenuButton" hidden>
+            <button id="clearExpiredWorkspaceCookiesButton" type="button" role="menuitem">Clear expired</button>
+            <button id="clearAllWorkspaceCookiesButton" type="button" role="menuitem" class="danger-button">Clear all</button>
+          </div>
+        </div>
+      </div>
+      <div id="cookiesModalError" class="cookie-manager-error" role="alert" hidden></div>
+      <div id="cookiesDomainList" class="cookies-domain-list"></div>
+    </section>
+
+    <section id="unsavedRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unsavedRequestTitle" aria-describedby="unsavedRequestMessage" hidden>
+      <h2 id="unsavedRequestTitle">Close unsaved request?</h2>
+      <p id="unsavedRequestMessage">This request has unsaved changes. Save it before closing?</p>
+      <div class="modal-actions">
+        <button id="cancelCloseRequestButton">Cancel</button>
+        <button id="closeWithoutSavingButton" class="danger-button">Close Without Saving</button>
+        <button id="saveAndCloseRequestButton" class="primary">Save</button>
+      </div>
+    </section>
+
+    <section id="saveDraftRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="saveDraftRequestTitle" aria-describedby="saveDraftRequestMessage" hidden>
+      <h2 id="saveDraftRequestTitle">Save request to collection</h2>
+      <p id="saveDraftRequestMessage">Choose a collection for this request.</p>
+      <div id="saveDraftCollectionList" class="collection-pick-list" role="radiogroup" aria-label="Collections"></div>
+      <div class="modal-actions">
+        <button id="cancelSaveDraftButton">Cancel</button>
+        <button id="confirmSaveDraftButton" class="primary" disabled>Save</button>
+      </div>
+    </section>
+
+    <section id="exportCollectionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="exportCollectionTitle" aria-describedby="exportCollectionMessage" hidden>
+      <h2 id="exportCollectionTitle">Export collection</h2>
+      <p id="exportCollectionMessage">Choose a collection to export.</p>
+      <div id="exportCollectionList" class="collection-pick-list" role="radiogroup" aria-label="Collections"></div>
+      <div class="modal-actions">
+        <button id="cancelExportCollectionButton">Cancel</button>
+        <button id="confirmExportCollectionButton" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
+    <section id="exportItemModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="exportItemTitle" aria-describedby="exportItemMessage" hidden>
+      <h2 id="exportItemTitle">Export item</h2>
+      <p id="exportItemMessage">Choose an item to export.</p>
+      <div id="exportItemList" class="collection-pick-list" role="radiogroup" aria-label="Items"></div>
+      <div class="modal-actions">
+        <button id="cancelExportItemButton" type="button">Cancel</button>
+        <button id="confirmExportItemButton" type="button" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
+    <section id="requestExportPickerModal" class="modal runner-import-modal" role="dialog" aria-modal="true" aria-labelledby="requestExportPickerTitle" aria-describedby="requestExportPickerMessage" hidden>
+      <h2 id="requestExportPickerTitle">Export request</h2>
+      <p id="requestExportPickerMessage">Choose a collection to expand, then select a request to export.</p>
+      <div id="requestExportPickerList" class="collection-pick-list runner-import-list" role="group" aria-label="Collections and requests"></div>
+      <div class="modal-actions">
+        <button id="cancelRequestExportPickerButton" type="button">Cancel</button>
+        <button id="confirmRequestExportPickerButton" type="button" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
+    <section id="folderDestinationModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="folderDestinationTitle" aria-describedby="folderDestinationMessage" hidden>
+      <h2 id="folderDestinationTitle">Create folder</h2>
+      <p id="folderDestinationMessage">Choose a collection or folder for the new folder.</p>
+      <div id="folderDestinationList" class="collection-pick-list" role="radiogroup" aria-label="Folder destinations"></div>
+      <div class="modal-actions">
+        <button id="cancelFolderDestinationButton" type="button">Cancel</button>
+        <button id="confirmFolderDestinationButton" type="button" class="primary" disabled>Create Folder</button>
+      </div>
+    </section>
+
+    <section id="runnerImportModal" class="modal runner-import-modal" role="dialog" aria-modal="true" aria-labelledby="runnerImportTitle" aria-describedby="runnerImportMessage" hidden>
+      <h2 id="runnerImportTitle">Import requests</h2>
+      <p id="runnerImportMessage">Expand collections and folders, then select requests to import.</p>
+      <div id="runnerImportList" class="collection-pick-list runner-import-list" role="group" aria-label="Collections, folders, and requests"></div>
+      <div class="modal-actions">
+        <button id="cancelRunnerImportButton" type="button">Cancel</button>
+        <button id="confirmRunnerImportButton" type="button" class="primary" disabled>Add</button>
+      </div>
+    </section>
+
+    <section id="htmlReportOptionsModal" class="modal html-report-options-modal" role="dialog" aria-modal="true" aria-labelledby="htmlReportOptionsTitle" aria-describedby="htmlReportOptionsMessage" hidden>
+      <h2 id="htmlReportOptionsTitle">Export HTML report</h2>
+      <p id="htmlReportOptionsMessage">Choose how much request-level data to include in the report.</p>
+      <div class="html-report-options">
+        <fieldset class="html-report-theme-options">
+          <legend>Report theme</legend>
+          <label class="checkbox-line html-report-option">
+            <input id="htmlReportThemeLightInput" type="radio" name="htmlReportTheme" value="light">
+            <span>Light</span>
+          </label>
+          <label class="checkbox-line html-report-option">
+            <input id="htmlReportThemeDarkInput" type="radio" name="htmlReportTheme" value="dark">
+            <span>Dark</span>
+          </label>
+        </fieldset>
+        <label class="checkbox-line html-report-option">
+          <input id="htmlReportIncludeResultsInput" type="checkbox" checked>
+          <span>Include Request Results section</span>
+        </label>
+        <label class="checkbox-line html-report-option">
+          <input id="htmlReportIncludeDetailsInput" type="checkbox" checked>
+          <span>Include Request Details for each response</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="cancelHtmlReportOptionsButton" type="button">Cancel</button>
+        <button id="confirmHtmlReportOptionsButton" type="button" class="primary">Export</button>
+      </div>
+    </section>
+
+    <section id="requestImportModal" class="modal request-import-modal" role="dialog" aria-modal="true" aria-labelledby="requestImportTitle" aria-describedby="requestImportMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="requestImportTitle">Import request</h2>
+        <button id="requestImportCloseButton" type="button" class="modal-close-button" aria-label="Close request import">X</button>
+      </div>
+      <p id="requestImportMessage">Paste a curl command or PostMeter request JSON, or choose a request file.</p>
+      <label class="field">
+        <span>Request text</span>
+        <textarea id="requestImportTextInput" rows="7" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text" placeholder="curl https://api.example.test/widgets"></textarea>
+      </label>
+      <div id="requestImportDropZone" class="file-picker-dropzone" role="button" tabindex="0">
+        <strong>Drop request file here</strong>
+        <span>or choose a file from this computer.</span>
+      </div>
+      <p id="requestImportFileSelection" class="file-picker-selection" hidden></p>
+      <p id="requestImportError" class="file-picker-error" role="alert" hidden></p>
+      <input id="requestImportFileInput" type="file" accept=".json,.sh,.txt,application/json,text/plain" hidden>
+      <div class="modal-actions">
+        <button id="cancelRequestImportButton" type="button">Cancel</button>
+        <button id="requestImportBrowseButton" type="button">Choose File</button>
+        <button id="confirmRequestImportButton" type="button" class="primary" disabled>Import</button>
+      </div>
+    </section>
+
+    <section id="requestExportModal" class="modal request-export-modal" role="dialog" aria-modal="true" aria-labelledby="requestExportTitle" aria-describedby="requestExportMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="requestExportTitle">Export request</h2>
+        <button id="requestExportCloseButton" type="button" class="modal-close-button" aria-label="Close request export">X</button>
+      </div>
+      <p id="requestExportMessage">Copy the generated request text or export it to a file.</p>
+      <label class="field">
+        <span id="requestExportTextLabel">Request export</span>
+        <textarea id="requestExportTextOutput" class="request-export-text" rows="14" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text" readonly></textarea>
+      </label>
+      <p id="requestExportCopyStatus" class="request-export-status" role="status" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelRequestExportButton" type="button">Close</button>
+        <button id="copyRequestExportButton" type="button">Copy All</button>
+        <button id="fileRequestExportButton" type="button" class="primary">Export File</button>
+      </div>
+    </section>
+

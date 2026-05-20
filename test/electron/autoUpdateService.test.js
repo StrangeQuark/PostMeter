@@ -3,7 +3,7 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const {
   createAutoUpdateService
-} = require('../../electron/autoUpdateService');
+} = require('../../electron/services/autoUpdateService');
 
 test('auto update service stays inert when automatic updates are disabled', async () => {
   const updater = new FakeAutoUpdater();

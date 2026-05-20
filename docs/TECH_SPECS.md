@@ -95,9 +95,9 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 
 ## Guided Tutorials
 
-The desktop Help menu includes a Tutorials action that opens a renderer modal backed by static tutorial definitions in `src/renderer/renderer.js`. The modal is rendered in `src/renderer/index.html`, styled by `src/renderer/overlays.css`, and wired through `src/renderer/rendererBootstrap.js`. Tutorial start/end/step navigation is renderer-only state. The overlay highlights live DOM targets by selector and positions a coach panel beside the target. Step setup callbacks may create unsaved draft requests, environments, or runners so the user can inspect real controls without requiring saved fixture data.
+The desktop Help menu includes a Tutorials action that opens a renderer modal backed by static tutorial definitions in `src/renderer/features/tutorialCatalog.js`. The modal is rendered in `src/renderer/index.html`, styled by `src/renderer/styles/overlays.css`, wired through `src/renderer/app/rendererBootstrap.js`, and controlled by `src/renderer/features/tutorialController.js`. Tutorial start/end/step navigation is renderer-only state. The overlay highlights live DOM targets by selector and positions a coach panel beside the target. Step setup callbacks may create unsaved draft requests, environments, or runners so the user can inspect real controls without requiring saved fixture data.
 
-The current tutorial catalog uses full guided walkthroughs such as `request`, `environment-variables`, `runner`, and `performance`. Future tutorial implementation notes and extension rules live in [TUTORIALS.md](../TUTORIALS.md).
+The current tutorial catalog uses full guided walkthroughs such as `request`, `environment-variables`, `runner`, and `performance`. Tutorial definitions live in `src/renderer/features/tutorialCatalog.js`, while tutorial modal state and overlay behavior live in `src/renderer/features/tutorialController.js`.
 
 ## Runtime Requirements
 
@@ -163,63 +163,186 @@ npm run sandbox:validate:packaged
 
 ```text
 electron/
-  appIpc.js
-  appMenu.js
-  diagnosticsIpc.js
-  fileDialogs.js
+  app-shell/
+    appMenu.js
+    appProtocol.js
+    fileDialogs.js
+    mainDiagnostics.js
+    mainWindow.js
+    preload.js
+    rendererAssetManifest.js
+  domains/
+    app-shell/
+    ipc/
+    packaging/
+    security/
+    services/
+  ipc/
+    appIpc.js
+    diagnosticsIpc.js
+    exportIpc.js
+    oauthIpc.js
+    requestIpc.js
+    runtimeIpc.js
+    sandboxPackageIpc.js
+    sessionIpc.js
+    vaultPrompt.js
+    workspaceIpc.js
   main.js
-  mainWindow.js
-  oauthIpc.js
-  oauthFlows.js
-  preload.js
-  requestIpc.js
-  runtimeIpc.js
-  workspaceIpc.js
-  workspaceMutations.js
+  packaging/
+    packagedResourceManifest.js
+    packagedSandboxRuntimeCli.js
+    packagedStartupSmokeNode.js
+  security/
+    ipcSecurity.js
+  services/
+    autoUpdateService.js
+    oauthFlows.js
+    sessionStore.js
+    workspaceMutations.js
+  workers/
+    exportPreparationWorker.js
 
 src/core/
-  auth.js
-  cookieJar.js
-  collectionFormats.js
-  collectionRunner.js
-  diagnostics.js
-  diagnosticsSettings.js
-  environmentResolver.js
-  httpClient.js
-  ipcValidation.js
-  localMockServer.js
-  models.js
-  payloadSchemas.js
-  postmanBuiltinPackages.js
-  postmanSandboxBootcodeBundle.js
-  postmanImporter.js
-  postmanParityHarness.js
-  postmanParityMatrix.js
-  requestScriptRunner.js
-  scriptSandbox.js
-  scriptRuntime.js
-  scriptWorker.js
-  updateChecker.js
-  visualizerHandlebarsBundle.js
-  workspaceMigrations.js
-  workspaceStore.js
+  contracts/
+    ipcValidation.js
+    keyboardShortcuts.js
+    payloadSchemas.js
+  diagnostics-release/
+    diagnostics.js
+    diagnosticsSettings.js
+    oauthProviderCertification.js
+    postmanDocsCoverageAudit.js
+    postmanParityHarness.js
+    postmanParityMatrix.js
+    productionReadinessMatrix.js
+    productionSupportMatrices.js
+    updateChecker.js
+  domains/
+    diagnostics-release/
+    http/
+    import-export/
+    ipc/
+    runtime/
+    security-sandbox/
+    workspace/
+  http/
+    auth.js
+    authModel.js
+    authRefresh.js
+    cookieJar.js
+    cookieModel.js
+    fileAttachmentBindings.js
+    grpcClient.js
+    httpClient.js
+    pfxCertificate.js
+    requestSettings.js
+    tlsSettings.js
+  import-export/
+    collectionFormats.js
+    collectionImportRegistry.js
+    curlFormats.js
+    environmentFormats.js
+    openApiFormats.js
+    postmanImporter.js
+    requestFormats.js
+    runnerFormats.js
+  runtime/
+    collectionRunner.js
+    localMockServer.js
+    performanceRunner.js
+    requestScriptRunner.js
+    scriptedRequestLifecycle.js
+  sandbox/
+    osSandbox.js
+    postmanBuiltinPackages.js
+    postmanSandboxBootcodeBundle.js
+    scriptRuntime.js
+    scriptSandbox.js
+    scriptWorker.js
+    visualizerHandlebarsBundle.js
+  workspace/
+    appSettingsStore.js
+    csvVariables.js
+    dynamicVariables.js
+    environmentResolver.js
+    models.js
+    workspaceMigrations.js
+    workspaceStore.js
 
 src/renderer/
-  base.css
-  chrome.css
-  collectionModel.js
-  contextMenu.js
-  cookieModel.js
-  editorPanels.css
+  app/
+    appMenuAndTabs.js
+    editorCollectors.js
+    rendererBootstrap.js
+    rendererStartup.js
+    rendererState.js
+    rendererWorkflows.js
+    requestTabState.js
+    sessionPersistence.js
+    workspaceLifecycle.js
+  features/
+    authRefreshController.js
+    diagnosticsWorkspaceController.js
+    entityDisplay.js
+    importExportWorkspaceController.js
+    performanceController.js
+    runnerController.js
+    runtimeResultsController.js
+    settingsController.js
+    tutorialCatalog.js
+    tutorialController.js
+    vaultPromptController.js
+    workspaceSidebarController.js
+  formatting/
+    markdownRenderer.js
+    responseFormatting.js
+    runResultFormatting.js
+  html/
+    manifest.json
+    panels/
+    shell/
+    modals/
+    overlays/
+    scripts.html
   index.html
-  layoutControls.js
-  overlays.css
-  responseFormatting.js
+  models/
+    authRefreshAutoDetectModel.js
+    collectionModel.js
+    cookieModel.js
+    performanceTestModel.js
   renderer.js
-  runResultFormatting.js
-  styles.css
-  theme.css
-  uiSmoke.js
+  smoke/
+    uiAwsSmoke.js
+    uiHawkSmoke.js
+    uiOauthSmoke.js
+    uiRegressionSmoke.js
+    uiSmoke.js
+    uiSmokeCommon.js
+    uiSnapshotSmoke.js
+    uiTypographySmoke.js
+    uiWorkflowSmoke.js
+  styles/
+    base.css
+    chrome.css
+    editorPanels.css
+    overlays.css
+    styles.css
+    theme.css
+  ui/
+    codeEditor.js
+    contextMenu.js
+    layoutControls.js
+    localFilePickerController.js
+    modalController.js
+    requestEditorController.js
+    requestEditorPanels.js
+    requestTabs.js
+    rendererUiUtilities.js
+    titleEditors.js
+    variableAutocomplete.js
+    variableHighlighter.js
+    vaultPromptQueue.js
 
 test/electron/
   *.test.js
@@ -235,9 +358,9 @@ docs/
   COMPATIBILITY.md
 ```
 
-`electron/main.js` owns the desktop lifecycle, window hardening, dialogs, workspace store instance, and IPC handlers.
+`electron/main.js` is the packaged app entry point and lifecycle wiring layer. Window hardening, dialogs, IPC handlers, services, and packaging helpers live under the Electron ownership folders above.
 
-`electron/preload.js` exposes a small `window.postmeter` API only to the main renderer frame. The renderer is served from the secure standard `postmeter-app://bundle` custom protocol through an allowlisted main-process handler instead of `file://`, the protocol response applies CSP/`nosniff`/`no-referrer` headers, and the renderer has no direct Node access.
+`electron/app-shell/preload.js` exposes a small `window.postmeter` API only to the main renderer frame. The renderer is served from the secure standard `postmeter-app://bundle` custom protocol through an allowlisted main-process handler instead of `file://`, the protocol response applies CSP/`nosniff`/`no-referrer` headers, and the renderer has no direct Node access.
 
 `src/core/` contains framework-independent business logic. JavaFX source, Maven wrapper files, and Maven tests are no longer part of the tracked repository.
 
@@ -856,7 +979,7 @@ Implemented runtime behavior:
 - Runs pre-request scripts before a single request is sent and test scripts after the response is received.
 - Persists `pm.environment`, `pm.collectionVariables`, workspace `pm.globals`, and request-local `pm.variables` mutations back to the active workspace scopes for single sends and collection runs.
 - Starts script workers with a minimal environment instead of inheriting the full PostMeter/Electron process environment.
-- Starts script workers through `src/core/osSandbox.js` when a functional OS backend is available or required. Backend selection probes the launcher before auto-enabling it, so CI or desktop environments with an installed but unusable backend fall back in auto mode instead of breaking Postman-compatible script execution; required mode still fails closed unless an explicit Linux CI validation waiver is set. The Linux backend uses `bubblewrap` with cleared environment, unshared namespaces including network, dropped capabilities, private writable `/tmp` and `/run`, disabled nested user namespaces, read-only runtime/app/library bind mounts, and a seccomp cBPF policy that denies high-risk kernel APIs including `bpf`, `ptrace`, keyring, module-loading, mount, process-memory, performance-event, `io_uring`, and nested namespace syscalls such as `unshare`, `setns`, and `clone3`. The Windows backend builds and packages the release-owned `PostMeterWindowsSandboxHelper.exe`, launches workers in a stable AppContainer profile with no declared network capabilities, grants only required runtime/app paths plus a private temp directory, passes a minimal child environment, and keeps the child in a kill-on-close single-process job object. The macOS backend launches workers through `sandbox-exec` with a deny-default seatbelt profile, denied network access, explicit process-exec/process-fork denial, no broad process allowance, read-only runtime/app/library access, and a per-launch private writable temp directory.
+- Starts script workers through `src/core/sandbox/osSandbox.js` when a functional OS backend is available or required. Backend selection probes the launcher before auto-enabling it, so CI or desktop environments with an installed but unusable backend fall back in auto mode instead of breaking Postman-compatible script execution; required mode still fails closed unless an explicit Linux CI validation waiver is set. The Linux backend uses `bubblewrap` with cleared environment, unshared namespaces including network, dropped capabilities, private writable `/tmp` and `/run`, disabled nested user namespaces, read-only runtime/app/library bind mounts, and a seccomp cBPF policy that denies high-risk kernel APIs including `bpf`, `ptrace`, keyring, module-loading, mount, process-memory, performance-event, `io_uring`, and nested namespace syscalls such as `unshare`, `setns`, and `clone3`. The Windows backend builds and packages the release-owned `PostMeterWindowsSandboxHelper.exe`, launches workers in a stable AppContainer profile with no declared network capabilities, grants only required runtime/app paths plus a private temp directory, passes a minimal child environment, and keeps the child in a kill-on-close single-process job object. The macOS backend launches workers through `sandbox-exec` with a deny-default seatbelt profile, denied network access, explicit process-exec/process-fork denial, no broad process allowance, read-only runtime/app/library access, and a per-launch private writable temp directory.
 - Starts script workers with Node permission flags when the pinned runtime supports them, allowing filesystem read access only to the exact worker/runtime modules, dynamic-variable and variable-scope helpers, reviewed package-cache helper, and the pinned Postman package bundle needed by script execution.
 - Fails closed for packaged Electron script execution when Node permission flags are unavailable, and requires the same permission support for CLI script workers on the supported Node 22+ baseline.
 - Starts script workers with a bounded V8 old-space limit. The default is `64` MB, tunable with `POSTMETER_SCRIPT_WORKER_MAX_OLD_SPACE_MB` or internal test options between `16` and `512` MB.
@@ -886,15 +1009,15 @@ Implemented runtime behavior:
 - Provides explicit errors for host-only APIs and package-loading paths that Postman does not expose in scripts: raw `fetch`, `XMLHttpRequest`, `WebSocket`, process access, host Node resolution, `node:` specifiers, WebAssembly, browser globals, unreviewed package loading, native modules, paths, runtime registry fetches, Electron, renderer, and raw socket access. Current Postman WebSocket/Socket.IO docs do not expose saved script hooks, so PostMeter records that audit result instead of inventing WebSocket hook execution.
 - The Postman/Newman-style fixture corpus in `test/fixtures/postman` runs through the normal Postman importer and collection runner or the local mock runner, covering async ordering, nested `pm.sendRequest`, user-granted file/binary/form-data attachment bindings, SDK request/response/list objects, Step 4 `pm.test`/Chai/variable/dynamic-variable behavior, `pm.execution.location`, `pm.execution.runRequest`, GraphQL and gRPC protocol hooks, local mock `pm.mock`/`pm.state`, interactive Handlebars `pm.visualizer` including reviewed assets, brokered `pm.vault`, bundled packages, reviewed cached packages, multi-file CommonJS package loading, Postman globals, NodeJS module facades, timers/microtasks, iteration data, cookie scope, variable precedence, execution control, cancellation, skipped requests, and mixed `pm.test` pass/fail behavior.
 - The current audited parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces.
-- The generated Postman sandbox parity matrix lives at `docs/postman-sandbox-parity-matrix.json` with source in `src/core/postmanParityMatrix.js`; `npm run postman:parity:validate` fails if it is stale or structurally invalid.
-- The official Postman/Newman docs coverage audit lives at `docs/postman-docs-coverage-audit.json` with source in `src/core/postmanDocsCoverageAudit.js`; `npm run postman:docs:validate` fails if any committed official-docs token is unmapped, and `npm run postman:docs:live` refetches the current official docs plus the Newman npm latest dist-tag to catch upstream drift before preserving a 1:1 script-import claim.
+- The generated Postman sandbox parity matrix lives at `docs/postman-sandbox-parity-matrix.json` with source in `src/core/diagnostics-release/postmanParityMatrix.js`; `npm run postman:parity:validate` fails if it is stale or structurally invalid.
+- The official Postman/Newman docs coverage audit lives at `docs/postman-docs-coverage-audit.json` with source in `src/core/diagnostics-release/postmanDocsCoverageAudit.js`; `npm run postman:docs:validate` fails if any committed official-docs token is unmapped, and `npm run postman:docs:live` refetches the current official docs plus the Newman npm latest dist-tag to catch upstream drift before preserving a 1:1 script-import claim.
 - `npm run postman:parity:claim` is the full Postman script compatibility gate for the supported default import profile. It currently passes with zero default-import blockers. Implemented behavior-sensitive Desktop rows are validated against explicit row-specific Desktop evidence metadata.
 - `npm run postman:parity:diff` runs the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential collections through PostMeter, and `npm run postman:parity:diff -- --newman --download-newman` optionally compares the same fixtures against the targeted `newman@6.2.2` reporter output. `npm run postman:newman-reports:refresh -- --download-newman` runs the approved live Newman differential and rewrites the checked-in evidence in one explicit network-using step; `npm run postman:newman-reports:write -- --from <dir>` keeps the two-step refresh path available and accepts only clean source summaries targeting `newman@6.2.2`, Postman Runtime 7.39.1, and the exact approved suite list. Checked-in raw Newman, raw PostMeter, and normalized `newman@6.2.2` JSON evidence lives under `test/fixtures/postman/newman-reports/`; `npm run postman:newman-reports:validate` keeps it structurally current without network access, verifies all required suites, rejects unexpected checked-in JSON files and stale normalized Newman/PostMeter output, requires generation metadata on each normalized report, preserves response-shape/body-digest evidence and console output when present, and fails if normalized evidence still contains concrete localhost ports, local filesystem paths, generated request IDs, generated Postman request tokens, generated multipart boundaries, time-derived request signatures, machine names, or machine-specific metadata.
-- The OS-sandbox platform completion matrix lives at `docs/os-sandbox-platform-matrix.json` with source in `src/core/osSandboxPlatformMatrix.js`; `npm run sandbox:platform:validate` fails if it is stale or structurally invalid.
+- The OS-sandbox platform completion matrix lives at `docs/os-sandbox-platform-matrix.json` with source in `src/core/sandbox/osSandboxPlatformMatrix.js`; `npm run sandbox:platform:validate` fails if it is stale or structurally invalid.
 - `npm run sandbox:platform:claim` is the implemented tier-one OS sandbox backend gate. It is intentionally separate from Postman API parity and passes when the committed platform matrix records implemented Linux `bubblewrap`/seccomp, Windows AppContainer helper, macOS seatbelt, and packaged-validation rows; stable production readiness still requires native-runner/manual evidence in the production readiness matrix.
 - `npm run release:gate` validates that the package scripts and CI/release workflows keep the sandbox runtime validation, OS-sandbox platform-matrix validation, packaged validation, parity validation, official-docs coverage validation, aggregate `npm run check`, packaged Linux validation, and Windows/macOS native validation hooks in the production release gate.
-- `npm run production:readiness`, `npm run production:readiness:validate`, and `npm run production:readiness:claim` read the source-owned production readiness dashboard from `src/core/productionReadinessMatrix.js` and generated `docs/production-readiness-matrix.json`. The default claim command is the fail-closed stable-release gate; `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc` expose lower release-level thresholds, with RC accepting only validated rows or explicit documented RC waivers. Normal validation is wired into CI/release as a freshness check, and the tag-driven release workflow runs the stable claim before building publishable artifacts. The dashboard also tracks dependency audit and Electron runtime-version checks as release-blocking rows instead of leaving them implicit inside aggregate scripts.
-- Production observability is privacy-first and cloud-free. `src/core/diagnostics.js` writes bounded JSONL diagnostic events with log levels, record caps, file-size caps, one-file/multi-file rotation, and the final Electron user-data diagnostics directory. Request/response URLs, path/query values, methods, status codes/categories, sizes, headers, HTTP/gRPC metadata, cookies, auth material, bodies, aliases, protocol messages, script-console traffic echoes, and payload-derived identifiers are omitted by default unless a current-workspace opt-in in managed workspace `localsettings` explicitly enables that category. `electron/diagnosticsIpc.js` waits for queued local privacy-setting saves, then exports a user-selected local JSON bundle containing app/runtime metadata, sanitized settings, workspace counts, readiness status counts, privacy flags, and recent sanitized diagnostic events. There is no automatic telemetry, cloud upload, PostMeter account flow, screenshot inclusion, artifact-directory crawl, GitHub Actions log ingestion, DNS lookup, HTTP(S) request, or raw socket connection.
+- `npm run production:readiness`, `npm run production:readiness:validate`, and `npm run production:readiness:claim` read the source-owned production readiness dashboard from `src/core/diagnostics-release/productionReadinessMatrix.js` and generated `docs/production-readiness-matrix.json`. The default claim command is the fail-closed stable-release gate; `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc` expose lower release-level thresholds, with RC accepting only validated rows or explicit documented RC waivers. Normal validation is wired into CI/release as a freshness check, and the tag-driven release workflow runs the stable claim before building publishable artifacts. The dashboard also tracks dependency audit and Electron runtime-version checks as release-blocking rows instead of leaving them implicit inside aggregate scripts.
+- Production observability is privacy-first and cloud-free. `src/core/diagnostics-release/diagnostics.js` writes bounded JSONL diagnostic events with log levels, record caps, file-size caps, one-file/multi-file rotation, and the final Electron user-data diagnostics directory. Request/response URLs, path/query values, methods, status codes/categories, sizes, headers, HTTP/gRPC metadata, cookies, auth material, bodies, aliases, protocol messages, script-console traffic echoes, and payload-derived identifiers are omitted by default unless a current-workspace opt-in in managed workspace `localsettings` explicitly enables that category. `electron/ipc/diagnosticsIpc.js` waits for queued local privacy-setting saves, then exports a user-selected local JSON bundle containing app/runtime metadata, sanitized settings, workspace counts, readiness status counts, privacy flags, and recent sanitized diagnostic events. There is no automatic telemetry, cloud upload, PostMeter account flow, screenshot inclusion, artifact-directory crawl, GitHub Actions log ingestion, DNS lookup, HTTP(S) request, or raw socket connection.
 - Diagnostics default-deny inbound/outbound request and response data, including URLs, path/query values, methods, status codes/categories, sizes, headers, HTTP/gRPC metadata, cookies, auth material, request/response bodies and aliases, form-data parts, GraphQL variables, gRPC messages, rendered response text, examples/history payloads, script-echoed traffic values, console-output aliases, and payload-derived identifiers. Workspace-local opt-ins stored in managed workspace `localsettings` can enable narrow categories (`urls`, `headers`, `cookies`, `bodies`, `protocolMessages`, `scriptConsole`, and `payloadIdentifiers`), but auth schemes including header-shaped standalone Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate tokens, comma/semicolon-delimited compound Digest-style parameters with optional whitespace around equals, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, AWS SigV4 and Akamai-style signature parameters, chained AWS query credentials next to kebab-case OAuth secret assignments, assigned exact token/code/state fields, assigned and bare whitespace-only snake_case/kebab-case/camelCase OAuth/token fields, unquoted multi-word and repeated-whitespace secret fields, certificate passphrases, generic credential fields, sensitive object keys, unescaped JSON/annotated/class-style and parenthesized util-inspect URL/header/metadata array/object aliases with whitespace/colon/equals separators, structured header/metadata key/name pairs with sensitive value/raw/currentValue/schema fields, object/array request/response assignments, bare, assigned, escaped, double-escaped, and nested-JSON including escaped newline/quote/backslash camelCase/snake_case/kebab-case body/bodyPreview/data/responseText/text/variables/rendered-response aliases, script-console aliases, payload-identifier aliases, protocol-message aliases, cookies, JWTs including JWT-shaped URL path/query/fragment values, private keys, UNC/extended UNC/Windows device/Windows/macOS/POSIX local paths including file:// URLs, JSON-escaped slash URLs, JSON-escaped POSIX paths, file URLs, mixed path/URL chains, URL credentials across supported and custom URL schemes, OAuth provider/progress error URL and path references, OAuth callback code/state params and token fragments, URL-encoded free-text OAuth/token parameter strings, bare DNS/IP/localhost transport endpoints, secret query/fragment/path params including path label/value and inline same-segment forms with encoded slashes, routed fragment path forms, single- and multi-encoded delimiter forms including recursively nested encoded wrapper params and structured key/value/raw/currentValue/example/schema-default arrays, source/UI/packaged smoke failure output, source/packaged sandbox validation child output, and IPC handler/export failure messages and diagnostic event type/outcome/failure-code metadata including compact/delimiter-free token/code/state labels and one-letter token aliases plus secret-shaped IPC/export error names and codes are still redacted. Auth-scheme words embedded inside hyphenated values are not treated as standalone auth schemes, and URL category opt-ins preserve non-sensitive query, fragment, and path context while redacting sensitive query, fragment, path label/value, inline path, routed fragment path, encoded delimiter, auth, and token values. Imported and exported native workspaces omit local diagnostics settings so a shared file cannot silently enable traffic logging, and partial settings saves preserve the current diagnostics privacy state unless a diagnostics field is explicitly changed.
 - Workspace diagnostics controls are current-workspace scoped: editing and export are disabled for selected non-current workspaces, PII warnings are programmatically tied to risky controls, failed local settings saves roll back in-memory state, and diagnostics export waits for any pending diagnostics settings save before producing a bundle.
 - `npm run diagnostics:privacy:validate` validates the source-owned diagnostics/privacy matrix at `docs/diagnostics-privacy-matrix.json`; `npm run diagnostics:privacy:write` regenerates it. The production readiness row `diagnostics.privacy` is validated locally by diagnostics unit tests, IPC tests, renderer binding/UI regression tests, import-reset tests, event-emitter tests, matrix freshness, and `npm run check`.
@@ -952,7 +1075,7 @@ Performance tests can be created from the sidebar empty state or the top-level `
 
 ## IPC Validation
 
-Renderer-originated IPC sender identity is checked by `electron/ipcSecurity.js` before production handlers run, including fail-closed rejection for missing sender-frame metadata, subframe senders, non-`postmeter-app` origins, unexpected app-protocol paths, and unexpected app-protocol query keys. IPC inputs are validated in `ipcValidation.js` before reaching main-process behavior. Shared enum and high-level payload contract metadata lives in `payloadSchemas.js` with `PAYLOAD_SCHEMA_VERSION = 1`. The source-owned Electron security matrix enumerates the BrowserWindow, navigation, window-open, webview, permission, secure app-content protocol response headers, main-frame-only preload, every IPC channel, IPC sender validation, file-dialog, external URL, custom protocol, packaged-preload, packaged-protocol, fuse, renderer CSP, and visualizer CSP surfaces and is validated by `npm run electron:security:validate`.
+Renderer-originated IPC sender identity is checked by `electron/security/ipcSecurity.js` before production handlers run, including fail-closed rejection for missing sender-frame metadata, subframe senders, non-`postmeter-app` origins, unexpected app-protocol paths, and unexpected app-protocol query keys. IPC inputs are validated in `ipcValidation.js` before reaching main-process behavior. Shared enum and high-level payload contract metadata lives in `payloadSchemas.js` with `PAYLOAD_SCHEMA_VERSION = 1`. The source-owned Electron security matrix enumerates the BrowserWindow, navigation, window-open, webview, permission, secure app-content protocol response headers, main-frame-only preload, every IPC channel, IPC sender validation, file-dialog, external URL, custom protocol, packaged-preload, packaged-protocol, fuse, renderer CSP, and visualizer CSP surfaces and is validated by `npm run electron:security:validate`.
 
 Covered payloads:
 

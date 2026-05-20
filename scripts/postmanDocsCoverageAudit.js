@@ -4,7 +4,7 @@ const {
   runLiveDocsCoverageAudit,
   validateCommittedDocsCoverageAudit,
   writeDocsCoverageAudit
-} = require('../src/core/postmanDocsCoverageAudit');
+} = require('../src/core/diagnostics-release/postmanDocsCoverageAudit');
 
 async function main() {
   const command = process.argv[2] || 'validate';
@@ -25,7 +25,7 @@ async function main() {
   }
   if (command === 'live') {
     const audit = await runLiveDocsCoverageAudit();
-    const result = require('../src/core/postmanDocsCoverageAudit').validateDocsCoverageAudit(audit);
+    const result = require('../src/core/diagnostics-release/postmanDocsCoverageAudit').validateDocsCoverageAudit(audit);
     if (!result.ok) {
       printErrors(result.errors);
       process.exitCode = 1;

@@ -10,7 +10,7 @@ const {
   normalizeShortcutText,
   recordShortcutFromEvent,
   shortcutForAction
-} = require('../../src/core/keyboardShortcuts');
+} = require('../../src/core/contracts/keyboardShortcuts');
 
 test('keyboard shortcut normalization canonicalizes editable shortcut text', () => {
   assert.equal(normalizeShortcutText('Ctrl++'), 'Ctrl+Plus');

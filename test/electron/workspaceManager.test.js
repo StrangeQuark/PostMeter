@@ -3,9 +3,13 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { CURRENT_SCHEMA_VERSION } = require('../../src/core/models');
-const { WorkspaceManager } = require('../../src/core/workspaceManager');
-const { WorkspaceRecoveryError } = require('../../src/core/workspaceStore');
+const { CURRENT_SCHEMA_VERSION } = require('../../src/core/workspace/models');
+const { WorkspaceManager } = require('../../src/core/workspace/workspaceManager');
+const { WorkspaceRecoveryError } = require('../../src/core/workspace/workspaceStore');
+const {
+  decryptWorkspaceEnvelope,
+  isEncryptedWorkspaceEnvelope
+} = require('../../src/core/workspace/workspaceEncryption');
 
 test('workspace manager creates and describes a default managed workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
@@ -86,6 +90,78 @@ test('workspace manager creates, switches, and deletes managed workspaces', asyn
   assert.equal(deleted.workspaces.length, 1);
   assert.equal(deleted.workspaces[0].deletable, false);
   await assert.rejects(() => fs.access(path.join(temp, 'Workspace.json')));
+});
+
+test('workspace manager discovers, unlocks, exports, duplicates, and imports encrypted workspaces without plaintext export', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-encrypted-'));
+  const importTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-encrypted-import-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  const loaded = await manager.load();
+  loaded.workspace.collections.push({
+    id: 'collection-1',
+    name: 'PII Collection',
+    description: '',
+    variables: [],
+    certificates: [],
+    requests: [{ id: 'request-1', name: 'SSN Request', method: 'POST', url: 'https://example.test/123-45-6789' }],
+    folders: []
+  });
+  await manager.encryptWorkspace(loaded.activeWorkspaceId, loaded.workspace, 'secret1');
+  const encryptedText = await fs.readFile(loaded.path, 'utf8');
+  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(encryptedText)), true);
+  assert.doesNotMatch(encryptedText, /SSN Request|123-45-6789/);
+
+  const lockedManager = new WorkspaceManager(preferredWorkspacePath);
+  const locked = await lockedManager.load({ preferredWorkspaceId: loaded.activeWorkspaceId });
+  assert.equal(locked.locked, true);
+  assert.equal(locked.encrypted, true);
+  assert.equal(locked.workspaces[0].encrypted, true);
+  assert.equal(locked.workspaces[0].locked, true);
+  assert.equal(locked.workspaces[0].requestCount, 0);
+  await assert.rejects(
+    () => lockedManager.exportWorkspaceById(loaded.activeWorkspaceId, path.join(temp, 'locked-export.json')),
+    /unlocked before exporting/
+  );
+  const lockedExportPath = path.join(temp, 'locked-export-with-key.json');
+  await lockedManager.exportWorkspaceById(loaded.activeWorkspaceId, lockedExportPath, { encryptionKey: 'secret1' });
+  const lockedExportedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(await fs.readFile(lockedExportPath, 'utf8')), 'secret1');
+  assert.equal(Object.hasOwn(lockedExportedWorkspace, 'localsettings'), false);
+  assert.equal(lockedExportedWorkspace.collections[0].requests[0].name, 'SSN Request');
+
+  const unlocked = await lockedManager.unlockWorkspace(loaded.activeWorkspaceId, 'secret1');
+  assert.equal(unlocked.locked, false);
+  assert.equal(unlocked.workspaces[0].requestCount, 1);
+  unlocked.workspace.collections[0].requests[0].name = 'Updated SSN Request';
+  await lockedManager.save(unlocked.workspace);
+  const savedEncryptedText = await fs.readFile(loaded.path, 'utf8');
+  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(savedEncryptedText)), true);
+  assert.doesNotMatch(savedEncryptedText, /Updated SSN Request|123-45-6789/);
+  const savedEncryptedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(savedEncryptedText), 'secret1');
+  assert.equal(Object.hasOwn(savedEncryptedWorkspace, 'localsettings'), true);
+
+  const exportPath = path.join(temp, 'encrypted-export.json');
+  await lockedManager.exportWorkspaceById(loaded.activeWorkspaceId, exportPath);
+  const exportedText = await fs.readFile(exportPath, 'utf8');
+  const exportedEnvelope = JSON.parse(exportedText);
+  assert.equal(isEncryptedWorkspaceEnvelope(exportedEnvelope), true);
+  assert.doesNotMatch(exportedText, /Updated SSN Request|123-45-6789/);
+  const exportedWorkspace = await decryptWorkspaceEnvelope(exportedEnvelope, 'secret1');
+  assert.equal(Object.hasOwn(exportedWorkspace, 'localsettings'), false);
+  assert.equal(exportedWorkspace.collections[0].requests[0].name, 'Updated SSN Request');
+
+  const duplicateId = await lockedManager.duplicateWorkspace(loaded.activeWorkspaceId);
+  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(await fs.readFile(path.join(temp, duplicateId), 'utf8'))), true);
+
+  const importPath = path.join(importTemp, 'Shared.postmeter.json');
+  await fs.writeFile(importPath, await fs.readFile(exportPath, 'utf8'));
+  const importedId = await lockedManager.importWorkspace(importPath);
+  const importedText = await fs.readFile(path.join(temp, importedId), 'utf8');
+  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(importedText)), true);
+  const importedWorkspace = await decryptWorkspaceEnvelope(JSON.parse(importedText), 'secret1');
+  assert.equal(Object.hasOwn(importedWorkspace, 'localsettings'), false);
+  assert.equal(importedWorkspace.collections[0].requests[0].name, 'Updated SSN Request');
 });
 
 test('workspace manager can snapshot and restore a deleted managed workspace for rollback', async () => {

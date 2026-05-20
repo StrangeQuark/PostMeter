@@ -5,7 +5,7 @@ const {
   authFromEditorState,
   normalizeAuth,
   normalizePersistedAuth
-} = require('../../src/core/authModel');
+} = require('../../src/core/http/authModel');
 
 test('shared auth model normalizes runtime auth values by type', () => {
   assert.deepEqual(normalizeAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });

@@ -3,7 +3,7 @@ const test = require('node:test');
 const {
   highlightVariableTokens,
   resolvedVariableForToken
-} = require('../../src/renderer/variableHighlighter');
+} = require('../../src/renderer/ui/variableHighlighter');
 
 test('variable highlighter marks Postman-style variable tokens', () => {
   const html = highlightVariableTokens('https://{{baseUrl}}/users?token={{ token }}&url=${ requestUrl }', {

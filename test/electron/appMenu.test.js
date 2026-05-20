@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createApplicationMenuTemplate, electronAcceleratorForShortcut } = require('../../electron/appMenu');
+const { createApplicationMenuTemplate, electronAcceleratorForShortcut } = require('../../electron/app-shell/appMenu');
 
 const FILE_ACTIONS = new Map([
   ['File > New > Request', 'new-request'],

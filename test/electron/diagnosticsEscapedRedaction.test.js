@@ -4,10 +4,10 @@ const test = require('node:test');
 const {
   redactText,
   sanitizeDiagnosticEvent
-} = require('../../src/core/diagnostics');
-const { redactOAuthErrorMessage } = require('../../src/core/auth');
-const { redactedDiagnosticsExportError } = require('../../electron/diagnosticsIpc');
-const { sanitizeIpcError } = require('../../electron/ipcSecurity');
+} = require('../../src/core/diagnostics-release/diagnostics');
+const { redactOAuthErrorMessage } = require('../../src/core/http/auth');
+const { redactedDiagnosticsExportError } = require('../../electron/ipc/diagnosticsIpc');
+const { sanitizeIpcError } = require('../../electron/security/ipcSecurity');
 const { redactSmokeOutputText } = require('../../scripts/smokeProcess');
 const {
   packagedSmokeCliErrorText,
@@ -15,7 +15,7 @@ const {
 } = require('../../scripts/validatePackagedAppSmoke');
 const { redactForOutput } = require('../../scripts/validateSandboxRuntime');
 const { redactForOutput: redactPackagedSandboxOutput } = require('../../scripts/validatePackagedSandboxRuntime');
-const { redactUiSmokeText } = require('../../electron/mainWindow');
+const { redactUiSmokeText } = require('../../electron/app-shell/mainWindow');
 
 function escapedRequestResponseSample(prefix) {
   const nested = JSON.stringify({

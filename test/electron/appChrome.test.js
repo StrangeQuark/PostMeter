@@ -12,28 +12,28 @@ const {
   createAppRendererUrl,
   isTrustedAppRendererUrl,
   serveAppProtocolRequest
-} = require('../../electron/appProtocol');
+} = require('../../electron/app-shell/appProtocol');
 const {
   isAllowedRendererNavigation
-} = require('../../electron/mainWindow');
+} = require('../../electron/app-shell/mainWindow');
 const {
   createTrustedIpcMain,
   isMainFrameSender,
   isTrustedIpcSender,
   isTrustedRendererUrl,
   sanitizeIpcError
-} = require('../../electron/ipcSecurity');
+} = require('../../electron/security/ipcSecurity');
 const {
   buildElectronSecurityMatrix,
   ELECTRON_IPC_CHANNELS
-} = require('../../src/core/productionSupportMatrices');
+} = require('../../src/core/diagnostics-release/productionSupportMatrices');
 
 test('Electron shell keeps custom File/Edit/View/Help menus without the default Window menu', async () => {
   const root = path.join(__dirname, '..', '..');
   const mainSource = await fs.readFile(path.join(root, 'electron', 'main.js'), 'utf8');
-  const appMenuSource = await fs.readFile(path.join(root, 'electron', 'appMenu.js'), 'utf8');
-  const preloadSource = await fs.readFile(path.join(root, 'electron', 'preload.js'), 'utf8');
-  const rendererSource = await fs.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
+  const appMenuSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'appMenu.js'), 'utf8');
+  const preloadSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'preload.js'), 'utf8');
+  const rendererSource = await readRendererBundleSource(root);
   const indexSource = await fs.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
 
   assert.match(mainSource, /refreshApplicationMenu/);
@@ -196,7 +196,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
 
 test('Electron BrowserWindow hardening denies renderer navigation, window-open, webview, and permissions', async () => {
   const root = path.join(__dirname, '..', '..');
-  const mainWindowSource = await fs.readFile(path.join(root, 'electron', 'mainWindow.js'), 'utf8');
+  const mainWindowSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'mainWindow.js'), 'utf8');
   const rendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' });
 
   assert.match(mainWindowSource, /nodeIntegration:\s*false/);
@@ -336,7 +336,7 @@ test('Electron IPC error sanitizer redacts traffic-shaped values while preservin
 
 test('PostMeter app protocol only serves allowlisted renderer bundle assets', async () => {
   const root = path.join(__dirname, '..', '..');
-  const appProtocolSource = await fs.readFile(path.join(root, 'electron', 'appProtocol.js'), 'utf8');
+  const appProtocolSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'appProtocol.js'), 'utf8');
   const rendererHtml = await fs.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
   const rendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' });
 
@@ -355,9 +355,9 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
     'uiWorkflowSmoke'
   ]);
   assert.equal(appProtocolFilePath(rendererUrl, root), path.join(root, 'src', 'renderer', 'index.html'));
-  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/payloadSchemas.js`, root), path.join(root, 'src', 'core', 'payloadSchemas.js'));
-  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/csvVariables.js`, root), path.join(root, 'src', 'core', 'csvVariables.js'));
-  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/requestQueryModel.js`, root), path.join(root, 'src', 'core', 'requestQueryModel.js'));
+  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/contracts/payloadSchemas.js`, root), path.join(root, 'src', 'core', 'contracts', 'payloadSchemas.js'));
+  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/workspace/csvVariables.js`, root), path.join(root, 'src', 'core', 'workspace', 'csvVariables.js'));
+  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/workspace/requestQueryModel.js`, root), path.join(root, 'src', 'core', 'workspace', 'requestQueryModel.js'));
   assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/build/icon.png`, root), path.join(root, 'build', 'icon.png'));
   for (const scriptSrc of rendererHtml.matchAll(/<script src="([^"]+)"><\/script>/g)) {
     const scriptUrl = new URL(scriptSrc[1], rendererUrl).toString();
@@ -368,7 +368,7 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
   }
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://evil/src/renderer/index.html`, root), /Invalid PostMeter app protocol URL/);
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/package.json`, root), /not allowlisted/);
-  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/scriptRuntime.js`, root), /not allowlisted/);
+  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/sandbox/scriptRuntime.js`, root), /not allowlisted/);
   assert.throws(() => appProtocolFilePath(`file://${path.join(root, 'src', 'renderer', 'index.html')}`, root), /Invalid PostMeter app protocol URL/);
   assert.doesNotMatch(appProtocolSource, /supportFetchAPI:\s*true/);
   assert.match(rendererHtml, new RegExp(APP_RENDERER_CSP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -401,19 +401,20 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
 test('Electron security matrix enumerates every IPC channel exposed by source', async () => {
   const root = path.join(__dirname, '..', '..');
   const mainFiles = [
-    'electron/appIpc.js',
-    'electron/exportIpc.js',
+    'electron/ipc/appIpc.js',
+    'electron/ipc/exportIpc.js',
     'electron/main.js',
-    'electron/oauthIpc.js',
-    'electron/requestIpc.js',
-    'electron/runtimeIpc.js',
-    'electron/sandboxPackageIpc.js',
-    'electron/sessionIpc.js',
-    'electron/vaultPrompt.js',
-    'electron/workspaceIpc.js'
+    'electron/ipc/oauthIpc.js',
+    'electron/ipc/requestIpc.js',
+    'electron/ipc/runtimeIpc.js',
+    'electron/ipc/sandboxPackageIpc.js',
+    'electron/ipc/sessionIpc.js',
+    'electron/ipc/vaultPrompt.js',
+    'electron/ipc/workspaceIpc.js',
+    'electron/ipc/workspaceKeyPrompt.js'
   ];
   const mainSource = (await Promise.all(mainFiles.map((file) => fs.readFile(path.join(root, file), 'utf8')))).join('\n');
-  const preloadSource = await fs.readFile(path.join(root, 'electron', 'preload.js'), 'utf8');
+  const preloadSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'preload.js'), 'utf8');
   const matrixRows = new Set(buildElectronSecurityMatrix().rows.map((row) => row.id));
   const declaredRendererToMain = new Set(ELECTRON_IPC_CHANNELS
     .filter((channel) => channel.direction.startsWith('renderer-to-main'))
@@ -451,4 +452,18 @@ function assertSourceOrder(source, needles, label) {
     assert.ok(index > previous, `${needle} should appear after the previous ${label} item`);
     previous = index;
   }
+}
+
+async function readRendererBundleSource(root) {
+  const rendererRoot = path.join(root, 'src', 'renderer');
+  const indexSource = await fs.readFile(path.join(rendererRoot, 'index.html'), 'utf8');
+  const sources = [];
+  for (const match of indexSource.matchAll(/<script src="([^"]+)"><\/script>/g)) {
+    const scriptSrc = match[1];
+    if (scriptSrc.startsWith('../core/') || scriptSrc.startsWith('vendor/') || scriptSrc.startsWith('smoke/')) {
+      continue;
+    }
+    sources.push(await fs.readFile(path.join(rendererRoot, scriptSrc), 'utf8'));
+  }
+  return sources.join('\n');
 }

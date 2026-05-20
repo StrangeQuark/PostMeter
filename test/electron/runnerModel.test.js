@@ -7,9 +7,9 @@ const {
   requestModel,
   runnerModel,
   workspaceModel
-} = require('../../src/core/models');
-const { normalizeWorkspace } = require('../../src/core/workspacePersistence');
-const { migrate } = require('../../src/core/workspaceMigrations');
+} = require('../../src/core/workspace/models');
+const { normalizeWorkspace } = require('../../src/core/workspace/workspacePersistence');
+const { migrate } = require('../../src/core/workspace/workspaceMigrations');
 
 test('normalizes workspace-owned runners with request clones and none environment support', () => {
   const runner = runnerModel({

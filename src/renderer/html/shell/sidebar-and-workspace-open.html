@@ -1,0 +1,72 @@
+
+  <main id="appGrid" class="app-grid">
+    <aside class="sidebar">
+      <nav class="sidebar-tabs" role="tablist" aria-label="Workspace panels" aria-orientation="vertical">
+        <button id="collectionsPanelTab" class="sidebar-tab active" type="button" role="tab" data-sidebar-panel="collections" aria-selected="true" aria-controls="collectionsSidebarPanel">Collections</button>
+        <button id="environmentsPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="environments" aria-selected="false" aria-controls="environmentsSidebarPanel">Environments</button>
+        <button id="runnersPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="runners" aria-selected="false" aria-controls="runnersSidebarPanel">Runners</button>
+        <button id="performancePanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="performance" aria-selected="false" aria-controls="performanceSidebarPanel">Performance</button>
+        <button id="workspacesPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="workspaces" aria-selected="false" aria-controls="workspacesSidebarPanel">Workspaces</button>
+        <button id="historyPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="history" aria-selected="false" aria-controls="historySidebarPanel">History</button>
+      </nav>
+      <div class="sidebar-content">
+        <section id="collectionsSidebarPanel" class="sidebar-panel active" role="tabpanel" aria-labelledby="collectionsPanelTab" data-sidebar-panel-content="collections">
+          <div class="sidebar-panel-header">
+            <h2>Collections</h2>
+            <button id="collapseCollectionsButton" type="button" class="sidebar-header-action">Collapse all</button>
+          </div>
+          <div id="collectionsTree" class="tree"></div>
+        </section>
+
+        <section id="environmentsSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="environmentsPanelTab" data-sidebar-panel-content="environments" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Environments</h2>
+          </div>
+          <div id="environmentsList" class="tree environment-list"></div>
+        </section>
+
+        <section id="runnersSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="runnersPanelTab" data-sidebar-panel-content="runners" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Runners</h2>
+          </div>
+          <div id="runnersList" class="tree runner-list"></div>
+        </section>
+
+        <section id="performanceSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="performancePanelTab" data-sidebar-panel-content="performance" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Performance</h2>
+            <button id="calibratePerformanceButton" type="button" class="sidebar-header-action">Calibrate</button>
+          </div>
+          <div id="performanceList" class="tree performance-list"></div>
+        </section>
+
+        <section id="workspacesSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="workspacesPanelTab" data-sidebar-panel-content="workspaces" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Workspaces</h2>
+          </div>
+          <div id="workspacesList" class="tree workspace-list"></div>
+        </section>
+
+        <section id="historySidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="historyPanelTab" data-sidebar-panel-content="history" hidden>
+          <div class="sidebar-panel-header">
+            <h2>History</h2>
+          </div>
+          <div id="historyList" class="history"></div>
+        </section>
+      </div>
+    </aside>
+
+    <div id="mainPaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+    <section class="workspace">
+      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Open requests, environments, workspaces, runners, and performance tests" hidden></div>
+      <section id="requestEmptyPanel" class="panel request-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Create a new request</h2>
+          <button id="emptyCreateRequestButton" type="button" class="primary">New Request</button>
+        </div>
+      </section>
+

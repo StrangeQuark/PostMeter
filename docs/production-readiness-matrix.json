@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedFrom": "src/core/productionReadinessMatrix.js",
+  "generatedFrom": "src/core/diagnostics-release/productionReadinessMatrix.js",
   "deterministic": true,
   "releaseLevels": [
     "beta",
@@ -54,8 +54,8 @@
       "evidenceRefs": [
         "docs/non-postman-compatibility-matrix.json",
         "docs/COMPATIBILITY.md",
-        "src/core/openApiFormats.js",
-        "src/core/curlFormats.js",
+        "src/core/import-export/openApiFormats.js",
+        "src/core/import-export/curlFormats.js",
         "test/electron/collectionFormats.test.js",
         "test/electron/workspaceStore.test.js",
         "test/electron/postmanImporter.test.js"
@@ -94,14 +94,13 @@
       ],
       "evidenceRefs": [
         "docs/diagnostics-privacy-matrix.json",
-        "src/core/diagnostics.js",
-        "src/core/diagnosticsSettings.js",
-        "electron/diagnosticsIpc.js",
+        "src/core/diagnostics-release/diagnostics.js",
+        "src/core/diagnostics-release/diagnosticsSettings.js",
+        "electron/ipc/diagnosticsIpc.js",
         "electron/main.js",
         "src/renderer/index.html",
         "README.md",
         "docs/TECH_SPECS.md",
-        "docs/RELEASE_READINESS.md",
         "docs/TROUBLESHOOTING.md"
       ],
       "owner": "PostMeter",
@@ -120,7 +119,6 @@
       "evidenceRefs": [
         "README.md",
         "docs/TECH_SPECS.md",
-        "docs/RELEASE_READINESS.md",
         "docs/SECURITY.md"
       ],
       "owner": "PostMeter",
@@ -156,14 +154,14 @@
       ],
       "evidenceRefs": [
         "docs/electron-security-matrix.json",
-        "src/core/productionSupportMatrices.js",
-        "electron/appProtocol.js",
-        "electron/mainWindow.js",
-        "electron/ipcSecurity.js",
-        "electron/preload.js",
-        "electron/workspaceIpc.js",
-        "electron/appIpc.js",
-        "electron/oauthFlows.js",
+        "src/core/diagnostics-release/productionSupportMatrices.js",
+        "electron/app-shell/appProtocol.js",
+        "electron/app-shell/mainWindow.js",
+        "electron/security/ipcSecurity.js",
+        "electron/app-shell/preload.js",
+        "electron/ipc/workspaceIpc.js",
+        "electron/ipc/appIpc.js",
+        "electron/services/oauthFlows.js",
         "test/electron/appChrome.test.js"
       ],
       "owner": "PostMeter",
@@ -180,12 +178,12 @@
         "npm test"
       ],
       "evidenceRefs": [
-        "src/core/pfxCertificate.js",
-        "src/core/grpcClient.js",
-        "src/core/httpClient.js",
-        "src/core/scriptedRequestLifecycle.js",
-        "src/core/scriptSandbox.js",
-        "src/core/postmanImporter.js",
+        "src/core/http/pfxCertificate.js",
+        "src/core/http/grpcClient.js",
+        "src/core/http/httpClient.js",
+        "src/core/runtime/scriptedRequestLifecycle.js",
+        "src/core/sandbox/scriptSandbox.js",
+        "src/core/import-export/postmanImporter.js",
         "test/electron/grpcClient.test.js",
         "test/electron/httpClient.test.js",
         "test/electron/scriptSandbox.test.js",
@@ -204,7 +202,7 @@
       "releaseBlocking": false,
       "commands": [],
       "evidenceRefs": [
-        "NEXT_STEPS.MD",
+        "docs/TECH_SPECS.md",
         "docs/COMPATIBILITY.md"
       ],
       "owner": "PostMeter",
@@ -223,7 +221,7 @@
         "npm run oauth:certify:live"
       ],
       "evidenceRefs": [
-        "src/core/oauthProviderCertification.js",
+        "src/core/diagnostics-release/oauthProviderCertification.js",
         "docs/oauth-provider-certification-matrix.json",
         "docs/OAUTH_PROVIDER_CERTIFICATION.md",
         ".github/workflows/oauth-provider-certification.yml"
@@ -318,10 +316,8 @@
         "docs/TECH_SPECS.md",
         "docs/ARCHITECTURE.md",
         "docs/COMPATIBILITY.md",
-        "docs/RELEASE_READINESS.md",
-        "NEXT_STEPS.MD",
-        "src/core/performanceRunner.js",
-        "electron/runtimeIpc.js",
+        "src/core/runtime/performanceRunner.js",
+        "electron/ipc/runtimeIpc.js",
         "src/renderer/renderer.js"
       ],
       "owner": "PostMeter",
@@ -383,9 +379,9 @@
         "npm run release:gate"
       ],
       "evidenceRefs": [
-        "src/core/productionReadinessMatrix.js",
+        "src/core/diagnostics-release/productionReadinessMatrix.js",
         "docs/production-readiness-matrix.json",
-        "docs/RELEASE_READINESS.md",
+        "docs/TECH_SPECS.md",
         ".github/workflows/release.yml"
       ],
       "owner": "PostMeter",
@@ -402,7 +398,7 @@
         "future signing/notarization workflow"
       ],
       "evidenceRefs": [
-        "NEXT_STEPS.MD"
+        "docs/SECURITY.md"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
@@ -420,7 +416,7 @@
       ],
       "evidenceRefs": [
         "docs/os-sandbox-platform-matrix.json",
-        "src/core/osSandboxPlatformMatrix.js",
+        "src/core/sandbox/osSandboxPlatformMatrix.js",
         "native/windows-sandbox-helper/PostMeterWindowsSandboxHelper.cpp"
       ],
       "owner": "PostMeter",
@@ -458,8 +454,8 @@
         "npm test"
       ],
       "evidenceRefs": [
-        "electron/autoUpdateService.js",
-        "src/core/updateChecker.js",
+        "electron/services/autoUpdateService.js",
+        "src/core/diagnostics-release/updateChecker.js",
         "src/renderer/index.html",
         "scripts/writeReleaseManifest.js",
         "scripts/validateReleaseArtifacts.js",
@@ -485,13 +481,13 @@
       ],
       "evidenceRefs": [
         "docs/ux-accessibility-matrix.json",
-        "docs/RELEASE_READINESS.md",
+        "docs/TECH_SPECS.md",
         "src/renderer/index.html",
-        "src/renderer/uiRegressionSmoke.js",
-        "src/renderer/uiSnapshotSmoke.js",
+        "src/renderer/smoke/uiRegressionSmoke.js",
+        "src/renderer/smoke/uiSnapshotSmoke.js",
         "test/electron/startupSmoke.js",
         "scripts/smokeProcess.js",
-        "electron/mainWindow.js"
+        "electron/app-shell/mainWindow.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
@@ -507,17 +503,17 @@
         "npm test"
       ],
       "evidenceRefs": [
-        "src/core/scriptSandbox.js",
-        "src/core/scriptedRequestLifecycle.js",
-        "src/core/collectionRunner.js",
-        "src/core/models.js",
-        "src/core/workspaceMigrations.js",
-        "electron/vaultPrompt.js",
-        "electron/requestIpc.js",
-        "electron/runtimeIpc.js",
+        "src/core/sandbox/scriptSandbox.js",
+        "src/core/runtime/scriptedRequestLifecycle.js",
+        "src/core/runtime/collectionRunner.js",
+        "src/core/workspace/models.js",
+        "src/core/workspace/workspaceMigrations.js",
+        "electron/ipc/vaultPrompt.js",
+        "electron/ipc/requestIpc.js",
+        "electron/ipc/runtimeIpc.js",
         "src/renderer/index.html",
-        "src/renderer/rendererBootstrap.js",
-        "src/renderer/vaultPromptQueue.js",
+        "src/renderer/app/rendererBootstrap.js",
+        "src/renderer/ui/vaultPromptQueue.js",
         "docs/TROUBLESHOOTING.md",
         "test/electron/scriptSandbox.test.js",
         "test/electron/collectionRunner.test.js",
@@ -545,11 +541,11 @@
       ],
       "evidenceRefs": [
         "docs/workspace-durability-matrix.json",
-        "src/core/productionSupportMatrices.js",
-        "src/core/workspacePersistence.js",
-        "src/core/workspaceStore.js",
-        "src/core/workspaceManager.js",
-        "src/core/vaultStore.js",
+        "src/core/diagnostics-release/productionSupportMatrices.js",
+        "src/core/workspace/workspacePersistence.js",
+        "src/core/workspace/workspaceStore.js",
+        "src/core/workspace/workspaceManager.js",
+        "src/core/sandbox/vaultStore.js",
         "test/electron/workspaceStore.test.js",
         "test/electron/workspaceManager.test.js",
         "test/electron/workspaceDurabilityPerformance.test.js"

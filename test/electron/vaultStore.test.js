@@ -7,7 +7,7 @@ const {
   EncryptedVaultStore,
   MemoryVaultStore,
   VaultUnavailableError
-} = require('../../src/core/vaultStore');
+} = require('../../src/core/sandbox/vaultStore');
 
 test('encrypted vault store persists secrets outside plaintext JSON', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-vault-'));

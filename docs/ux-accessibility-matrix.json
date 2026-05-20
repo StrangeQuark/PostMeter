@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "ux-accessibility",
-  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "generatedFrom": "src/core/diagnostics-release/productionSupportMatrices.js",
   "deterministic": true,
   "rows": [
     {
@@ -11,10 +11,10 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "src/renderer/layoutControls.js",
-        "src/renderer/variableAutocomplete.js",
-        "src/renderer/contextMenu.js",
-        "src/renderer/requestEditorPanels.js",
+        "src/renderer/ui/layoutControls.js",
+        "src/renderer/ui/variableAutocomplete.js",
+        "src/renderer/ui/contextMenu.js",
+        "src/renderer/ui/requestEditorPanels.js",
         "src/renderer/renderer.js"
       ],
       "tests": [
@@ -44,7 +44,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/renderer.js",
-        "src/renderer/rendererBootstrap.js",
+        "src/renderer/app/rendererBootstrap.js",
         "src/renderer/index.html"
       ],
       "tests": [
@@ -61,8 +61,8 @@
       "evidenceRefs": [
         "src/renderer/index.html",
         "src/renderer/renderer.js",
-        "src/renderer/requestTabs.js",
-        "src/renderer/requestTabState.js"
+        "src/renderer/ui/requestTabs.js",
+        "src/renderer/app/requestTabState.js"
       ],
       "tests": [
         "npm run test:ui:regression",
@@ -76,8 +76,8 @@
       "target": "Linux headless UI smoke covers constrained desktop size, system/light/dark theme switching, active forced-colors focus visibility, long labels, empty workspaces, and large workspaces.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/renderer/uiRegressionSmoke.js",
-        "src/renderer/uiSnapshotSmoke.js",
+        "src/renderer/smoke/uiRegressionSmoke.js",
+        "src/renderer/smoke/uiSnapshotSmoke.js",
         "test/electron/uiRegressionSmoke.js",
         "test/electron/uiSnapshotSmoke.js"
       ],
@@ -94,7 +94,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
-        "electron/mainWindow.js",
+        "electron/app-shell/mainWindow.js",
         "scripts/smokeProcess.js",
         "test/electron/startupSmoke.js",
         ".github/workflows/ci.yml",
@@ -120,13 +120,13 @@
       "evidenceRefs": [
         "src/renderer/index.html",
         "src/renderer/renderer.js",
-        "src/renderer/requestTabState.js",
-        "src/renderer/sessionPersistence.js",
-        "src/renderer/rendererWorkflows.js",
-        "electron/runtimeIpc.js",
+        "src/renderer/app/requestTabState.js",
+        "src/renderer/app/sessionPersistence.js",
+        "src/renderer/app/rendererWorkflows.js",
+        "electron/ipc/runtimeIpc.js",
         "electron/main.js",
-        "src/core/runtimeResultStore.js",
-        "src/core/resultCapturePolicy.js"
+        "src/core/runtime/runtimeResultStore.js",
+        "src/core/workspace/resultCapturePolicy.js"
       ],
       "tests": [
         "npm run test:ui:regression",
@@ -148,9 +148,9 @@
       "evidenceRefs": [
         "src/renderer/index.html",
         "src/renderer/renderer.js",
-        "src/renderer/rendererBootstrap.js",
-        "electron/appMenu.js",
-        "electron/diagnosticsIpc.js",
+        "src/renderer/app/rendererBootstrap.js",
+        "electron/app-shell/appMenu.js",
+        "electron/ipc/diagnosticsIpc.js",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [
@@ -168,8 +168,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "src/renderer/rendererWorkflows.js",
-        "src/core/fileAttachmentBindings.js",
+        "src/renderer/app/rendererWorkflows.js",
+        "src/core/http/fileAttachmentBindings.js",
         "docs/SANDBOX_CONTRACT.md"
       ],
       "tests": [
@@ -186,8 +186,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "src/renderer/uiRegressionSmoke.js",
-        "src/renderer/uiSnapshotSmoke.js"
+        "src/renderer/smoke/uiRegressionSmoke.js",
+        "src/renderer/smoke/uiSnapshotSmoke.js"
       ],
       "tests": [
         "npm run test:ui:regression",
@@ -201,9 +201,9 @@
       "target": "Workspace, collection, example, and runner import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.",
       "status": "implemented",
       "evidenceRefs": [
-        "electron/workspaceIpc.js",
-        "electron/runtimeIpc.js",
-        "electron/fileDialogs.js",
+        "electron/ipc/workspaceIpc.js",
+        "electron/ipc/runtimeIpc.js",
+        "electron/app-shell/fileDialogs.js",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [
@@ -220,7 +220,7 @@
       "target": "Imported local mock scripts are preserved and run through the bounded loopback mock runner; mock failure and state behavior remain documented as sandbox-owned rather than cloud-owned.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/localMockServer.js",
+        "src/core/runtime/localMockServer.js",
         "docs/COMPATIBILITY.md",
         "docs/SANDBOX_CONTRACT.md"
       ],
@@ -238,8 +238,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "src/renderer/rendererWorkflows.js",
-        "src/renderer/uiOauthSmoke.js",
+        "src/renderer/app/rendererWorkflows.js",
+        "src/renderer/smoke/uiOauthSmoke.js",
         "docs/OAUTH_PROVIDER_CERTIFICATION.md"
       ],
       "tests": [
@@ -258,10 +258,10 @@
       "evidenceRefs": [
         "src/renderer/index.html",
         "src/renderer/renderer.js",
-        "src/renderer/performanceTestModel.js",
-        "src/core/performanceCalibration.js",
-        "src/core/runtimeResultStore.js",
-        "src/core/resultCapturePolicy.js",
+        "src/renderer/models/performanceTestModel.js",
+        "src/core/runtime/performanceCalibration.js",
+        "src/core/runtime/runtimeResultStore.js",
+        "src/core/workspace/resultCapturePolicy.js",
         "electron/main.js",
         "docs/ARCHITECTURE.md",
         "docs/TECH_SPECS.md"
@@ -285,8 +285,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "src/renderer/rendererWorkflows.js",
-        "electron/requestIpc.js"
+        "src/renderer/app/rendererWorkflows.js",
+        "electron/ipc/requestIpc.js"
       ],
       "tests": [
         "npm run test:ui",
@@ -302,9 +302,9 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "src/renderer/rendererWorkflows.js",
-        "electron/sandboxPackageIpc.js",
-        "src/core/sandboxPackageCache.js"
+        "src/renderer/app/rendererWorkflows.js",
+        "electron/ipc/sandboxPackageIpc.js",
+        "src/core/sandbox/sandboxPackageCache.js"
       ],
       "tests": [
         "npm run test:ui:regression",
@@ -319,11 +319,11 @@
       "target": "App-wide theme/update/tab/modal preferences save and reload from settings.json, while workspace-local sandbox/diagnostics settings save and reload from managed workspace localsettings without leaking into request payloads or portable workspace exports.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/appSettingsStore.js",
+        "src/core/workspace/appSettingsStore.js",
         "src/renderer/index.html",
-        "src/renderer/theme.css",
+        "src/renderer/styles/theme.css",
         "src/renderer/renderer.js",
-        "src/renderer/uiWorkflowSmoke.js"
+        "src/renderer/smoke/uiWorkflowSmoke.js"
       ],
       "tests": [
         "test/electron/appSettingsStore.test.js",
@@ -338,9 +338,9 @@
       "target": "Update-check success, no-update, and failure states use validated main-process update metadata and user-visible non-secret notifications.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/core/updateChecker.js",
-        "electron/appIpc.js",
-        "src/renderer/rendererWorkflows.js"
+        "src/core/diagnostics-release/updateChecker.js",
+        "electron/ipc/appIpc.js",
+        "src/renderer/app/rendererWorkflows.js"
       ],
       "tests": [
         "npm run test:ui:regression",
@@ -355,8 +355,8 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
-        "src/renderer/rendererBootstrap.js",
-        "electron/vaultPrompt.js",
+        "src/renderer/app/rendererBootstrap.js",
+        "electron/ipc/vaultPrompt.js",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [
@@ -373,8 +373,8 @@
       "target": "Workspace create, open, switch, inline rename, export, delete, and sidebar reorder flows expose success/failure states and in-app destructive confirmation through main-process validated operations without saving unrelated dirty drafts.",
       "status": "implemented",
       "evidenceRefs": [
-        "src/renderer/rendererWorkflows.js",
-        "electron/workspaceIpc.js",
+        "src/renderer/app/rendererWorkflows.js",
+        "electron/ipc/workspaceIpc.js",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [

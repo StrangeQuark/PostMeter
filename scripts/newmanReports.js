@@ -63,7 +63,7 @@ async function main() {
 }
 
 async function refreshReports(outputDir, options = {}) {
-  const { runPostmanParityDifferential } = require('../src/core/postmanParityHarness');
+  const { runPostmanParityDifferential } = require('../src/core/diagnostics-release/postmanParityHarness');
   const result = await runPostmanParityDifferential({
     allowNewmanDownload: options.allowNewmanDownload === true,
     outputDir,
@@ -81,7 +81,6 @@ async function writeReports(sourceDir) {
   await fs.mkdir(RAW_POSTMETER_DIR, { recursive: true });
   await fs.mkdir(NORMALIZED_DIR, { recursive: true });
   await fs.mkdir(POSTMETER_DIR, { recursive: true });
-  await fs.writeFile(path.join(REPORT_DIR, 'README.md'), readmeContent());
   await cleanupReportDir(RAW_DIR);
   await cleanupReportDir(RAW_POSTMETER_DIR);
   await cleanupReportDir(NORMALIZED_DIR);
@@ -651,40 +650,6 @@ function isIsoTimestamp(value) {
   return typeof value === 'string'
     && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)
     && !Number.isNaN(Date.parse(value));
-}
-
-function readmeContent() {
-  return `# Newman Report Evidence
-
-This folder contains checked-in Newman JSON evidence for the Newman-compatible differential suites.
-
-Target: \`newman@${TARGET.newman}\` with Postman Runtime ${TARGET.postmanRuntime}.
-
-The \`raw-newman/\` folder stores the captured Newman JSON reporter output. The \`raw-postmeter/\` folder stores the corresponding PostMeter differential harness output. The \`normalized-newman/\` and \`normalized-postmeter/\` folders store deterministic evidence used by CI. Normalization removes volatile timestamps, durations, concrete localhost ports, host paths, generated request IDs, generated Postman request tokens, generated multipart boundaries, time-derived request signatures, machine names, and machine-specific metadata while preserving request order, request names, response codes, response-shape/body-digest evidence, assertion names, pass/fail state, failure messages, and console output when present. Each normalized report records the fixture ID, Newman target, Postman Runtime target, generation command, normalization schema version, and generated timestamp. The write path accepts only clean source differential summaries that target \`newman@${TARGET.newman}\`, Postman Runtime ${TARGET.postmanRuntime}, and the exact approved suite list.
-
-Regenerate from a fresh live comparison:
-
-\`\`\`bash
-npm run postman:newman-reports:refresh -- --download-newman
-\`\`\`
-
-Equivalent explicit two-step flow:
-
-\`\`\`bash
-npm run postman:parity:diff -- --newman --download-newman --output /tmp/postmeter-newman-evidence
-npm run postman:newman-reports:write -- --from /tmp/postmeter-newman-evidence
-\`\`\`
-
-Validate without network access:
-
-\`\`\`bash
-npm run postman:newman-reports:validate
-\`\`\`
-
-Validation rejects stale normalized output, mismatched targets, incomplete or reordered suites, unexpected checked-in JSON files, failing PostMeter evidence, Newman assertion failures, and leaked nondeterministic values.
-
-This evidence covers Newman-compatible request-script behavior. Desktop-only flows such as local vault prompts are covered by focused PostMeter tests and docs instead of Newman reports.
-`;
 }
 
 function valueForFlag(flag) {

@@ -4,15 +4,15 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { LocalDiagnosticsLogger } = require('../../src/core/diagnostics');
-const { normalizeSettings } = require('../../src/core/models');
-const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
-const { fetchSandboxPackageForReview } = require('../../src/core/sandboxPackageFetcher');
-const { scriptPackageBundleIntegrity } = require('../../src/core/scriptRuntime');
+const { LocalDiagnosticsLogger } = require('../../src/core/diagnostics-release/diagnostics');
+const { normalizeSettings } = require('../../src/core/workspace/models');
+const { runRequestWithScripts } = require('../../src/core/runtime/requestScriptRunner');
+const { fetchSandboxPackageForReview } = require('../../src/core/sandbox/sandboxPackageFetcher');
+const { scriptPackageBundleIntegrity } = require('../../src/core/sandbox/scriptRuntime');
 const {
   EncryptedVaultStore,
   MemoryVaultStore
-} = require('../../src/core/vaultStore');
+} = require('../../src/core/sandbox/vaultStore');
 
 function response(statusCode, body, finalUrl) {
   return {

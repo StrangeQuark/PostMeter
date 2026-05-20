@@ -5,19 +5,19 @@ const {
   cloneRequestForPerformanceTest,
   defaultPerformanceTest,
   performanceTestModel
-} = require('../../src/core/models');
+} = require('../../src/core/workspace/models');
 const {
   assertPerformanceTestPayload
-} = require('../../src/core/ipcValidation');
+} = require('../../src/core/contracts/ipcValidation');
 const {
   exportPerformanceTestDocument,
   exportPerformanceTestToJson,
   importPerformanceTestFromText,
   performanceResultToCsv
-} = require('../../src/core/performanceFormats');
+} = require('../../src/core/import-export/performanceFormats');
 const {
   runPerformanceTest
-} = require('../../src/core/performanceRunner');
+} = require('../../src/core/runtime/performanceRunner');
 
 const EXPECTED_TYPES = Object.freeze([
   'diagnosis',

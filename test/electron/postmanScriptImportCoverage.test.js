@@ -1,13 +1,13 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { runCollection } = require('../../src/core/collectionRunner');
-const { importPostmanCollection } = require('../../src/core/postmanImporter');
+const { runCollection } = require('../../src/core/runtime/collectionRunner');
+const { importPostmanCollection } = require('../../src/core/import-export/postmanImporter');
 const {
   MockStateStore,
   handleLocalMockRequest
-} = require('../../src/core/localMockServer');
-const { scriptPackageIntegrity } = require('../../src/core/scriptRuntime');
-const { MemoryVaultStore } = require('../../src/core/vaultStore');
+} = require('../../src/core/runtime/localMockServer');
+const { scriptPackageIntegrity } = require('../../src/core/sandbox/scriptRuntime');
+const { MemoryVaultStore } = require('../../src/core/sandbox/vaultStore');
 
 test('executes simple imported Postman collection, folder, and request scripts with expected outputs', async () => {
   const collection = importPostmanCollection({
