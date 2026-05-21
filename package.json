@@ -83,8 +83,8 @@
     "release:validate:mac-protocol": "bash scripts/validateMacProtocolRegistration.sh"
   },
   "devDependencies": {
-    "electron": "^41.3.0",
-    "electron-builder": "^26.0.12"
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1"
   },
   "build": {
     "appId": "com.strangequark.postmeter",
@@ -151,8 +151,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@grpc/grpc-js": "^1.14.3",
-    "@grpc/proto-loader": "^0.8.0",
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
     "@xmldom/xmldom": "^0.9.10",
     "electron-updater": "^6.8.3",
     "handlebars": "4.7.9",
@@ -161,7 +161,7 @@
     "node-html-parser": "^7.1.0",
     "psl": "^1.15.0",
     "xpath": "^0.0.34",
-    "yaml": "^2.8.3"
+    "yaml": "^2.9.0"
   },
   "overrides": {
     "ip-address": "10.2.0"
