@@ -4,25 +4,43 @@ const { readdirSync, statSync } = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const testRoot = path.join(__dirname, '..', 'test', 'electron');
-const testFiles = collectTestFiles(testRoot);
-
-if (!testFiles.length) {
-  console.error('No Electron test files found.');
-  process.exit(1);
+function main() {
+  process.exit(runElectronTests());
 }
 
-const testConcurrency = process.env.POSTMETER_TEST_CONCURRENCY || '1';
-const result = spawnSync(process.execPath, ['--test', `--test-concurrency=${testConcurrency}`, ...testFiles], {
-  stdio: 'inherit'
-});
-
-if (result.error) {
-  console.error(result.error.message);
-  process.exit(1);
+function defaultTestRoot() {
+  return path.join(__dirname, '..', 'test', 'electron');
 }
 
-process.exit(result.status ?? 1);
+function buildNodeTestArgs(testFiles, env = process.env) {
+  const testConcurrency = env.POSTMETER_TEST_CONCURRENCY || '1';
+  return ['--test', `--test-concurrency=${testConcurrency}`, ...testFiles];
+}
+
+function runElectronTests(options = {}) {
+  const {
+    env = process.env,
+    execPath = process.execPath,
+    spawn = spawnSync,
+    stderr = console.error,
+    stdio = 'inherit',
+    testRoot = defaultTestRoot()
+  } = options;
+  const testFiles = collectTestFiles(testRoot);
+
+  if (!testFiles.length) {
+    stderr('No Electron test files found.');
+    return 1;
+  }
+
+  const result = spawn(execPath, buildNodeTestArgs(testFiles, env), { stdio });
+  if (result.error) {
+    stderr(result.error.message);
+    return 1;
+  }
+
+  return result.status ?? 1;
+}
 
 function collectTestFiles(directory) {
   return readdirSync(directory)
@@ -35,3 +53,14 @@ function collectTestFiles(directory) {
     })
     .sort();
 }
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  buildNodeTestArgs,
+  collectTestFiles,
+  defaultTestRoot,
+  runElectronTests
+};

@@ -1,5 +1,25 @@
 # Third-Party Notices
 
+## Runtime And Packaging Dependency Inventory
+
+This inventory is intentionally limited to direct runtime dependencies plus the packaging dependencies that are distributed with, or materially responsible for producing, desktop release artifacts. It must stay aligned with `package-lock.json`.
+
+| Package | License | V1 usage boundary |
+| --- | --- | --- |
+| `@grpc/grpc-js@1.14.3` | Apache-2.0 | Parent-owned gRPC transport only. |
+| `@grpc/proto-loader@0.8.0` | Apache-2.0 | Parent-owned `.proto` loading for gRPC requests only. |
+| `@xmldom/xmldom@0.9.10` | MIT | Import/export XML parsing and formatting helpers. |
+| `electron@41.3.0` | MIT | Desktop shell runtime and packaged application host. |
+| `electron-builder@26.8.1` | MIT | Release packaging, installer, and artifact generation tooling. |
+| `electron-updater@6.8.3` | MIT | GitHub update metadata checks and packaged update flow. |
+| `handlebars@4.7.9` | MIT | Isolated visualizer runtime bundle. |
+| `markdown-it@14.1.1` | MIT | Renderer-side markdown preview and documentation rendering. |
+| `node-forge@1.4.0` | `(BSD-3-Clause OR GPL-2.0)` | Parent-owned PFX/P12 certificate parsing; PostMeter relies on the BSD-3-Clause option. |
+| `node-html-parser@7.1.0` | MIT | Test/build-time renderer HTML contract parsing. |
+| `psl@1.15.0` | MIT | Cookie/public suffix normalization. |
+| `xpath@0.0.34` | MIT | XML selector support for import/export and request workflows. |
+| `yaml@2.8.3` | ISC | OpenAPI, workflow, and release matrix YAML parsing. |
+
 ## Postman Sandbox Bootcode
 
 `src/core/sandbox/postmanSandboxBootcodeBundle.js` contains a gzip-compressed generated artifact derived from `postman-sandbox@6.2.2` `.cache/bootcode.browser.js`.

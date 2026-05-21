@@ -80,9 +80,14 @@
     ].filter(Boolean).join('\n');
   }
 
-  global.PostMeterRunFormatting = {
+  const exported = {
     formatRunnerResult,
     oauthProgressDetail,
     oauthStatusText
   };
-})(window);
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = exported;
+  }
+  global.PostMeterRunFormatting = exported;
+})(typeof window !== 'undefined' ? window : globalThis);

@@ -786,6 +786,57 @@ test('request setting Auto uses the compatible default HTTP transport', async ()
   }
 });
 
+test('aborts stalled requests from caller cancellation and timeout signals', async () => {
+  let firstRequestReceived;
+  const firstRequestPromise = new Promise((resolve) => {
+    firstRequestReceived = resolve;
+  });
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/caller-abort') {
+      firstRequestReceived();
+      request.on('aborted', () => {
+        response.destroy();
+      });
+      return;
+    }
+    if (request.url === '/timeout') {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      response.end('late');
+      return;
+    }
+    response.end('ok');
+  });
+
+  try {
+    const controller = new AbortController();
+    const aborted = sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/caller-abort`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: ''
+    }, null, { signal: controller.signal, forceNode: true });
+    await firstRequestPromise;
+    controller.abort();
+    await assert.rejects(aborted, /abort|cancel/i);
+
+    await assert.rejects(
+      () => sendRequest({
+        method: 'GET',
+        url: `${server.baseUrl}/timeout`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: ''
+      }, null, { timeoutMillis: 5, forceNode: true }),
+      /abort|timeout/i
+    );
+  } finally {
+    await server.close();
+  }
+});
+
 test('sends user-bound file and multipart Postman bodies without arbitrary path reads', async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-attachments-'));
   t.after(async () => {

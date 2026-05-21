@@ -17,6 +17,7 @@ const {
 const { fsyncDirectory, moveFileNoOverwrite } = require('../src/core/workspace/workspacePersistence');
 const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./app-shell/appProtocol');
 const { installApplicationMenu } = require('./app-shell/appMenu');
+const { handleSecondInstance } = require('./app-shell/secondInstance');
 const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('./ipc/appIpc');
 const { createAutoUpdateService } = require('./services/autoUpdateService');
 const { createTrustedIpcMain } = require('./security/ipcSecurity');
@@ -222,16 +223,7 @@ async function failStartup(error, title = 'PostMeter could not start') {
 }
 
 app.on('second-instance', (_event, argv) => {
-  const callbackUrl = oauthFlows.findCallbackArg(argv);
-  if (callbackUrl) {
-    oauthFlows.handleCallbackUrl(callbackUrl);
-  }
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
-    mainWindow.focus();
-  }
+  handleSecondInstance(argv, { mainWindow, oauthFlows });
 });
 
 app.on('open-url', (event, url) => {

@@ -73,43 +73,54 @@ function writeIndex() {
   console.log(`Wrote ${path.relative(PROJECT_ROOT, INDEX_PATH)} from renderer HTML partials.`);
 }
 
-function checkIndex() {
-  const expected = assembleRendererHtml();
-  const actual = fs.readFileSync(INDEX_PATH, 'utf8');
+function checkIndex(options = {}) {
+  const expected = assembleRendererHtml(options);
+  const actual = fs.readFileSync(options.indexPath || INDEX_PATH, 'utf8');
   if (actual !== expected) {
-    console.error('src/renderer/index.html is out of date. Run npm run renderer:html:write.');
+    const message = 'src/renderer/index.html is out of date. Run npm run renderer:html:write.';
+    if (options.exitOnMismatch === false) {
+      throw new Error(message);
+    }
+    console.error(message);
     process.exit(1);
   }
   validateRendererSecurityAndAssets(actual);
   console.log('Renderer HTML partials match src/renderer/index.html.');
+  return true;
 }
 
-function assembleRendererHtml() {
-  return readManifest()
+function assembleRendererHtml(options = {}) {
+  const htmlRoot = options.htmlRoot || HTML_ROOT;
+  return readManifest(options)
     .map((relativePath) => {
-      const filePath = path.join(HTML_ROOT, relativePath);
-      assertInsideHtmlRoot(filePath);
+      const filePath = path.join(htmlRoot, relativePath);
+      assertInsideHtmlRoot(filePath, htmlRoot);
       return fs.readFileSync(filePath, 'utf8');
     })
     .join('');
 }
 
-function readManifest() {
-  const parsed = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+function readManifest(options = {}) {
+  const parsed = JSON.parse(fs.readFileSync(options.manifestPath || MANIFEST_PATH, 'utf8'));
   if (!Array.isArray(parsed) || !parsed.length) {
     throw new Error('Renderer HTML manifest must be a non-empty array.');
   }
+  const seen = new Set();
   return parsed.map((value) => {
     const relativePath = String(value || '');
     if (!relativePath || path.isAbsolute(relativePath) || relativePath.includes('\\') || relativePath.split('/').includes('..')) {
       throw new Error(`Invalid renderer HTML partial path: ${relativePath}`);
     }
+    if (seen.has(relativePath)) {
+      throw new Error(`Duplicate renderer HTML partial path: ${relativePath}`);
+    }
+    seen.add(relativePath);
     return relativePath;
   });
 }
 
-function assertInsideHtmlRoot(filePath) {
-  const relative = path.relative(HTML_ROOT, filePath);
+function assertInsideHtmlRoot(filePath, htmlRoot = HTML_ROOT) {
+  const relative = path.relative(htmlRoot, filePath);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Renderer HTML partial escapes html root: ${filePath}`);
   }
@@ -139,4 +150,14 @@ function assertSameSet(actual, expected, message) {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  assembleRendererHtml,
+  assertInsideHtmlRoot,
+  checkIndex,
+  readManifest,
+  validateRendererSecurityAndAssets
+};

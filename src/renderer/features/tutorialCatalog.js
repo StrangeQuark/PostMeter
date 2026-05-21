@@ -870,8 +870,10 @@
       summary: 'Review local-only vault secrets, reviewed script packages, and imported file bindings.',
       steps: Object.freeze([
         {
+          selector: '#settingsModal',
           title: 'Navigate to Settings',
           body: 'Open the desktop File menu from the app menu bar, and click the Settings button.',
+          beforeStep: tutorialEnsureSettingsModal,
           coachPlacement: 'top-left'
         },
         {
@@ -968,8 +970,10 @@
       summary: 'Configure SSL verification, trusted CA files, client certificates, request-level TLS settings, and TLS response evidence.',
       steps: Object.freeze([
         {
+          selector: '#settingsModal',
           title: 'Navigate to Settings',
           body: 'Open the desktop File menu from the app menu bar, and click the Settings button.',
+          beforeStep: tutorialEnsureSettingsModal,
           coachPlacement: 'top-left'
         },
         {
