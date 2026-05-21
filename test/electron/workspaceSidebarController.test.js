@@ -4,6 +4,15 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
+test('workspace tree labels only show active state suffixes', () => {
+  const { sandbox } = loadWorkspaceSidebarController({ id: 'plain', name: 'Plain', encrypted: false, locked: false, current: false });
+
+  assert.equal(sandbox.workspaceTreeLabel({ id: 'active', name: 'Active Workspace', encrypted: true, locked: false, current: true }), 'Active Workspace (Active)');
+  assert.equal(sandbox.workspaceTreeLabel({ id: 'encrypted', name: 'Encrypted Workspace', encrypted: true, locked: false, current: false }), 'Encrypted Workspace');
+  assert.equal(sandbox.workspaceTreeLabel({ id: 'locked', name: 'Locked Workspace', encrypted: true, locked: true, current: false }), 'Locked Workspace');
+  assert.equal(sandbox.workspaceTreeLabel({ id: 'locked-active', name: 'Locked Active', encrypted: true, locked: true, current: true }), 'Locked Active (Active)');
+});
+
 test('workspace panel shows disabled decrypt action for locked encrypted workspaces', () => {
   const lockedWorkspace = { id: 'locked', encrypted: true, locked: true, current: false, path: '/tmp/locked.json' };
   const { elements, sandbox } = loadWorkspaceSidebarController(lockedWorkspace);
@@ -12,6 +21,8 @@ test('workspace panel shows disabled decrypt action for locked encrypted workspa
 
   assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').hidden, false);
   assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').disabled, true);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, false);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').disabled, true);
   assert.equal(elements.get('encryptWorkspacePanelButton').hidden, true);
 });
 
@@ -23,7 +34,43 @@ test('workspace panel enables decrypt action for unlocked encrypted workspaces',
 
   assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').hidden, false);
   assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').disabled, false);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, false);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').disabled, false);
   assert.equal(elements.get('encryptWorkspacePanelButton').hidden, true);
+});
+
+test('workspace panel disables reset key action for the current locked encrypted workspace', () => {
+  const lockedCurrentWorkspace = { id: 'locked-current', encrypted: true, locked: true, current: true, path: '/tmp/locked-current.json' };
+  const { elements, sandbox } = loadWorkspaceSidebarController(lockedCurrentWorkspace);
+
+  sandbox.renderWorkspacePanel();
+
+  assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').hidden, false);
+  assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').disabled, true);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, false);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').disabled, true);
+});
+
+test('workspace panel disables reset key action for inactive locked encrypted workspaces', () => {
+  const lockedWorkspace = { id: 'locked', encrypted: true, locked: true, current: false, path: '/tmp/locked.json' };
+  const { elements, sandbox } = loadWorkspaceSidebarController(lockedWorkspace);
+
+  sandbox.renderWorkspacePanel();
+
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, false);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').disabled, true);
+});
+
+test('workspace panel disables reset key action for inactive encrypted workspaces', () => {
+  const inactiveWorkspace = { id: 'inactive', encrypted: true, locked: false, current: false, path: '/tmp/inactive.json' };
+  const { elements, sandbox } = loadWorkspaceSidebarController(inactiveWorkspace);
+
+  sandbox.renderWorkspacePanel();
+
+  assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').hidden, false);
+  assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').disabled, false);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, false);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').disabled, true);
 });
 
 test('workspace panel hides decrypt action for plaintext workspaces', () => {
@@ -33,6 +80,7 @@ test('workspace panel hides decrypt action for plaintext workspaces', () => {
   sandbox.renderWorkspacePanel();
 
   assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').hidden, true);
+  assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, true);
   assert.equal(elements.get('encryptWorkspacePanelButton').hidden, false);
   assert.equal(elements.get('encryptWorkspacePanelButton').disabled, false);
 });
@@ -77,6 +125,7 @@ function createWorkspacePanelElements() {
     ['exportWorkspacePanelButton', createElement()],
     ['encryptWorkspacePanelButton', createElement()],
     ['removeWorkspaceEncryptionPanelButton', createElement()],
+    ['resetWorkspaceEncryptionKeyPanelButton', createElement()],
     ['workspaceSummary', createElement()]
   ]);
 }

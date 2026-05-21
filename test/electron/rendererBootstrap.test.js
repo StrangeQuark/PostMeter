@@ -1110,6 +1110,7 @@ test('renderer bootstrap submits workspace encryption modal inputs on Enter', ()
   };
   const elements = new Map([
     ['workspaceEncryptionKeyInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
+    ['workspaceEncryptionNewKeyInput', createElement({ tagName: 'INPUT', value: 'secret2' })],
     ['workspaceEncryptionConfirmInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
     ['confirmWorkspaceEncryptionButton', createElement()],
     ['cancelWorkspaceEncryptionButton', createElement()],
@@ -1133,12 +1134,13 @@ test('renderer bootstrap submits workspace encryption modal inputs on Enter', ()
   });
 
   elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('workspaceEncryptionNewKeyInput').dispatch('keydown', { key: 'Enter' });
   elements.get('workspaceEncryptionConfirmInput').dispatch('keydown', { key: 'Enter' });
   elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Tab' });
   elements.get('confirmWorkspaceEncryptionButton').dispatch('click');
   elements.get('cancelWorkspaceEncryptionButton').dispatch('click');
 
-  assert.equal(calls.confirm, 3);
+  assert.equal(calls.confirm, 4);
   assert.deepEqual(calls.resolved, [null]);
 });
 
@@ -2896,6 +2898,17 @@ test('renderer prompts for locked encrypted workspace export keys', () => {
     /workspaceItem\.locked === true[\s\S]*promptWorkspaceEncryptionKey\([\s\S]*title: 'Export encrypted workspace'/
   );
   assert.match(rendererSource, /exportWorkspaceBoundary\(null, workspaceItem\.id, encryptionKey\)/);
+});
+
+test('renderer exposes active encrypted workspace key reset controls', () => {
+  const rendererSource = readRendererBundleSourceSync();
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+
+  assert.match(indexHtml, /id="resetWorkspaceEncryptionKeyPanelButton"[^>]*>Reset Key<\/button>/);
+  assert.match(indexHtml, /id="workspaceEncryptionNewKeyInput"[^>]*type="password"/);
+  assert.match(rendererSource, /onResetWorkspaceEncryptionKey: \(\) => \{ void resetWorkspaceEncryptionKey\(\); \}/);
+  assert.match(rendererSource, /workspace\.resetEncryptionKey\(\s*workspaceId,\s*keys\.currentKey,\s*keys\.newKey\s*\)/);
+  assert.match(rendererSource, /resetWorkspaceEncryptionKeyPanelButton'\)\.disabled = !workspaceItem \|\| locked \|\| workspaceItem\.current !== true/);
 });
 
 test('renderer exposes first-class runner UI and sends runner payloads through runtime IPC', () => {

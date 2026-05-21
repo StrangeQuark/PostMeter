@@ -354,6 +354,60 @@ function registerWorkspaceIpc(options = {}) {
     return result;
   });
 
+  ipcMain.handle('workspace:resetEncryptionKey', async (_event, workspaceId, currentEncryptionKey, newEncryptionKey) => {
+    const targetWorkspaceId = validateWorkspaceId(workspaceId);
+    const currentKey = validateWorkspaceEncryptionKey(currentEncryptionKey);
+    const newKey = validateWorkspaceEncryptionKey(newEncryptionKey);
+    if (currentKey === newKey) {
+      throw new Error('New workspace encryption key must be different from the current key.');
+    }
+    const result = await queueWorkspaceOperation(async () => {
+      const workspaceStore = getWorkspaceStore();
+      const currentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
+      const activeWorkspaceKey = typeof workspaceStore.encryptionKeyForWorkspace === 'function'
+        ? workspaceStore.encryptionKeyForWorkspace(targetWorkspaceId)
+        : '';
+      if (targetWorkspaceId !== currentWorkspaceId) {
+        throw new Error('Only the active workspace can have its encryption key reset. Switch to the workspace before resetting the key.');
+      }
+      if (
+        typeof workspaceStore.isWorkspaceEncrypted === 'function'
+        && !(await workspaceStore.isWorkspaceEncrypted(targetWorkspaceId))
+      ) {
+        throw new Error('Workspace is not encrypted.');
+      }
+      if (!activeWorkspaceKey) {
+        throw new Error('Unlock workspace before resetting its encryption key.');
+      }
+      let workspaceForReset = getWorkspace();
+      if (!workspaceForReset) {
+        throw new Error('Unlock workspace before resetting its encryption key.');
+      }
+      const localSettings = await saveLocalSettings(
+        workspaceForReset.settings,
+        targetWorkspaceId,
+        workspaceForReset.localsettings
+      );
+      workspaceForReset = {
+        ...workspaceForReset,
+        localsettings: localSettings
+      };
+      const reset = hydrateLoadResult(await workspaceStore.resetWorkspaceEncryptionKey(
+        targetWorkspaceId,
+        currentKey,
+        newKey,
+        workspaceForReset
+      ));
+      if (targetWorkspaceId === currentWorkspaceId) {
+        setWorkspace(reset.workspace);
+      }
+      return reset;
+    });
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
+  });
+
   ipcMain.handle('workspace:delete', async (_event, workspaceId) => {
     if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
       throw new Error('workspaceId must be a non-empty string.');

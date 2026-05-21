@@ -257,6 +257,7 @@
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
     bindClick(doc, 'encryptWorkspacePanelButton', options.onEncryptWorkspace);
     bindClick(doc, 'removeWorkspaceEncryptionPanelButton', options.onRemoveWorkspaceEncryption);
+    bindClick(doc, 'resetWorkspaceEncryptionKeyPanelButton', options.onResetWorkspaceEncryptionKey);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
     bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
     bindClick(doc, 'exportWorkspacePanelButton', options.onExportWorkspace);
@@ -566,6 +567,7 @@
     bindClick(doc, 'cancelWorkspaceEncryptionButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'confirmWorkspaceEncryptionButton', options.onConfirmWorkspaceEncryptionModal);
     bindKey(doc, 'workspaceEncryptionKeyInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
+    bindKey(doc, 'workspaceEncryptionNewKeyInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
     bindKey(doc, 'workspaceEncryptionConfirmInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
     bindClick(doc, 'closeClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'cancelClientCertificateModalButton', () => options.onResolveActiveModal?.(null));

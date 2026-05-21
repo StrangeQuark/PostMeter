@@ -1195,6 +1195,34 @@ test('encrypting and removing encryption deletes obsolete workspace backups', as
   assert.equal(raw.collections[0].name, 'Backup Secrets');
 });
 
+test('resetting workspace encryption keys re-encrypts and deletes old-key backups', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-reset-key-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const store = new WorkspaceStore(workspacePath);
+  const workspace = {
+    schemaVersion: 6,
+    collections: [{ id: 'c1', name: 'Old Key Secrets', requests: [], folders: [] }],
+    environments: [],
+    cookies: [],
+    history: []
+  };
+  await store.encryptWorkspace(workspace, 'secret1');
+  const encryptedBackup = await store.createBackup('manual.backup');
+
+  const resetWorkspace = {
+    ...workspace,
+    collections: [{ ...workspace.collections[0], name: 'New Key Secrets' }]
+  };
+  await store.resetEncryptionKey('secret1', 'secret2', resetWorkspace);
+
+  await assert.rejects(() => fs.access(encryptedBackup));
+  const envelope = JSON.parse(await fs.readFile(workspacePath, 'utf8'));
+  assert.equal(isEncryptedWorkspaceEnvelope(envelope), true);
+  await assert.rejects(() => store.load({ encryptionKey: 'secret1' }), WorkspaceUnlockFailedError);
+  const loaded = await store.load({ encryptionKey: 'secret2' });
+  assert.equal(loaded.workspace.collections[0].name, 'New Key Secrets');
+});
+
 test('persists and exports workspace values as plain JSON', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const workspacePath = path.join(temp, 'workspace.json');

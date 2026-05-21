@@ -113,6 +113,7 @@ function bindUi() {
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onEncryptWorkspace: () => { void encryptWorkspace(); },
     onRemoveWorkspaceEncryption: () => { void removeWorkspaceEncryption(); },
+    onResetWorkspaceEncryptionKey: () => { void resetWorkspaceEncryptionKey(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
     onAddSandboxPackage: () => { void addSandboxPackageFromPrompt(); },
     onFetchSandboxPackage: () => { void fetchSandboxPackageFromPrompt(); },

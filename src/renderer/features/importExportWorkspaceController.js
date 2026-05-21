@@ -33,6 +33,7 @@ let workspaceEncryptionModalState = null;
 async function promptWorkspaceEncryptionKey(options = {}) {
   workspaceEncryptionModalState = {
     mode: options.mode || 'unlock',
+    requireNewKey: options.requireNewKey === true,
     requireConfirmation: options.requireConfirmation === true,
     resolveOnConfirm: true
   };
@@ -40,24 +41,55 @@ async function promptWorkspaceEncryptionKey(options = {}) {
   $('workspaceEncryptionMessage').textContent = options.message || 'Enter the workspace key.';
   $('workspaceEncryptionWarning').textContent = options.warning || 'Losing this key permanently loses access to the encrypted workspace. PostMeter does not store it.';
   $('workspaceEncryptionKeyLabel').textContent = options.label || 'Key';
+  $('workspaceEncryptionNewKeyLabel').textContent = options.newKeyLabel || 'New key';
+  $('workspaceEncryptionConfirmLabel').textContent = options.confirmKeyLabel || 'Confirm key';
   $('workspaceEncryptionKeyInput').value = '';
+  $('workspaceEncryptionNewKeyInput').value = '';
   $('workspaceEncryptionConfirmInput').value = '';
+  $('workspaceEncryptionNewKeyField').hidden = options.requireNewKey !== true;
   $('workspaceEncryptionConfirmField').hidden = options.requireConfirmation !== true;
   $('workspaceEncryptionError').hidden = true;
   $('workspaceEncryptionError').textContent = '';
   $('confirmWorkspaceEncryptionButton').textContent = options.confirmLabel || 'Continue';
-  const key = await showModal('workspaceEncryptionModal', null);
+  const result = await showModal('workspaceEncryptionModal', null);
   $('workspaceEncryptionKeyInput').value = '';
+  $('workspaceEncryptionNewKeyInput').value = '';
   $('workspaceEncryptionConfirmInput').value = '';
   workspaceEncryptionModalState = null;
-  return typeof key === 'string' && key.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH ? key : null;
+  if (options.requireNewKey === true) {
+    return result
+      && typeof result.currentKey === 'string'
+      && typeof result.newKey === 'string'
+      && result.currentKey.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH
+      && result.newKey.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH
+      ? result
+      : null;
+  }
+  return typeof result === 'string' && result.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH ? result : null;
 }
 
 function confirmWorkspaceEncryptionModal() {
   const key = $('workspaceEncryptionKeyInput')?.value || '';
+  const newKey = $('workspaceEncryptionNewKeyInput')?.value || '';
   const confirmation = $('workspaceEncryptionConfirmInput')?.value || '';
   if (key.length < WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH) {
     showWorkspaceEncryptionModalError(`Key must be at least ${WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH} characters.`);
+    return;
+  }
+  if (workspaceEncryptionModalState?.requireNewKey === true) {
+    if (newKey.length < WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH) {
+      showWorkspaceEncryptionModalError(`New key must be at least ${WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH} characters.`);
+      return;
+    }
+    if (newKey === key) {
+      showWorkspaceEncryptionModalError('New key must be different from the current key.');
+      return;
+    }
+    if (workspaceEncryptionModalState?.requireConfirmation === true && newKey !== confirmation) {
+      showWorkspaceEncryptionModalError('The confirmation key does not match.');
+      return;
+    }
+    resolveActiveModal({ currentKey: key, newKey });
     return;
   }
   if (workspaceEncryptionModalState?.requireConfirmation === true && key !== confirmation) {
@@ -577,6 +609,60 @@ async function removeWorkspaceEncryption(workspaceId = selectedWorkspaceId || ac
     const message = error.message || String(error);
     setStatus(`Workspace decrypt failed: ${message}`);
     notifyUser('Workspace Decrypt Failed', message);
+    return null;
+  }
+}
+
+async function resetWorkspaceEncryptionKey(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId) || null;
+  if (!workspaceItem) {
+    setStatus('Select a workspace before resetting its encryption key.');
+    return null;
+  }
+  if (workspaceId !== activeWorkspaceId || workspaceItem.current !== true) {
+    setStatus('Switch to this workspace before resetting its encryption key.');
+    return null;
+  }
+  if (workspaceItem.encrypted !== true) {
+    setStatus('Workspace is not encrypted.');
+    return null;
+  }
+  if (workspaceItem.locked === true) {
+    setStatus('Unlock workspace before resetting its encryption key.');
+    return null;
+  }
+  const keys = await promptWorkspaceEncryptionKey({
+    mode: 'reset',
+    title: 'Reset workspace key',
+    message: `Enter the current key for "${workspaceDisplayName(workspaceItem)}", then choose a new key.`,
+    warning: 'PostMeter will re-encrypt this workspace with the new key. The old key will no longer unlock this workspace, and existing encrypted workspace backups will be deleted.',
+    label: 'Current key',
+    newKeyLabel: 'New key',
+    confirmKeyLabel: 'Confirm new key',
+    requireNewKey: true,
+    requireConfirmation: true,
+    confirmLabel: 'Reset Key'
+  });
+  if (!keys) {
+    return null;
+  }
+  try {
+    collectActiveEditorState();
+    if (!(await persistWorkspace(false, { scope: 'all' }))) {
+      return null;
+    }
+    const loaded = await window.postmeter.workspace.resetEncryptionKey(
+      workspaceId,
+      keys.currentKey,
+      keys.newKey
+    );
+    applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    setStatus('Workspace encryption key reset. Existing encrypted workspace backups were removed.');
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace key reset failed: ${message}`);
+    notifyUser('Workspace Key Reset Failed', message);
     return null;
   }
 }

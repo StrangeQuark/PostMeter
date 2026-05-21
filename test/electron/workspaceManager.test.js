@@ -8,7 +8,8 @@ const { WorkspaceManager } = require('../../src/core/workspace/workspaceManager'
 const { WorkspaceRecoveryError } = require('../../src/core/workspace/workspaceStore');
 const {
   decryptWorkspaceEnvelope,
-  isEncryptedWorkspaceEnvelope
+  isEncryptedWorkspaceEnvelope,
+  WorkspaceUnlockFailedError
 } = require('../../src/core/workspace/workspaceEncryption');
 
 test('workspace manager creates and describes a default managed workspace', async () => {
@@ -229,6 +230,72 @@ test('workspace manager only unlocks the active workspace and keeps export keys 
   assert.equal(switchedAway.activeWorkspaceId, plaintextWorkspaceId);
   assert.equal(manager.encryptionKeyForWorkspace(encryptedWorkspaceId), '');
   assert.equal(switchedAway.workspaces.find((item) => item.id === encryptedWorkspaceId).locked, true);
+});
+
+test('workspace manager resets active encrypted workspace keys without leaving old-key backups', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-key-reset-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  const loaded = await manager.load();
+  const encryptedWorkspaceId = loaded.activeWorkspaceId;
+  loaded.workspace.collections.push({
+    id: 'collection-1',
+    name: 'Key Reset Collection',
+    description: '',
+    variables: [],
+    certificates: [],
+    requests: [{ id: 'request-1', name: 'Before Reset', method: 'GET', url: 'https://example.test/key-reset' }],
+    folders: []
+  });
+  await manager.encryptWorkspace(encryptedWorkspaceId, loaded.workspace, 'secret1');
+  const oldKeyBackup = await manager.backupCurrentWorkspace('manual.backup');
+  assert.equal(isEncryptedWorkspaceEnvelope(JSON.parse(await fs.readFile(oldKeyBackup, 'utf8'))), true);
+
+  loaded.workspace.collections[0].requests[0].name = 'After Reset';
+  const reset = await manager.resetWorkspaceEncryptionKey(encryptedWorkspaceId, 'secret1', 'secret2', loaded.workspace);
+
+  assert.equal(reset.activeWorkspaceId, encryptedWorkspaceId);
+  assert.equal(reset.encrypted, true);
+  assert.equal(reset.locked, false);
+  assert.equal(manager.encryptionKeyForWorkspace(encryptedWorkspaceId), 'secret2');
+  await assert.rejects(() => fs.access(oldKeyBackup));
+  const encryptedText = await fs.readFile(loaded.path, 'utf8');
+  assert.doesNotMatch(encryptedText, /After Reset|key-reset/);
+  await assert.rejects(
+    () => decryptWorkspaceEnvelope(JSON.parse(encryptedText), 'secret1'),
+    WorkspaceUnlockFailedError
+  );
+  const decryptedWithNewKey = await decryptWorkspaceEnvelope(JSON.parse(encryptedText), 'secret2');
+  assert.equal(decryptedWithNewKey.collections[0].requests[0].name, 'After Reset');
+
+  const freshManager = new WorkspaceManager(preferredWorkspacePath);
+  const locked = await freshManager.load({ preferredWorkspaceId: encryptedWorkspaceId });
+  assert.equal(locked.locked, true);
+  await assert.rejects(
+    () => freshManager.unlockWorkspace(encryptedWorkspaceId, 'secret1'),
+    WorkspaceUnlockFailedError
+  );
+  const unlockedWithNewKey = await freshManager.unlockWorkspace(encryptedWorkspaceId, 'secret2');
+  assert.equal(unlockedWithNewKey.workspace.collections[0].requests[0].name, 'After Reset');
+
+  const plaintextWorkspaceId = await manager.createWorkspace({ name: 'Plain Workspace' });
+  await manager.switchWorkspace(plaintextWorkspaceId);
+  await assert.rejects(
+    () => manager.resetWorkspaceEncryptionKey(encryptedWorkspaceId, 'secret2', 'secret3'),
+    /Only the active workspace can have its encryption key reset/
+  );
+  await assert.rejects(
+    () => manager.resetWorkspaceEncryptionKey(plaintextWorkspaceId, 'secret2', 'secret3'),
+    /Workspace is not encrypted/
+  );
+
+  const lockedResetManager = new WorkspaceManager(preferredWorkspacePath);
+  await lockedResetManager.load({ preferredWorkspaceId: encryptedWorkspaceId });
+  await assert.rejects(
+    () => lockedResetManager.resetWorkspaceEncryptionKey(encryptedWorkspaceId, 'secret2', 'secret3'),
+    /Unlock workspace before resetting its encryption key/
+  );
 });
 
 test('workspace manager can snapshot and restore a deleted managed workspace for rollback', async () => {

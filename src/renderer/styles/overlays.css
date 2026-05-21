@@ -71,6 +71,7 @@
   line-height: 1.45;
 }
 
+#workspaceEncryptionNewKeyField,
 #workspaceEncryptionConfirmField {
   margin-top: 12px;
 }

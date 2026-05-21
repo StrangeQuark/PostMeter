@@ -337,6 +337,33 @@ class WorkspaceManager {
     return this.describeCurrent(saved, { encrypted: false, locked: false });
   }
 
+  async resetWorkspaceEncryptionKey(workspaceId, currentKey, newKey, currentWorkspace = null) {
+    assertWorkspaceEncryptionKey(currentKey, 'Current workspace encryption key');
+    assertWorkspaceEncryptionKey(newKey, 'New workspace encryption key');
+    if (currentKey === newKey) {
+      throw new Error('New workspace encryption key must be different from the current key.');
+    }
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    if (!catalog.files.includes(workspaceId)) {
+      throw new Error(`Workspace "${workspaceId}" was not found.`);
+    }
+    if (workspaceId !== this.currentWorkspaceId) {
+      throw new Error('Only the active workspace can have its encryption key reset. Switch to the workspace before resetting the key.');
+    }
+    if (!(await this.isWorkspaceEncrypted(workspaceId))) {
+      throw new Error('Workspace is not encrypted.');
+    }
+    if (!this.encryptionKeyForWorkspace(workspaceId)) {
+      throw new Error('Unlock workspace before resetting its encryption key.');
+    }
+    const targetStore = new WorkspaceStore(this.absoluteWorkspacePath(workspaceId));
+    const sourceWorkspace = currentWorkspace ? normalizeWorkspace(currentWorkspace) : null;
+    const saved = await targetStore.resetEncryptionKey(currentKey, newKey, sourceWorkspace);
+    this.workspaceEncryptionKeys.clear();
+    this.workspaceEncryptionKeys.set(workspaceId, newKey);
+    return this.describeCurrent(saved, { encrypted: true, locked: false });
+  }
+
   async deleteWorkspace(workspaceId) {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     if (!catalog.files.includes(workspaceId)) {
