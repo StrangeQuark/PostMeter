@@ -233,6 +233,18 @@ function workspaceNode(workspaceItem) {
     ['Duplicate', () => { void duplicateWorkspace(workspaceItem.id); }],
     ['Export', () => { void exportWorkspace(workspaceItem.id); }]
   ];
+  if (activeWorkspaceLocked()) {
+    const lockedMenuItems = [
+      ['View Details', () => { selectWorkspaceItem(workspaceItem.id); }]
+    ];
+    if (workspaceItem.current === true) {
+      lockedMenuItems.push(['Unlock Workspace', () => { void unlockWorkspace(workspaceItem.id); }]);
+    } else {
+      lockedMenuItems.push(['Switch to This Workspace', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }]);
+    }
+    attachTreeContextMenu(button, lockedMenuItems);
+    return wrapper;
+  }
   if (workspaceItem.encrypted === true && workspaceItem.locked === true && workspaceItem.current === true) {
     menuItems.splice(1, 0, ['Unlock Workspace', () => { void unlockWorkspace(workspaceItem.id); }]);
   } else if (workspaceItem.encrypted === true && workspaceItem.locked !== true) {

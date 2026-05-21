@@ -15,6 +15,9 @@ async function persistWorkspace(showStatus = true, options = {}) {
 }
 
 async function importWorkspace() {
+  if (!requireUnlockedWorkspace('importing workspaces')) {
+    return null;
+  }
   if (typeof window.__postmeterImportWorkspace === 'function') {
     return rendererWorkflows.importWorkspace();
   }
@@ -229,6 +232,9 @@ async function runPickerFirstExport({
 }
 
 async function exportWorkspace(workspaceIdOrItem = null) {
+  if (!requireUnlockedWorkspace('exporting')) {
+    return null;
+  }
   const requestedWorkspaceId = typeof workspaceIdOrItem === 'string'
     ? workspaceIdOrItem
     : workspaceIdOrItem && typeof workspaceIdOrItem === 'object' && typeof workspaceIdOrItem.id === 'string'
@@ -404,6 +410,33 @@ async function newWorkspace() {
   }
 }
 
+async function newWorkspaceFromLockedGate() {
+  const createdWorkspaceId = await newWorkspace();
+  if (!createdWorkspaceId) {
+    return null;
+  }
+  return switchWorkspace(createdWorkspaceId, { focus: 'workspace' });
+}
+
+function switchWorkspaceFromLockedGate() {
+  const items = workspaceListItems();
+  const selectedSwitchTarget = items.find((item) => item.id === selectedWorkspaceId && item.id !== activeWorkspaceId) || null;
+  const switchCandidates = items.filter((item) => item.id && item.id !== activeWorkspaceId);
+  const targetWorkspace = selectedSwitchTarget || (switchCandidates.length === 1 ? switchCandidates[0] : null);
+  if (targetWorkspace) {
+    return switchWorkspace(targetWorkspace.id, { focus: 'workspace' });
+  }
+  selectedWorkspaceId = activeWorkspaceId || selectedWorkspaceId;
+  activeSidebarPanel = 'workspaces';
+  activeMainPanel = 'workspace';
+  renderAll();
+  restoreTreeFocus(treeFocusTarget('workspace', selectedWorkspaceId), activeWorkspaceTreeFocusTargets());
+  setStatus(switchCandidates.length
+    ? 'Select a workspace to switch, or unlock the current workspace.'
+    : 'Unlock this workspace or create a new workspace.');
+  return activeWorkspaceItem();
+}
+
 function currentPanelFocus() {
   if (activeMainPanel === 'workspace') {
     return 'workspace';
@@ -415,6 +448,9 @@ function currentPanelFocus() {
 }
 
 function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  if (!requireUnlockedWorkspace('renaming workspaces')) {
+    return null;
+  }
   const workspaceItem = selectWorkspaceItem(workspaceId);
   if (!workspaceItem) {
     setStatus('Select a workspace before renaming.');
@@ -425,6 +461,9 @@ function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId)
 }
 
 async function renameWorkspaceToName(workspaceId, workspaceName) {
+  if (!requireUnlockedWorkspace('renaming workspaces')) {
+    return null;
+  }
   try {
     const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
     if (!workspaceItem) {
@@ -668,6 +707,10 @@ async function resetWorkspaceEncryptionKey(workspaceId = selectedWorkspaceId || 
 }
 
 async function deleteWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  if (activeWorkspaceLocked()) {
+    setStatus('Unlock workspace before deleting workspaces.');
+    return null;
+  }
   try {
     const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
     if (!workspaceItem) {
@@ -813,6 +856,9 @@ function handleAutoUpdateStatus(status = {}) {
 }
 
 async function importCollection() {
+  if (!requireUnlockedWorkspace('importing collections')) {
+    return null;
+  }
   if (typeof window.__postmeterImportCollection === 'function') {
     return rendererWorkflows.importCollection();
   }
@@ -826,6 +872,9 @@ async function importCollection() {
 }
 
 async function importRequest() {
+  if (!requireUnlockedWorkspace('importing requests')) {
+    return null;
+  }
   const requestApi = window.postmeter?.request;
   const importBoundary = window.__postmeterImportRequest || requestApi?.importRequest;
   if (!importBoundary) {
@@ -857,6 +906,9 @@ async function importRequest() {
 }
 
 function openImportedRequest(importedRequest) {
+  if (!requireUnlockedWorkspace('importing requests')) {
+    return null;
+  }
   if (!canOpenAdditionalRequestTab()) {
     return null;
   }
@@ -951,6 +1003,9 @@ function collectSettingsFromEditor() {
 }
 
 async function exportCollection(collection = activeCollection(), format = 'postmeter') {
+  if (!requireUnlockedWorkspace('exporting collections')) {
+    return null;
+  }
   let selectedCollection = collection;
   if (!selectedCollection) {
     const collections = Array.isArray(workspace?.collections) ? workspace.collections : [];
@@ -984,6 +1039,9 @@ async function exportCollection(collection = activeCollection(), format = 'postm
 }
 
 async function exportRequestFromPicker(format = 'postmeter') {
+  if (!requireUnlockedWorkspace('exporting requests')) {
+    return null;
+  }
   collectActiveEditorState();
   const requestEntries = collectRequestExportEntries();
   if (!requestEntries.length) {
@@ -1332,6 +1390,9 @@ function requestCurlExportExclusions(request = {}) {
 }
 
 async function importEnvironment() {
+  if (!requireUnlockedWorkspace('importing environments')) {
+    return null;
+  }
   const environmentApi = window.postmeter?.environment;
   const importBoundary = window.__postmeterImportEnvironment || environmentApi?.importEnvironment;
   if (!importBoundary) {
@@ -1380,6 +1441,9 @@ async function importEnvironment() {
 }
 
 async function exportEnvironment(environment = activeEditorEnvironment(), format = 'postmeter') {
+  if (!requireUnlockedWorkspace('exporting environments')) {
+    return null;
+  }
   const selectedEnvironment = environment || activeEditorEnvironment() || workspace.environments?.[0] || null;
   if (!selectedEnvironment) {
     return setStatus('Select an environment before exporting.');
@@ -1434,6 +1498,9 @@ async function exportEnvironmentFromPicker(format = 'postmeter') {
 }
 
 async function importRunner() {
+  if (!requireUnlockedWorkspace('importing runners')) {
+    return null;
+  }
   const runnerApi = window.postmeter?.runner;
   const importBoundary = window.__postmeterImportRunner || runnerApi?.importDefinition;
   if (!importBoundary) {
@@ -1482,6 +1549,9 @@ async function importRunner() {
 }
 
 async function exportRunnerDefinition(runner = activeRunner()) {
+  if (!requireUnlockedWorkspace('exporting runners')) {
+    return null;
+  }
   const selectedRunner = runner || activeRunner() || workspace.runners?.[0] || null;
   if (!selectedRunner) {
     return setStatus('Select a runner before exporting.');
@@ -1536,6 +1606,9 @@ async function exportRunnerDefinitionFromPicker() {
 }
 
 function newCollection() {
+  if (!requireUnlockedWorkspace('creating collections')) {
+    return null;
+  }
   collectActiveEditorState();
   activeSidebarPanel = 'collections';
   activeMainPanel = 'request';
@@ -1561,6 +1634,9 @@ function newCollection() {
 }
 
 function newRequest(collectionId = activeCollectionId, folderId = activeFolderId) {
+  if (!requireUnlockedWorkspace('creating requests')) {
+    return null;
+  }
   if (!canOpenAdditionalRequestTab()) {
     return null;
   }
@@ -1597,6 +1673,9 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
 }
 
 function newFolder(collectionId = activeCollectionId, parentFolderId = activeFolderId) {
+  if (!requireUnlockedWorkspace('creating folders')) {
+    return null;
+  }
   collectActiveEditorState();
   activeMainPanel = 'request';
   activeRunnerRequestRunnerId = null;
@@ -1666,6 +1745,9 @@ function expandCollectionTreePath(collection, folderId = null, options = {}) {
 }
 
 function newEnvironment() {
+  if (!requireUnlockedWorkspace('creating environments')) {
+    return null;
+  }
   if (!canOpenAdditionalEnvironmentTab()) {
     return null;
   }
@@ -1687,6 +1769,9 @@ function newEnvironment() {
 }
 
 async function deleteEnvironment(environment = activeEditorEnvironment()) {
+  if (!requireUnlockedWorkspace('deleting environments')) {
+    return false;
+  }
   if (!environment || !(await confirmActionModal({
     title: 'Delete environment?',
     message: `Delete ${environment.name}?`,
@@ -1938,6 +2023,9 @@ async function renameFolder(folder) {
 }
 
 async function deleteFolder(collection, folder) {
+  if (!requireUnlockedWorkspace('deleting folders')) {
+    return;
+  }
   if (!(await confirmActionModal({
     title: 'Delete folder?',
     message: `Delete ${folder.name} and everything inside it?`,
@@ -2087,6 +2175,9 @@ function duplicatePerformanceTest(test) {
 }
 
 async function duplicateWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  if (!requireUnlockedWorkspace('duplicating workspaces')) {
+    return null;
+  }
   const selectedWorkspace = typeof workspaceId === 'string' ? workspaceId : workspaceId?.id;
   if (!selectedWorkspace) {
     return null;
@@ -2135,6 +2226,9 @@ function cloneRequestWithNewId(request) {
 }
 
 async function deleteCollection(collection) {
+  if (!requireUnlockedWorkspace('deleting collections')) {
+    return;
+  }
   if (!(await confirmActionModal({
     title: 'Delete collection?',
     message: `Delete ${collection.name}?`,
@@ -2166,6 +2260,9 @@ function clearActiveWorkspaceItem() {
 }
 
 async function deleteRequest(collection, folder, request) {
+  if (!requireUnlockedWorkspace('deleting requests')) {
+    return;
+  }
   if (!(await confirmActionModal({
     title: 'Delete request?',
     message: `Delete ${request.name}?`,

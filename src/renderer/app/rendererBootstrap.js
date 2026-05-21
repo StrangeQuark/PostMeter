@@ -209,6 +209,9 @@
     bindClick(doc, 'emptyCreateEnvironmentButton', options.onNewEnvironment);
     bindClick(doc, 'emptyCreateRunnerButton', options.onNewRunner);
     bindClick(doc, 'emptyCreatePerformanceTestButton', options.onNewPerformanceTest);
+    bindClick(doc, 'lockedWorkspaceUnlockButton', options.onUnlockActiveWorkspace);
+    bindClick(doc, 'lockedWorkspaceSwitchButton', options.onSwitchWorkspaceFromLockedGate);
+    bindClick(doc, 'lockedWorkspaceNewButton', options.onNewWorkspaceFromLockedGate);
     bindClick(doc, 'newEnvironmentMenuButton', options.onNewEnvironment);
     bindClick(doc, 'importWorkspaceButton', options.onImportWorkspace);
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);

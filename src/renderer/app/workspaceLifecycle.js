@@ -217,7 +217,28 @@ function flushSessionSave(options = {}) {
   return persistSessionState();
 }
 
+function lockedWorkspaceGateActive() {
+  return typeof activeWorkspaceLocked === 'function' && activeWorkspaceLocked();
+}
+
+function normalizeLockedWorkspaceGateState() {
+  if (!lockedWorkspaceGateActive()) {
+    return;
+  }
+  const selectedWorkspaceExists = workspaceListItems().some((item) => item.id === selectedWorkspaceId);
+  if (!selectedWorkspaceExists) {
+    selectedWorkspaceId = activeWorkspaceId || selectedWorkspaceId;
+  }
+  activeSidebarPanel = 'workspaces';
+  activeMainPanel = 'workspace';
+  activeRunnerConfigId = null;
+  activeRunnerRequestRunnerId = null;
+  activeAuthRefreshRequestOwnerType = '';
+  activeAuthRefreshRequestOwnerId = null;
+}
+
 function renderAll() {
+  normalizeLockedWorkspaceGateState();
   renderToolbarState();
   renderSidebarPanels();
   renderMainPanels();
@@ -709,6 +730,10 @@ function selectSidebarPanel(panel) {
   if (!['collections', 'environments', 'workspaces', 'runners', 'performance', 'history'].includes(panel)) {
     return;
   }
+  if (lockedWorkspaceGateActive() && panel !== 'workspaces') {
+    setStatus('Unlock workspace, switch workspaces, or create a new workspace.');
+    panel = 'workspaces';
+  }
   collectActiveEditorState();
   activeSidebarPanel = panel;
   if (panel === 'collections') {
@@ -780,10 +805,17 @@ function cancelActiveRuntimeForContextReset() {
 }
 
 function renderSidebarPanels() {
+  const locked = lockedWorkspaceGateActive();
+  if (locked && activeSidebarPanel !== 'workspaces') {
+    activeSidebarPanel = 'workspaces';
+  }
   for (const button of document.querySelectorAll('.sidebar-tab')) {
     const isActive = button.dataset.sidebarPanel === activeSidebarPanel;
+    const disabled = locked && button.dataset.sidebarPanel !== 'workspaces';
     button.classList.toggle('active', isActive);
     button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    button.disabled = disabled;
+    button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
     button.tabIndex = isActive ? 0 : -1;
   }
   for (const panel of document.querySelectorAll('[data-sidebar-panel-content]')) {
@@ -795,19 +827,21 @@ function renderSidebarPanels() {
 }
 
 function renderMainPanels() {
-  const showEnvironment = activeMainPanel === 'environment';
-  const showWorkspace = activeMainPanel === 'workspace';
-  const showRunner = activeMainPanel === 'runner';
-  const showPerformance = activeMainPanel === 'performance';
+  const showLockedWorkspace = lockedWorkspaceGateActive();
+  const showEnvironment = !showLockedWorkspace && activeMainPanel === 'environment';
+  const showWorkspace = !showLockedWorkspace && activeMainPanel === 'workspace';
+  const showRunner = !showLockedWorkspace && activeMainPanel === 'runner';
+  const showPerformance = !showLockedWorkspace && activeMainPanel === 'performance';
   const showDocument = showEnvironment || showWorkspace || showRunner || showPerformance;
-  const showFolder = activeMainPanel === 'request' && Boolean(activeFolder()) && !activeRequest();
-  const showCollection = activeMainPanel === 'request' && Boolean(activeCollection()) && !activeFolder() && !activeRequest();
-  const showRequestEmpty = activeMainPanel === 'request' && !activeRequest() && !showCollection && !showFolder;
+  const showFolder = !showLockedWorkspace && activeMainPanel === 'request' && Boolean(activeFolder()) && !activeRequest();
+  const showCollection = !showLockedWorkspace && activeMainPanel === 'request' && Boolean(activeCollection()) && !activeFolder() && !activeRequest();
+  const showRequestEmpty = !showLockedWorkspace && activeMainPanel === 'request' && !activeRequest() && !showCollection && !showFolder;
   const showEnvironmentEmpty = showEnvironment && !activeEditorEnvironment();
   const showWorkspaceEmpty = showWorkspace && !activeWorkspaceItem();
   const showRunnerEmpty = showRunner && !activeRunner();
   const showPerformanceEmpty = showPerformance && !activePerformanceTest();
   document.querySelector('.workspace').classList.toggle('document-mode', showDocument);
+  document.querySelector('.workspace').classList.toggle('locked-workspace-mode', showLockedWorkspace);
   document.querySelector('.workspace').classList.toggle('environment-mode', showEnvironment);
   document.querySelector('.workspace').classList.toggle('workspace-mode', showWorkspace);
   document.querySelector('.workspace').classList.toggle('runner-mode', showRunner);
@@ -820,6 +854,7 @@ function renderMainPanels() {
   document.querySelector('.workspace').classList.toggle('runner-empty-mode', showRunnerEmpty);
   document.querySelector('.workspace').classList.toggle('performance-empty-mode', showPerformanceEmpty);
   $('requestEmptyPanel').hidden = !showRequestEmpty;
+  $('lockedWorkspacePanel').hidden = !showLockedWorkspace;
   $('collectionMainPanel').hidden = !showCollection;
   $('folderMainPanel').hidden = !showFolder;
   $('environmentEmptyPanel').hidden = !showEnvironmentEmpty;
@@ -831,12 +866,89 @@ function renderMainPanels() {
   $('workspaceMainPanel').hidden = !showWorkspace || showWorkspaceEmpty;
   $('runnerMainPanel').hidden = !showRunner || showRunnerEmpty;
   $('performanceMainPanel').hidden = !showPerformance || showPerformanceEmpty;
-  $('workspacePaneResize').hidden = showDocument || showRequestEmpty || showCollection || showFolder;
-  document.querySelector('.results').hidden = showDocument || showRequestEmpty || showCollection;
+  $('workspacePaneResize').hidden = showLockedWorkspace || showDocument || showRequestEmpty || showCollection || showFolder;
+  document.querySelector('.results').hidden = showLockedWorkspace || showDocument || showRequestEmpty || showCollection;
+  renderLockedWorkspacePanel();
+}
+
+function renderLockedWorkspacePanel() {
+  const panel = $('lockedWorkspacePanel');
+  if (!panel || panel.hidden) {
+    return;
+  }
+  const items = workspaceListItems();
+  const activeItem = items.find((item) => item.id === activeWorkspaceId) || activeWorkspaceItem();
+  const selectedItem = activeWorkspaceItem();
+  const selectedSwitchTarget = selectedItem && selectedItem.id !== activeWorkspaceId ? selectedItem : null;
+  $('lockedWorkspaceTitle').textContent = selectedSwitchTarget
+    ? `${workspaceDisplayName(selectedSwitchTarget)} is available`
+    : `${workspaceDisplayName(activeItem)} is locked`;
+  $('lockedWorkspaceMessage').textContent = selectedSwitchTarget
+    ? 'Switch to this workspace or create a new workspace.'
+    : 'Unlock this workspace or create a new workspace.';
+  const unlockButton = $('lockedWorkspaceUnlockButton');
+  if (unlockButton) {
+    unlockButton.hidden = Boolean(selectedSwitchTarget);
+  }
+  const switchButton = $('lockedWorkspaceSwitchButton');
+  if (switchButton) {
+    switchButton.hidden = !selectedSwitchTarget;
+    switchButton.textContent = 'Switch to Workspace';
+    switchButton.disabled = !selectedSwitchTarget;
+    switchButton.setAttribute('aria-disabled', selectedSwitchTarget ? 'false' : 'true');
+  }
 }
 
 function renderToolbarState() {
   const hasCollections = Array.isArray(workspace.collections) && workspace.collections.length > 0;
   $('newFolderButton').disabled = !hasCollections;
   $('newFolderButton').setAttribute('aria-disabled', hasCollections ? 'false' : 'true');
+  const locked = lockedWorkspaceGateActive();
+  const disabledWhileLocked = [
+    'newRequestButton',
+    'newCollectionButton',
+    'newFolderButton',
+    'newEnvironmentMenuButton',
+    'newRunnerMenuButton',
+    'newPerformanceTestMenuButton',
+    'emptyCreateRequestButton',
+    'emptyCreateEnvironmentButton',
+    'emptyCreateRunnerButton',
+    'emptyCreatePerformanceTestButton',
+    'importMenuButton',
+    'importRequestButton',
+    'importCollectionButton',
+    'importEnvironmentButton',
+    'importRunnerButton',
+    'importPerformanceTestButton',
+    'importWorkspaceButton',
+    'exportMenuButton',
+    'exportRequestParentButton',
+    'exportRequestButton',
+    'exportRequestCurlButton',
+    'exportCollectionParentButton',
+    'exportCollectionButton',
+    'exportPostmanButton',
+    'exportOpenApiButton',
+    'exportCurlButton',
+    'exportEnvironmentParentButton',
+    'exportEnvironmentButton',
+    'exportPostmanEnvironmentButton',
+    'exportRunnerDefinitionButton',
+    'exportPerformanceTestMenuButton',
+    'exportWorkspaceButton',
+    'openCookiesButton'
+  ];
+  for (const id of disabledWhileLocked) {
+    const element = $(id);
+    if (element) {
+      element.disabled = locked || (id === 'newFolderButton' && !hasCollections);
+      element.setAttribute('aria-disabled', element.disabled ? 'true' : 'false');
+    }
+  }
+  const environmentSelect = $('environmentSelect');
+  if (environmentSelect) {
+    environmentSelect.disabled = locked;
+    environmentSelect.setAttribute('aria-disabled', locked ? 'true' : 'false');
+  }
 }

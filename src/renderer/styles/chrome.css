@@ -744,6 +744,7 @@ h2 {
 .workspace.runner-mode,
 .workspace.performance-mode,
 .workspace.document-mode,
+.workspace.locked-workspace-mode,
 .workspace.request-empty-mode,
 .workspace.environment-empty-mode,
 .workspace.workspace-empty-mode,
@@ -794,6 +795,20 @@ h2 {
 .workspace.workspace-mode #runnerEmptyPanel,
 .workspace.workspace-mode #performanceEmptyPanel,
 .workspace.workspace-mode .results,
+.workspace.locked-workspace-mode #workspacePaneResize,
+.workspace.locked-workspace-mode #requestEditorPanel,
+.workspace.locked-workspace-mode #requestEmptyPanel,
+.workspace.locked-workspace-mode #collectionMainPanel,
+.workspace.locked-workspace-mode #folderMainPanel,
+.workspace.locked-workspace-mode #environmentEmptyPanel,
+.workspace.locked-workspace-mode #environmentMainPanel,
+.workspace.locked-workspace-mode #workspaceEmptyPanel,
+.workspace.locked-workspace-mode #workspaceMainPanel,
+.workspace.locked-workspace-mode #runnerEmptyPanel,
+.workspace.locked-workspace-mode #runnerMainPanel,
+.workspace.locked-workspace-mode #performanceEmptyPanel,
+.workspace.locked-workspace-mode #performanceMainPanel,
+.workspace.locked-workspace-mode .results,
 .workspace.runner-mode #workspacePaneResize,
 .workspace.runner-mode #requestEditorPanel,
 .workspace.runner-mode #requestEmptyPanel,
@@ -832,6 +847,7 @@ h2 {
 .workspace.folder-mode #folderMainPanel,
 .workspace.environment-mode #environmentMainPanel,
 .workspace.workspace-mode #workspaceMainPanel,
+.workspace.locked-workspace-mode #lockedWorkspacePanel,
 .workspace.runner-mode #runnerMainPanel,
 .workspace.performance-mode #performanceMainPanel,
 .workspace.request-empty-mode #requestEmptyPanel,
@@ -919,6 +935,13 @@ h2 {
   margin: 0;
   font-size: var(--ui-font-size-hero);
   font-weight: 650;
+}
+
+.locked-workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 .environment-main-panel,

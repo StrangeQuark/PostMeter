@@ -3,7 +3,7 @@ async function handleAppMenuAction(action) {
   try {
     switch (type) {
       case 'new-workspace':
-        await newWorkspace();
+        await (activeWorkspaceLocked() ? newWorkspaceFromLockedGate() : newWorkspace());
         break;
       case 'new-request':
         newRequest();

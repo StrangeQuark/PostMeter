@@ -328,6 +328,14 @@ function activeWorkspaceLocked() {
   return workspaceListItems().find((item) => item.id === activeWorkspaceId)?.locked === true;
 }
 
+function requireUnlockedWorkspace(actionLabel = 'making changes') {
+  if (!activeWorkspaceLocked()) {
+    return true;
+  }
+  setStatus(`Unlock workspace before ${actionLabel}.`);
+  return false;
+}
+
 function workspaceDisplayName(workspaceItem = activeWorkspaceItem()) {
   if (typeof rendererEntityDisplay?.workspaceDisplayName === 'function') {
     return rendererEntityDisplay.workspaceDisplayName(workspaceItem);
@@ -415,6 +423,9 @@ function ensureOpenRunnerTabForActive(options = {}) {
 }
 
 function newRunner() {
+  if (!requireUnlockedWorkspace('creating runners')) {
+    return null;
+  }
   if (!canOpenAdditionalRunnerTab()) {
     return null;
   }
@@ -446,6 +457,9 @@ function newRunnerObject(name) {
 }
 
 function newPerformanceTest() {
+  if (!requireUnlockedWorkspace('creating performance tests')) {
+    return null;
+  }
   if (!canOpenAdditionalPerformanceTab()) {
     return null;
   }
@@ -469,6 +483,9 @@ function newPerformanceTest() {
 }
 
 async function deletePerformanceTest(test = activePerformanceTest()) {
+  if (!requireUnlockedWorkspace('deleting performance tests')) {
+    return false;
+  }
   ensureWorkspacePerformanceTests();
   if (!test) {
     return false;
@@ -499,6 +516,9 @@ async function deletePerformanceTest(test = activePerformanceTest()) {
 }
 
 async function savePerformanceTestFromPane() {
+  if (!requireUnlockedWorkspace('saving performance tests')) {
+    return false;
+  }
   const test = activePerformanceTest();
   if (!test) {
     return false;
@@ -567,6 +587,9 @@ async function renamePerformanceTest(test) {
 }
 
 async function deleteRunner(runner = activeRunner()) {
+  if (!requireUnlockedWorkspace('deleting runners')) {
+    return false;
+  }
   ensureWorkspaceRunners();
   if (!runner) {
     return false;
@@ -597,6 +620,9 @@ async function deleteRunner(runner = activeRunner()) {
 }
 
 async function saveRunnerFromPane() {
+  if (!requireUnlockedWorkspace('saving runners')) {
+    return false;
+  }
   const runner = activeRunner();
   if (!runner) {
     return false;

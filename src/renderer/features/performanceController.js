@@ -210,6 +210,9 @@ function calibrationStageCell(value, strong = false) {
 }
 
 async function runActivePerformanceTest() {
+  if (!requireUnlockedWorkspace('running performance tests')) {
+    return null;
+  }
   const test = activePerformanceTest();
   if (!test) {
     return setStatus('Select a performance test before running it.');
@@ -308,6 +311,9 @@ function performanceRunPreflightError(test = {}) {
 }
 
 async function exportActivePerformanceTest(test = activePerformanceTest()) {
+  if (!requireUnlockedWorkspace('exporting performance tests')) {
+    return null;
+  }
   if (!test) {
     return setStatus('Select a performance test before exporting.');
   }
@@ -442,6 +448,9 @@ function confirmHtmlReportOptionsModal() {
 }
 
 async function importPerformanceTest() {
+  if (!requireUnlockedWorkspace('importing performance tests')) {
+    return null;
+  }
   const performanceApi = window.postmeter?.performance;
   if (!performanceApi?.importTest) {
     return setStatus('Performance import is unavailable in this runtime.');

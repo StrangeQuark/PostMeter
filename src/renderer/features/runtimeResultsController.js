@@ -132,6 +132,9 @@ async function clearHistory() {
 }
 
 async function sendActiveRequest() {
+  if (!requireUnlockedWorkspace('sending requests')) {
+    return null;
+  }
   return rendererWorkflows.sendActiveRequest();
 }
 
@@ -1368,6 +1371,9 @@ function safeScriptJson(value) {
 }
 
 async function runActiveCollection() {
+  if (!requireUnlockedWorkspace('running collections')) {
+    return null;
+  }
   if (activeMainPanel === 'runner') {
     return runActiveRunner();
   }
@@ -1495,6 +1501,9 @@ function renderOauthProgress(progress) {
 }
 
 async function saveRequestFromPane() {
+  if (!requireUnlockedWorkspace('saving requests')) {
+    return false;
+  }
   if (!activeRequest()) {
     setStatus('Select a request before saving.');
     return false;
@@ -1528,6 +1537,9 @@ async function saveRequestFromPane() {
 }
 
 async function saveCollectionFromPane() {
+  if (!requireUnlockedWorkspace('saving collections')) {
+    return false;
+  }
   if (!activeCollection()) {
     setStatus('Select a collection before saving.');
     return false;
@@ -1548,6 +1560,9 @@ async function saveCollectionFromPane() {
 }
 
 async function saveFolderFromPane() {
+  if (!requireUnlockedWorkspace('saving folders')) {
+    return false;
+  }
   if (!activeFolder()) {
     setStatus('Select a folder before saving.');
     return false;
@@ -1568,6 +1583,9 @@ async function saveFolderFromPane() {
 }
 
 async function saveEnvironmentFromPane() {
+  if (!requireUnlockedWorkspace('saving environments')) {
+    return false;
+  }
   if (!activeEditorEnvironment()) {
     setStatus('Select an environment before saving.');
     return false;
@@ -1587,6 +1605,9 @@ async function saveEnvironmentFromPane() {
 }
 
 function setActiveEnvironmentFromPane() {
+  if (!requireUnlockedWorkspace('setting environments')) {
+    return false;
+  }
   const environment = activeEditorEnvironment();
   if (!environment) {
     setStatus('Select an environment before setting it.');

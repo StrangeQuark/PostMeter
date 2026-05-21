@@ -49,6 +49,7 @@ test('workspace panel disables reset key action for the current locked encrypted
   assert.equal(elements.get('removeWorkspaceEncryptionPanelButton').disabled, true);
   assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, false);
   assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').disabled, true);
+  assert.equal(elements.get('switchWorkspacePanelButton').textContent, 'Unlock Workspace');
 });
 
 test('workspace panel disables reset key action for inactive locked encrypted workspaces', () => {
@@ -59,6 +60,8 @@ test('workspace panel disables reset key action for inactive locked encrypted wo
 
   assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').hidden, false);
   assert.equal(elements.get('resetWorkspaceEncryptionKeyPanelButton').disabled, true);
+  assert.equal(elements.get('switchWorkspacePanelButton').textContent, 'Switch to this Workspace');
+  assert.equal(elements.get('switchWorkspacePanelButton').disabled, false);
 });
 
 test('workspace panel disables reset key action for inactive encrypted workspaces', () => {
