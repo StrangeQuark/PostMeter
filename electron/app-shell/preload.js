@@ -100,6 +100,12 @@ const postmeterApi = {
     unlock: (workspaceId, key) => ipcRenderer.invoke('workspace:unlock', workspaceId, key),
     encrypt: (workspaceId, key, workspace) => ipcRenderer.invoke('workspace:encrypt', workspaceId, key, workspace || null),
     removeEncryption: (workspaceId, key) => ipcRenderer.invoke('workspace:removeEncryption', workspaceId, key),
+    resetEncryptionKey: (workspaceId, currentKey, newKey) => ipcRenderer.invoke(
+      'workspace:resetEncryptionKey',
+      workspaceId,
+      String(currentKey || '').slice(0, 1024),
+      String(newKey || '').slice(0, 1024)
+    ),
     delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
     duplicate: (workspaceId) => ipcRenderer.invoke('workspace:duplicate', workspaceId),
     importWorkspace: (filePath) => ipcRenderer.invoke('workspace:import', optionalFilePath(filePath)),

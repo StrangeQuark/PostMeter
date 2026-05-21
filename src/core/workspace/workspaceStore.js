@@ -148,6 +148,16 @@ class WorkspaceStore {
     return saved;
   }
 
+  async resetEncryptionKey(currentKey, newKey, workspace = null) {
+    const loaded = await this.load({ encryptionKey: currentKey });
+    if (loaded.encrypted !== true) {
+      throw new Error('Workspace is not encrypted.');
+    }
+    const saved = await this.save(workspace || loaded.workspace, { encrypt: true, encryptionKey: newKey });
+    await this.deleteBackupSiblingsByEncryptionState(true);
+    return saved;
+  }
+
   async isEncrypted() {
     try {
       const parsed = JSON.parse(await fs.readFile(this.workspacePath, 'utf8'));

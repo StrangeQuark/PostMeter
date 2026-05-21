@@ -910,6 +910,7 @@
       assertUiSmoke($('tutorialTargetFrame').hidden, `${tutorial.title} step ${index + 1} should not show a target frame.`);
     }
     assertUiSmoke(!$('tutorialCoach').hidden, `${tutorial.title} step ${index + 1} should keep the coach visible.`);
+    assertTutorialOverlayBlocksBackground(tutorial, index);
     if (step.coachPlacement === 'top-left') {
       const coachRect = $('tutorialCoach').getBoundingClientRect();
       assertUiSmoke(coachRect.left <= 20 && coachRect.top <= 20, `${tutorial.title} step ${index + 1} should place the coach at the top left.`);
@@ -927,6 +928,52 @@
         `Request settings overview step should keep the highlight inside the visible settings panel. Frame ${Math.round(frameRect.top)}-${Math.round(frameRect.bottom)}, panel ${Math.round(panelRect.top)}-${Math.round(panelRect.bottom)}, target ${Math.round(targetRect?.top || 0)}-${Math.round(targetRect?.bottom || 0)}.`
       );
     }
+  }
+
+  function assertTutorialOverlayBlocksBackground(tutorial, index) {
+    const overlay = $('tutorialOverlay');
+    const coach = $('tutorialCoach');
+    assertUiSmoke(
+      getComputedStyle(overlay).pointerEvents === 'auto',
+      `${tutorial.title} step ${index + 1} should make the tutorial overlay capture pointer input.`
+    );
+    const point = tutorialOverlayBackgroundPoint(coach);
+    if (!point) {
+      return;
+    }
+    const topElement = document.elementFromPoint(point.x, point.y);
+    assertUiSmoke(
+      topElement === overlay || overlay.contains(topElement),
+      `${tutorial.title} step ${index + 1} should keep background UI behind the tutorial overlay.`
+    );
+  }
+
+  function tutorialOverlayBackgroundPoint(coach) {
+    const width = Number(window.innerWidth) || document.documentElement?.clientWidth || 0;
+    const height = Number(window.innerHeight) || document.documentElement?.clientHeight || 0;
+    const candidates = [
+      { x: 12, y: 12 },
+      { x: Math.max(12, width - 12), y: 12 },
+      { x: 12, y: Math.max(12, height - 12) },
+      { x: Math.max(12, width - 12), y: Math.max(12, height - 12) },
+      { x: Math.max(12, Math.floor(width / 2)), y: Math.max(12, height - 12) }
+    ];
+    const coachRect = coach?.getBoundingClientRect?.();
+    return candidates.find((point) => (
+      point.x >= 0
+        && point.y >= 0
+        && point.x <= width
+        && point.y <= height
+        && !pointInsideRect(point, coachRect)
+    )) || null;
+  }
+
+  function pointInsideRect(point, rect) {
+    return Boolean(rect
+      && point.x >= rect.left
+      && point.x <= rect.right
+      && point.y >= rect.top
+      && point.y <= rect.bottom);
   }
 
   function setPerformanceNumber(type, kind, name, value) {

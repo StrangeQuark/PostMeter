@@ -209,6 +209,9 @@
     bindClick(doc, 'emptyCreateEnvironmentButton', options.onNewEnvironment);
     bindClick(doc, 'emptyCreateRunnerButton', options.onNewRunner);
     bindClick(doc, 'emptyCreatePerformanceTestButton', options.onNewPerformanceTest);
+    bindClick(doc, 'lockedWorkspaceUnlockButton', options.onUnlockActiveWorkspace);
+    bindClick(doc, 'lockedWorkspaceSwitchButton', options.onSwitchWorkspaceFromLockedGate);
+    bindClick(doc, 'lockedWorkspaceNewButton', options.onNewWorkspaceFromLockedGate);
     bindClick(doc, 'newEnvironmentMenuButton', options.onNewEnvironment);
     bindClick(doc, 'importWorkspaceButton', options.onImportWorkspace);
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);
@@ -255,9 +258,9 @@
     bindClick(doc, 'setEnvironmentButton', options.onSetEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
-    bindClick(doc, 'unlockWorkspacePanelButton', options.onUnlockWorkspace);
     bindClick(doc, 'encryptWorkspacePanelButton', options.onEncryptWorkspace);
     bindClick(doc, 'removeWorkspaceEncryptionPanelButton', options.onRemoveWorkspaceEncryption);
+    bindClick(doc, 'resetWorkspaceEncryptionKeyPanelButton', options.onResetWorkspaceEncryptionKey);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
     bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
     bindClick(doc, 'exportWorkspacePanelButton', options.onExportWorkspace);
@@ -567,6 +570,7 @@
     bindClick(doc, 'cancelWorkspaceEncryptionButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'confirmWorkspaceEncryptionButton', options.onConfirmWorkspaceEncryptionModal);
     bindKey(doc, 'workspaceEncryptionKeyInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
+    bindKey(doc, 'workspaceEncryptionNewKeyInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
     bindKey(doc, 'workspaceEncryptionConfirmInput', options.onConfirmWorkspaceEncryptionModal, ['Enter']);
     bindClick(doc, 'closeClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'cancelClientCertificateModalButton', () => options.onResolveActiveModal?.(null));

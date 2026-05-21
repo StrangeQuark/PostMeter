@@ -5,6 +5,20 @@ async function openCookiesModal() {
   renderPerformanceCookieJarEditor();
 }
 
+const TUTORIAL_BACKGROUND_BLOCKED_EVENTS = Object.freeze([
+  'pointerdown',
+  'pointerup',
+  'click',
+  'dblclick',
+  'auxclick',
+  'contextmenu',
+  'wheel',
+  'touchstart',
+  'touchmove'
+]);
+const TUTORIAL_BACKGROUND_EVENT_OPTIONS = Object.freeze({ capture: true, passive: false });
+let tutorialBackgroundInteractionHandler = null;
+
 function renderTutorialsModal() {
   const list = $('tutorialList');
   const detailTitle = $('tutorialDetailTitle');
@@ -194,8 +208,14 @@ function tutorialTargetElement(step) {
 function attachTutorialOverlayListeners() {
   detachTutorialOverlayListeners();
   tutorialOverlayPositionHandler = () => positionTutorialOverlay();
+  tutorialBackgroundInteractionHandler = (event) => blockTutorialBackgroundInteraction(event);
   window.addEventListener('resize', tutorialOverlayPositionHandler);
   document.addEventListener('scroll', tutorialOverlayPositionHandler, true);
+  document.addEventListener('keydown', tutorialBackgroundInteractionHandler, true);
+  document.addEventListener('focusin', tutorialBackgroundInteractionHandler, true);
+  for (const eventName of TUTORIAL_BACKGROUND_BLOCKED_EVENTS) {
+    document.addEventListener(eventName, tutorialBackgroundInteractionHandler, TUTORIAL_BACKGROUND_EVENT_OPTIONS);
+  }
 }
 
 function detachTutorialOverlayListeners() {
@@ -205,6 +225,107 @@ function detachTutorialOverlayListeners() {
   window.removeEventListener('resize', tutorialOverlayPositionHandler);
   document.removeEventListener('scroll', tutorialOverlayPositionHandler, true);
   tutorialOverlayPositionHandler = null;
+  document.removeEventListener('keydown', tutorialBackgroundInteractionHandler, true);
+  document.removeEventListener('focusin', tutorialBackgroundInteractionHandler, true);
+  for (const eventName of TUTORIAL_BACKGROUND_BLOCKED_EVENTS) {
+    document.removeEventListener(eventName, tutorialBackgroundInteractionHandler, TUTORIAL_BACKGROUND_EVENT_OPTIONS);
+  }
+  tutorialBackgroundInteractionHandler = null;
+}
+
+function blockTutorialBackgroundInteraction(event) {
+  if (!activeTutorial()) {
+    return;
+  }
+  const coach = $('tutorialCoach');
+  if (event.type === 'keydown') {
+    blockTutorialBackgroundKeydown(event, coach);
+    return;
+  }
+  if (event.type === 'focusin') {
+    if (!tutorialEventTargetInsideCoach(event.target, coach)) {
+      stopTutorialBackgroundEvent(event);
+      restoreTutorialNavigationFocus();
+    }
+    return;
+  }
+  if (tutorialEventTargetInsideCoach(event.target, coach)) {
+    return;
+  }
+  stopTutorialBackgroundEvent(event);
+}
+
+function blockTutorialBackgroundKeydown(event, coach) {
+  if (event.key === 'Escape') {
+    stopTutorialBackgroundEvent(event);
+    endTutorial();
+    return;
+  }
+  if (event.key === 'Tab') {
+    trapTutorialCoachFocus(event, coach);
+    return;
+  }
+  if (!tutorialEventTargetInsideCoach(event.target, coach)) {
+    stopTutorialBackgroundEvent(event);
+    restoreTutorialNavigationFocus();
+  }
+}
+
+function trapTutorialCoachFocus(event, coach) {
+  if (!coach || coach.hidden) {
+    stopTutorialBackgroundEvent(event);
+    return;
+  }
+  const focusable = tutorialFocusableElements(coach);
+  if (!focusable.length) {
+    stopTutorialBackgroundEvent(event);
+    coach.focus?.();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  if (!tutorialEventTargetInsideCoach(active, coach)) {
+    stopTutorialBackgroundEvent(event);
+    (event.shiftKey ? last : first).focus();
+    return;
+  }
+  if (event.shiftKey && active === first) {
+    stopTutorialBackgroundEvent(event);
+    last.focus();
+    return;
+  }
+  if (!event.shiftKey && active === last) {
+    stopTutorialBackgroundEvent(event);
+    first.focus();
+  }
+}
+
+function tutorialFocusableElements(root) {
+  return Array.from(root.querySelectorAll([
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    'a[href]',
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(','))).filter((element) => {
+    if (element.hidden) {
+      return false;
+    }
+    const rect = element.getBoundingClientRect?.();
+    return element.offsetParent !== null || Boolean(rect && rect.width > 0 && rect.height > 0);
+  });
+}
+
+function tutorialEventTargetInsideCoach(target, coach = $('tutorialCoach')) {
+  return Boolean(coach && target && (target === coach || coach.contains?.(target)));
+}
+
+function stopTutorialBackgroundEvent(event) {
+  event.preventDefault?.();
+  event.stopImmediatePropagation?.();
+  event.stopPropagation?.();
 }
 
 function positionTutorialOverlay() {

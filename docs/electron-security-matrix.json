@@ -1299,6 +1299,23 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.workspace-resetencryptionkey",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:resetEncryptionKey`: Workspace encryption key reset validates active workspace IDs and bounded old/new keys before re-encrypting in the main process and deleting old encrypted backups.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/workspace/workspaceEncryption.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.workspace-save",
       "area": "IPC channel",
       "target": "renderer-to-main channel `workspace:save`: Whole-workspace save validates the workspace payload before persistence.",

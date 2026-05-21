@@ -142,6 +142,7 @@ test('workspace IPC registers stable workspace, collection, and request channels
     'workspace:load',
     'workspace:removeEncryption',
     'workspace:rename',
+    'workspace:resetEncryptionKey',
     'workspace:save',
     'workspace:saveCollection',
     'workspace:saveEnvironment',
@@ -228,6 +229,138 @@ test('workspace IPC imports renderer-selected files without reopening native dia
     () => handlers.get('collection:import')({}, 'bad\0path.json'),
     /collection import path must not contain null bytes/
   );
+});
+
+test('workspace IPC resets active workspace encryption keys and saves local settings first', async () => {
+  const handlers = new Map();
+  const workspace = {
+    schemaVersion: 11,
+    collections: [],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false }, request: { caCertificatePath: '/tmp/work-ca.pem' } },
+    localsettings: normalizeWorkspaceLocalSettings({ request: { caCertificatePath: '/tmp/local-ca.pem' } })
+  };
+  let savedLocalSettings = null;
+  let resetCall = null;
+  let setWorkspaceValue = null;
+  registerWorkspaceIpc({
+    dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceStore: () => ({
+      getWorkspaceId: () => 'Local Workspace.json',
+      encryptionKeyForWorkspace: () => 'secret1',
+      resetWorkspaceEncryptionKey: async (workspaceId, currentKey, newKey, nextWorkspace) => {
+        resetCall = { workspaceId, currentKey, newKey, workspace: nextWorkspace };
+        return {
+          workspace: nextWorkspace,
+          path: '/tmp/Local Workspace.json',
+          activeWorkspaceId: 'Local Workspace.json',
+          workspaces: [{
+            id: 'Local Workspace.json',
+            name: 'Local Workspace',
+            path: '/tmp/Local Workspace.json',
+            current: true,
+            deletable: false,
+            encrypted: true,
+            locked: false
+          }],
+          encrypted: true,
+          locked: false
+        };
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveLocalSettings: async (settings, workspaceId, localsettings) => {
+      savedLocalSettings = { settings, workspaceId, localsettings };
+      return normalizeWorkspaceLocalSettings({ request: { caCertificatePath: '/tmp/saved-local-ca.pem' } });
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: (nextWorkspace) => {
+      setWorkspaceValue = nextWorkspace;
+    }
+  });
+
+  const result = await handlers.get('workspace:resetEncryptionKey')({}, 'Local Workspace.json', 'secret1', 'secret2');
+
+  assert.equal(savedLocalSettings.workspaceId, 'Local Workspace.json');
+  assert.equal(savedLocalSettings.localsettings.request.caCertificatePath, '/tmp/local-ca.pem');
+  assert.deepEqual(resetCall, {
+    workspaceId: 'Local Workspace.json',
+    currentKey: 'secret1',
+    newKey: 'secret2',
+    workspace: {
+      ...workspace,
+      localsettings: normalizeWorkspaceLocalSettings({ request: { caCertificatePath: '/tmp/saved-local-ca.pem' } })
+    }
+  });
+  assert.equal(setWorkspaceValue.localsettings.request.caCertificatePath, '/tmp/saved-local-ca.pem');
+  assert.equal(result.encrypted, true);
+  assert.equal(result.locked, false);
+
+  await assert.rejects(
+    () => handlers.get('workspace:resetEncryptionKey')({}, 'Local Workspace.json', 'secret2', 'secret2'),
+    /different from the current key/
+  );
+});
+
+test('workspace IPC rejects locked active workspace encryption key resets without saving placeholder workspace state', async () => {
+  const handlers = new Map();
+  let saveLocalSettingsCalls = 0;
+  let resetCall = null;
+  registerWorkspaceIpc({
+    dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({
+      schemaVersion: 11,
+      collections: [],
+      environments: [],
+      history: [],
+      cookies: [],
+      settings: { updates: { includePrereleases: false } }
+    }),
+    getWorkspaceStore: () => ({
+      getWorkspaceId: () => 'Local Workspace.json',
+      encryptionKeyForWorkspace: () => '',
+      resetWorkspaceEncryptionKey: async (workspaceId, currentKey, newKey, nextWorkspace) => {
+        resetCall = { workspaceId, currentKey, newKey, workspace: nextWorkspace };
+        throw new Error('reset should not run while locked');
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveLocalSettings: async () => {
+      saveLocalSettingsCalls += 1;
+      return normalizeWorkspaceLocalSettings();
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await assert.rejects(
+    () => handlers.get('workspace:resetEncryptionKey')({}, 'Local Workspace.json', 'secret1', 'secret2'),
+    /Unlock workspace before resetting its encryption key/
+  );
+
+  assert.equal(resetCall, null);
+  assert.equal(saveLocalSettingsCalls, 0);
 });
 
 test('workspace IPC imports and exports standalone requests', async (t) => {

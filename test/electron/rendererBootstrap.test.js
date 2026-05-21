@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const vm = require('node:vm');
 const {
   bindUi,
   closeToolbarMenus,
@@ -1110,6 +1111,7 @@ test('renderer bootstrap submits workspace encryption modal inputs on Enter', ()
   };
   const elements = new Map([
     ['workspaceEncryptionKeyInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
+    ['workspaceEncryptionNewKeyInput', createElement({ tagName: 'INPUT', value: 'secret2' })],
     ['workspaceEncryptionConfirmInput', createElement({ tagName: 'INPUT', value: 'secret1' })],
     ['confirmWorkspaceEncryptionButton', createElement()],
     ['cancelWorkspaceEncryptionButton', createElement()],
@@ -1133,12 +1135,13 @@ test('renderer bootstrap submits workspace encryption modal inputs on Enter', ()
   });
 
   elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Enter' });
+  elements.get('workspaceEncryptionNewKeyInput').dispatch('keydown', { key: 'Enter' });
   elements.get('workspaceEncryptionConfirmInput').dispatch('keydown', { key: 'Enter' });
   elements.get('workspaceEncryptionKeyInput').dispatch('keydown', { key: 'Tab' });
   elements.get('confirmWorkspaceEncryptionButton').dispatch('click');
   elements.get('cancelWorkspaceEncryptionButton').dispatch('click');
 
-  assert.equal(calls.confirm, 3);
+  assert.equal(calls.confirm, 4);
   assert.deepEqual(calls.resolved, [null]);
 });
 
@@ -1861,6 +1864,21 @@ test('renderer bootstrap binds tutorial modal and overlay controls', () => {
     'next-step',
     'end-tutorial'
   ]);
+});
+
+test('tutorial overlay captures background interactions while coach remains interactive', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const overlaysSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'styles', 'overlays.css'), 'utf8');
+  const rendererSource = await readRendererBundleSource(root);
+
+  assert.match(overlaysSource, /\.tutorial-overlay\s*\{[\s\S]*pointer-events:\s*auto;/);
+  assert.match(overlaysSource, /\.tutorial-target-frame\s*\{[\s\S]*pointer-events:\s*none;/);
+  assert.match(overlaysSource, /\.tutorial-coach\s*\{[\s\S]*pointer-events:\s*auto;/);
+  assert.match(rendererSource, /TUTORIAL_BACKGROUND_BLOCKED_EVENTS/);
+  assert.match(rendererSource, /document\.addEventListener\('keydown', tutorialBackgroundInteractionHandler, true\)/);
+  assert.match(rendererSource, /document\.addEventListener\('focusin', tutorialBackgroundInteractionHandler, true\)/);
+  assert.match(rendererSource, /document\.addEventListener\(eventName, tutorialBackgroundInteractionHandler, TUTORIAL_BACKGROUND_EVENT_OPTIONS\)/);
+  assert.match(rendererSource, /function trapTutorialCoachFocus\(event, coach\)/);
 });
 
 test('renderer bootstrap keeps active modals open when the backdrop is clicked by default', () => {
@@ -2874,14 +2892,144 @@ test('renderer supplies explicit collection export format handlers', () => {
   assert.match(rendererSource, /onExportPerformanceTest: \(\) => \{ void exportPerformanceTestFromPicker\(\); \}/);
 });
 
-test('renderer prompts for locked encrypted workspace export keys', () => {
+test('renderer gates locked active workspaces before normal workspace actions', () => {
   const rendererSource = readRendererBundleSourceSync();
-  assert.match(
-    rendererSource,
-    /workspaceItem\.locked === true[\s\S]*promptWorkspaceEncryptionKey\([\s\S]*title: 'Export encrypted workspace'/
-  );
-  assert.match(rendererSource, /exportWorkspaceBoundary\(null, workspaceItem\.id, encryptionKey\)/);
+  const lifecycleSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/app/workspaceLifecycle.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+
+  assert.match(indexHtml, /id="lockedWorkspacePanel"/);
+  assert.match(indexHtml, /id="lockedWorkspaceUnlockButton"/);
+  assert.match(indexHtml, /id="lockedWorkspaceSwitchButton"[^>]*hidden>Switch to Workspace<\/button>/);
+  assert.doesNotMatch(indexHtml, />Switch Workspace<\/button>/);
+  assert.match(indexHtml, /id="lockedWorkspaceNewButton"/);
+  assert.match(rendererSource, /onNewWorkspace: \(\) => \{ void \(activeWorkspaceLocked\(\) \? newWorkspaceFromLockedGate\(\) : newWorkspace\(\)\); \}/);
+  assert.match(rendererSource, /await \(activeWorkspaceLocked\(\) \? newWorkspaceFromLockedGate\(\) : newWorkspace\(\)\);/);
+  assert.match(rendererSource, /function requireUnlockedWorkspace\(actionLabel = 'making changes'\)/);
+  assert.match(lifecycleSource, /function lockedWorkspaceGateActive\(\)/);
+  assert.match(lifecycleSource, /locked-workspace-mode/);
+  assert.match(lifecycleSource, /'newRequestButton'[\s\S]*'importWorkspaceButton'[\s\S]*'exportWorkspaceButton'/);
+  assert.match(rendererSource, /function newWorkspaceFromLockedGate\(\)/);
+  assert.match(rendererSource, /if \(!requireUnlockedWorkspace\('importing workspaces'\)\)/);
+  assert.match(rendererSource, /if \(!requireUnlockedWorkspace\('renaming workspaces'\)\)/);
+  assert.match(rendererSource, /if \(!requireUnlockedWorkspace\('duplicating workspaces'\)\)/);
+  assert.match(rendererSource, /if \(!requireUnlockedWorkspace\('creating requests'\)\)/);
+  assert.match(rendererSource, /if \(!requireUnlockedWorkspace\('sending requests'\)\)/);
 });
+
+test('locked workspace gate preserves inactive workspace selection for switching', () => {
+  const lifecycleSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/app/workspaceLifecycle.js'), 'utf8');
+  const elements = new Map([
+    ['lockedWorkspacePanel', { hidden: false }],
+    ['lockedWorkspaceUnlockButton', createLifecycleElement()],
+    ['lockedWorkspaceTitle', createLifecycleElement()],
+    ['lockedWorkspaceMessage', createLifecycleElement()],
+    ['lockedWorkspaceSwitchButton', createLifecycleElement()]
+  ]);
+  const items = [
+    { id: 'locked-active', name: 'Locked Active', current: true, encrypted: true, locked: true },
+    { id: 'plain-target', name: 'Plain Target', current: false, encrypted: false, locked: false }
+  ];
+  const sandbox = {
+    activeWorkspaceId: 'locked-active',
+    selectedWorkspaceId: 'plain-target',
+    activeSidebarPanel: 'runners',
+    activeMainPanel: 'runner',
+    activeRunnerConfigId: 'runner-id',
+    activeRunnerRequestRunnerId: 'runner-request-id',
+    activeAuthRefreshRequestOwnerType: 'runner',
+    activeAuthRefreshRequestOwnerId: 'runner-id',
+    activeWorkspaceLocked: () => true,
+    workspaceListItems: () => items,
+    activeWorkspaceItem() {
+      return items.find((item) => item.id === sandbox.selectedWorkspaceId) || null;
+    },
+    workspaceDisplayName: (item) => item?.name || 'Workspace',
+    $: (id) => elements.get(id) || null
+  };
+
+  vm.runInNewContext(lifecycleSource, sandbox, { filename: 'workspaceLifecycle.js' });
+  sandbox.normalizeLockedWorkspaceGateState();
+  sandbox.renderLockedWorkspacePanel();
+
+  assert.equal(sandbox.selectedWorkspaceId, 'plain-target');
+  assert.equal(sandbox.activeSidebarPanel, 'workspaces');
+  assert.equal(sandbox.activeMainPanel, 'workspace');
+  assert.equal(sandbox.activeRunnerConfigId, null);
+  assert.equal(sandbox.activeRunnerRequestRunnerId, null);
+  assert.equal(sandbox.activeAuthRefreshRequestOwnerType, '');
+  assert.equal(sandbox.activeAuthRefreshRequestOwnerId, null);
+  assert.equal(elements.get('lockedWorkspaceTitle').textContent, 'Plain Target is available');
+  assert.equal(elements.get('lockedWorkspaceMessage').textContent, 'Switch to this workspace or create a new workspace.');
+  assert.equal(elements.get('lockedWorkspaceUnlockButton').hidden, true);
+  assert.equal(elements.get('lockedWorkspaceSwitchButton').textContent, 'Switch to Workspace');
+  assert.equal(elements.get('lockedWorkspaceSwitchButton').disabled, false);
+  assert.equal(elements.get('lockedWorkspaceSwitchButton').hidden, false);
+});
+
+test('locked workspace gate hides generic switch action for the active locked workspace', () => {
+  const lifecycleSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/app/workspaceLifecycle.js'), 'utf8');
+  const elements = new Map([
+    ['lockedWorkspacePanel', { hidden: false }],
+    ['lockedWorkspaceUnlockButton', createLifecycleElement()],
+    ['lockedWorkspaceTitle', createLifecycleElement()],
+    ['lockedWorkspaceMessage', createLifecycleElement()],
+    ['lockedWorkspaceSwitchButton', createLifecycleElement()]
+  ]);
+  const items = [
+    { id: 'locked-active', name: 'Locked Active', current: true, encrypted: true, locked: true },
+    { id: 'plain-target', name: 'Plain Target', current: false, encrypted: false, locked: false }
+  ];
+  const sandbox = {
+    activeWorkspaceId: 'locked-active',
+    selectedWorkspaceId: 'locked-active',
+    activeSidebarPanel: 'workspaces',
+    activeMainPanel: 'workspace',
+    activeRunnerConfigId: null,
+    activeRunnerRequestRunnerId: null,
+    activeAuthRefreshRequestOwnerType: '',
+    activeAuthRefreshRequestOwnerId: null,
+    activeWorkspaceLocked: () => true,
+    workspaceListItems: () => items,
+    activeWorkspaceItem() {
+      return items.find((item) => item.id === sandbox.selectedWorkspaceId) || null;
+    },
+    workspaceDisplayName: (item) => item?.name || 'Workspace',
+    $: (id) => elements.get(id) || null
+  };
+
+  vm.runInNewContext(lifecycleSource, sandbox, { filename: 'workspaceLifecycle.js' });
+  sandbox.normalizeLockedWorkspaceGateState();
+  sandbox.renderLockedWorkspacePanel();
+
+  assert.equal(elements.get('lockedWorkspaceTitle').textContent, 'Locked Active is locked');
+  assert.equal(elements.get('lockedWorkspaceMessage').textContent, 'Unlock this workspace or create a new workspace.');
+  assert.equal(elements.get('lockedWorkspaceUnlockButton').hidden, false);
+  assert.equal(elements.get('lockedWorkspaceSwitchButton').textContent, 'Switch to Workspace');
+  assert.equal(elements.get('lockedWorkspaceSwitchButton').disabled, true);
+  assert.equal(elements.get('lockedWorkspaceSwitchButton').hidden, true);
+});
+
+test('renderer exposes active encrypted workspace key reset controls', () => {
+  const rendererSource = readRendererBundleSourceSync();
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+
+  assert.match(indexHtml, /id="resetWorkspaceEncryptionKeyPanelButton"[^>]*>Reset Key<\/button>/);
+  assert.match(indexHtml, /id="workspaceEncryptionNewKeyInput"[^>]*type="password"/);
+  assert.match(rendererSource, /onResetWorkspaceEncryptionKey: \(\) => \{ void resetWorkspaceEncryptionKey\(\); \}/);
+  assert.match(rendererSource, /workspace\.resetEncryptionKey\(\s*workspaceId,\s*keys\.currentKey,\s*keys\.newKey\s*\)/);
+  assert.match(rendererSource, /resetWorkspaceEncryptionKeyPanelButton'\)\.disabled = !workspaceItem \|\| locked \|\| workspaceItem\.current !== true/);
+});
+
+function createLifecycleElement() {
+  return {
+    attributes: {},
+    disabled: false,
+    textContent: '',
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    }
+  };
+}
 
 test('renderer exposes first-class runner UI and sends runner payloads through runtime IPC', () => {
   const rendererSource = readRendererBundleSourceSync();

@@ -15,6 +15,9 @@ async function persistWorkspace(showStatus = true, options = {}) {
 }
 
 async function importWorkspace() {
+  if (!requireUnlockedWorkspace('importing workspaces')) {
+    return null;
+  }
   if (typeof window.__postmeterImportWorkspace === 'function') {
     return rendererWorkflows.importWorkspace();
   }
@@ -33,6 +36,7 @@ let workspaceEncryptionModalState = null;
 async function promptWorkspaceEncryptionKey(options = {}) {
   workspaceEncryptionModalState = {
     mode: options.mode || 'unlock',
+    requireNewKey: options.requireNewKey === true,
     requireConfirmation: options.requireConfirmation === true,
     resolveOnConfirm: true
   };
@@ -40,24 +44,55 @@ async function promptWorkspaceEncryptionKey(options = {}) {
   $('workspaceEncryptionMessage').textContent = options.message || 'Enter the workspace key.';
   $('workspaceEncryptionWarning').textContent = options.warning || 'Losing this key permanently loses access to the encrypted workspace. PostMeter does not store it.';
   $('workspaceEncryptionKeyLabel').textContent = options.label || 'Key';
+  $('workspaceEncryptionNewKeyLabel').textContent = options.newKeyLabel || 'New key';
+  $('workspaceEncryptionConfirmLabel').textContent = options.confirmKeyLabel || 'Confirm key';
   $('workspaceEncryptionKeyInput').value = '';
+  $('workspaceEncryptionNewKeyInput').value = '';
   $('workspaceEncryptionConfirmInput').value = '';
+  $('workspaceEncryptionNewKeyField').hidden = options.requireNewKey !== true;
   $('workspaceEncryptionConfirmField').hidden = options.requireConfirmation !== true;
   $('workspaceEncryptionError').hidden = true;
   $('workspaceEncryptionError').textContent = '';
   $('confirmWorkspaceEncryptionButton').textContent = options.confirmLabel || 'Continue';
-  const key = await showModal('workspaceEncryptionModal', null);
+  const result = await showModal('workspaceEncryptionModal', null);
   $('workspaceEncryptionKeyInput').value = '';
+  $('workspaceEncryptionNewKeyInput').value = '';
   $('workspaceEncryptionConfirmInput').value = '';
   workspaceEncryptionModalState = null;
-  return typeof key === 'string' && key.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH ? key : null;
+  if (options.requireNewKey === true) {
+    return result
+      && typeof result.currentKey === 'string'
+      && typeof result.newKey === 'string'
+      && result.currentKey.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH
+      && result.newKey.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH
+      ? result
+      : null;
+  }
+  return typeof result === 'string' && result.length >= WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH ? result : null;
 }
 
 function confirmWorkspaceEncryptionModal() {
   const key = $('workspaceEncryptionKeyInput')?.value || '';
+  const newKey = $('workspaceEncryptionNewKeyInput')?.value || '';
   const confirmation = $('workspaceEncryptionConfirmInput')?.value || '';
   if (key.length < WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH) {
     showWorkspaceEncryptionModalError(`Key must be at least ${WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH} characters.`);
+    return;
+  }
+  if (workspaceEncryptionModalState?.requireNewKey === true) {
+    if (newKey.length < WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH) {
+      showWorkspaceEncryptionModalError(`New key must be at least ${WORKSPACE_ENCRYPTION_KEY_MIN_LENGTH} characters.`);
+      return;
+    }
+    if (newKey === key) {
+      showWorkspaceEncryptionModalError('New key must be different from the current key.');
+      return;
+    }
+    if (workspaceEncryptionModalState?.requireConfirmation === true && newKey !== confirmation) {
+      showWorkspaceEncryptionModalError('The confirmation key does not match.');
+      return;
+    }
+    resolveActiveModal({ currentKey: key, newKey });
     return;
   }
   if (workspaceEncryptionModalState?.requireConfirmation === true && key !== confirmation) {
@@ -197,6 +232,9 @@ async function runPickerFirstExport({
 }
 
 async function exportWorkspace(workspaceIdOrItem = null) {
+  if (!requireUnlockedWorkspace('exporting')) {
+    return null;
+  }
   const requestedWorkspaceId = typeof workspaceIdOrItem === 'string'
     ? workspaceIdOrItem
     : workspaceIdOrItem && typeof workspaceIdOrItem === 'object' && typeof workspaceIdOrItem.id === 'string'
@@ -372,6 +410,33 @@ async function newWorkspace() {
   }
 }
 
+async function newWorkspaceFromLockedGate() {
+  const createdWorkspaceId = await newWorkspace();
+  if (!createdWorkspaceId) {
+    return null;
+  }
+  return switchWorkspace(createdWorkspaceId, { focus: 'workspace' });
+}
+
+function switchWorkspaceFromLockedGate() {
+  const items = workspaceListItems();
+  const selectedSwitchTarget = items.find((item) => item.id === selectedWorkspaceId && item.id !== activeWorkspaceId) || null;
+  const switchCandidates = items.filter((item) => item.id && item.id !== activeWorkspaceId);
+  const targetWorkspace = selectedSwitchTarget || (switchCandidates.length === 1 ? switchCandidates[0] : null);
+  if (targetWorkspace) {
+    return switchWorkspace(targetWorkspace.id, { focus: 'workspace' });
+  }
+  selectedWorkspaceId = activeWorkspaceId || selectedWorkspaceId;
+  activeSidebarPanel = 'workspaces';
+  activeMainPanel = 'workspace';
+  renderAll();
+  restoreTreeFocus(treeFocusTarget('workspace', selectedWorkspaceId), activeWorkspaceTreeFocusTargets());
+  setStatus(switchCandidates.length
+    ? 'Select a workspace to switch, or unlock the current workspace.'
+    : 'Unlock this workspace or create a new workspace.');
+  return activeWorkspaceItem();
+}
+
 function currentPanelFocus() {
   if (activeMainPanel === 'workspace') {
     return 'workspace';
@@ -383,6 +448,9 @@ function currentPanelFocus() {
 }
 
 function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  if (!requireUnlockedWorkspace('renaming workspaces')) {
+    return null;
+  }
   const workspaceItem = selectWorkspaceItem(workspaceId);
   if (!workspaceItem) {
     setStatus('Select a workspace before renaming.');
@@ -393,6 +461,9 @@ function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId)
 }
 
 async function renameWorkspaceToName(workspaceId, workspaceName) {
+  if (!requireUnlockedWorkspace('renaming workspaces')) {
+    return null;
+  }
   try {
     const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
     if (!workspaceItem) {
@@ -443,6 +514,9 @@ async function switchWorkspace(workspaceId, options = {}) {
       return null;
     }
     if (workspaceId === activeWorkspaceId) {
+      if (workspaceItem.encrypted === true && workspaceItem.locked === true) {
+        return unlockWorkspace(workspaceId, options);
+      }
       return selectWorkspaceItem(workspaceId);
     }
     if (!(await prepareForWorkspaceChange('switching workspaces'))) {
@@ -469,6 +543,9 @@ async function unlockWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     setStatus('Select a workspace before unlocking.');
     return null;
   }
+  if (workspaceId !== activeWorkspaceId) {
+    return switchWorkspace(workspaceId, { focus: options.focus || 'workspace' });
+  }
   const key = await promptWorkspaceEncryptionKey({
     mode: 'unlock',
     title: 'Unlock workspace',
@@ -480,9 +557,6 @@ async function unlockWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     return null;
   }
   try {
-    if (workspaceId !== activeWorkspaceId && !(await prepareForWorkspaceChange('unlocking a workspace'))) {
-      return null;
-    }
     const loaded = await window.postmeter.workspace.unlock(workspaceId, key);
     applyLoadedWorkspace(loaded, { focus: options.focus || 'workspace', selectedWorkspaceId: workspaceId });
     setStatus(`Unlocked workspace: ${workspaceDisplayName()}.`);
@@ -544,6 +618,9 @@ async function removeWorkspaceEncryption(workspaceId = selectedWorkspaceId || ac
     setStatus('Select a workspace before removing encryption.');
     return null;
   }
+  if (workspaceId !== activeWorkspaceId) {
+    return switchWorkspace(workspaceId, { focus: 'workspace' });
+  }
   if (workspaceItem.encrypted !== true) {
     setStatus('Workspace is not encrypted.');
     return null;
@@ -575,7 +652,65 @@ async function removeWorkspaceEncryption(workspaceId = selectedWorkspaceId || ac
   }
 }
 
+async function resetWorkspaceEncryptionKey(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId) || null;
+  if (!workspaceItem) {
+    setStatus('Select a workspace before resetting its encryption key.');
+    return null;
+  }
+  if (workspaceId !== activeWorkspaceId || workspaceItem.current !== true) {
+    setStatus('Switch to this workspace before resetting its encryption key.');
+    return null;
+  }
+  if (workspaceItem.encrypted !== true) {
+    setStatus('Workspace is not encrypted.');
+    return null;
+  }
+  if (workspaceItem.locked === true) {
+    setStatus('Unlock workspace before resetting its encryption key.');
+    return null;
+  }
+  const keys = await promptWorkspaceEncryptionKey({
+    mode: 'reset',
+    title: 'Reset workspace key',
+    message: `Enter the current key for "${workspaceDisplayName(workspaceItem)}", then choose a new key.`,
+    warning: 'PostMeter will re-encrypt this workspace with the new key. The old key will no longer unlock this workspace, and existing encrypted workspace backups will be deleted.',
+    label: 'Current key',
+    newKeyLabel: 'New key',
+    confirmKeyLabel: 'Confirm new key',
+    requireNewKey: true,
+    requireConfirmation: true,
+    confirmLabel: 'Reset Key'
+  });
+  if (!keys) {
+    return null;
+  }
+  try {
+    collectActiveEditorState();
+    if (!(await persistWorkspace(false, { scope: 'all' }))) {
+      return null;
+    }
+    const loaded = await window.postmeter.workspace.resetEncryptionKey(
+      workspaceId,
+      keys.currentKey,
+      keys.newKey
+    );
+    applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
+    setStatus('Workspace encryption key reset. Existing encrypted workspace backups were removed.');
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace key reset failed: ${message}`);
+    notifyUser('Workspace Key Reset Failed', message);
+    return null;
+  }
+}
+
 async function deleteWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  if (activeWorkspaceLocked()) {
+    setStatus('Unlock workspace before deleting workspaces.');
+    return null;
+  }
   try {
     const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
     if (!workspaceItem) {
@@ -721,6 +856,9 @@ function handleAutoUpdateStatus(status = {}) {
 }
 
 async function importCollection() {
+  if (!requireUnlockedWorkspace('importing collections')) {
+    return null;
+  }
   if (typeof window.__postmeterImportCollection === 'function') {
     return rendererWorkflows.importCollection();
   }
@@ -734,6 +872,9 @@ async function importCollection() {
 }
 
 async function importRequest() {
+  if (!requireUnlockedWorkspace('importing requests')) {
+    return null;
+  }
   const requestApi = window.postmeter?.request;
   const importBoundary = window.__postmeterImportRequest || requestApi?.importRequest;
   if (!importBoundary) {
@@ -765,6 +906,9 @@ async function importRequest() {
 }
 
 function openImportedRequest(importedRequest) {
+  if (!requireUnlockedWorkspace('importing requests')) {
+    return null;
+  }
   if (!canOpenAdditionalRequestTab()) {
     return null;
   }
@@ -859,6 +1003,9 @@ function collectSettingsFromEditor() {
 }
 
 async function exportCollection(collection = activeCollection(), format = 'postmeter') {
+  if (!requireUnlockedWorkspace('exporting collections')) {
+    return null;
+  }
   let selectedCollection = collection;
   if (!selectedCollection) {
     const collections = Array.isArray(workspace?.collections) ? workspace.collections : [];
@@ -892,6 +1039,9 @@ async function exportCollection(collection = activeCollection(), format = 'postm
 }
 
 async function exportRequestFromPicker(format = 'postmeter') {
+  if (!requireUnlockedWorkspace('exporting requests')) {
+    return null;
+  }
   collectActiveEditorState();
   const requestEntries = collectRequestExportEntries();
   if (!requestEntries.length) {
@@ -1240,6 +1390,9 @@ function requestCurlExportExclusions(request = {}) {
 }
 
 async function importEnvironment() {
+  if (!requireUnlockedWorkspace('importing environments')) {
+    return null;
+  }
   const environmentApi = window.postmeter?.environment;
   const importBoundary = window.__postmeterImportEnvironment || environmentApi?.importEnvironment;
   if (!importBoundary) {
@@ -1288,6 +1441,9 @@ async function importEnvironment() {
 }
 
 async function exportEnvironment(environment = activeEditorEnvironment(), format = 'postmeter') {
+  if (!requireUnlockedWorkspace('exporting environments')) {
+    return null;
+  }
   const selectedEnvironment = environment || activeEditorEnvironment() || workspace.environments?.[0] || null;
   if (!selectedEnvironment) {
     return setStatus('Select an environment before exporting.');
@@ -1342,6 +1498,9 @@ async function exportEnvironmentFromPicker(format = 'postmeter') {
 }
 
 async function importRunner() {
+  if (!requireUnlockedWorkspace('importing runners')) {
+    return null;
+  }
   const runnerApi = window.postmeter?.runner;
   const importBoundary = window.__postmeterImportRunner || runnerApi?.importDefinition;
   if (!importBoundary) {
@@ -1390,6 +1549,9 @@ async function importRunner() {
 }
 
 async function exportRunnerDefinition(runner = activeRunner()) {
+  if (!requireUnlockedWorkspace('exporting runners')) {
+    return null;
+  }
   const selectedRunner = runner || activeRunner() || workspace.runners?.[0] || null;
   if (!selectedRunner) {
     return setStatus('Select a runner before exporting.');
@@ -1444,6 +1606,9 @@ async function exportRunnerDefinitionFromPicker() {
 }
 
 function newCollection() {
+  if (!requireUnlockedWorkspace('creating collections')) {
+    return null;
+  }
   collectActiveEditorState();
   activeSidebarPanel = 'collections';
   activeMainPanel = 'request';
@@ -1469,6 +1634,9 @@ function newCollection() {
 }
 
 function newRequest(collectionId = activeCollectionId, folderId = activeFolderId) {
+  if (!requireUnlockedWorkspace('creating requests')) {
+    return null;
+  }
   if (!canOpenAdditionalRequestTab()) {
     return null;
   }
@@ -1505,6 +1673,9 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
 }
 
 function newFolder(collectionId = activeCollectionId, parentFolderId = activeFolderId) {
+  if (!requireUnlockedWorkspace('creating folders')) {
+    return null;
+  }
   collectActiveEditorState();
   activeMainPanel = 'request';
   activeRunnerRequestRunnerId = null;
@@ -1574,6 +1745,9 @@ function expandCollectionTreePath(collection, folderId = null, options = {}) {
 }
 
 function newEnvironment() {
+  if (!requireUnlockedWorkspace('creating environments')) {
+    return null;
+  }
   if (!canOpenAdditionalEnvironmentTab()) {
     return null;
   }
@@ -1595,6 +1769,9 @@ function newEnvironment() {
 }
 
 async function deleteEnvironment(environment = activeEditorEnvironment()) {
+  if (!requireUnlockedWorkspace('deleting environments')) {
+    return false;
+  }
   if (!environment || !(await confirmActionModal({
     title: 'Delete environment?',
     message: `Delete ${environment.name}?`,
@@ -1846,6 +2023,9 @@ async function renameFolder(folder) {
 }
 
 async function deleteFolder(collection, folder) {
+  if (!requireUnlockedWorkspace('deleting folders')) {
+    return;
+  }
   if (!(await confirmActionModal({
     title: 'Delete folder?',
     message: `Delete ${folder.name} and everything inside it?`,
@@ -1995,6 +2175,9 @@ function duplicatePerformanceTest(test) {
 }
 
 async function duplicateWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  if (!requireUnlockedWorkspace('duplicating workspaces')) {
+    return null;
+  }
   const selectedWorkspace = typeof workspaceId === 'string' ? workspaceId : workspaceId?.id;
   if (!selectedWorkspace) {
     return null;
@@ -2043,6 +2226,9 @@ function cloneRequestWithNewId(request) {
 }
 
 async function deleteCollection(collection) {
+  if (!requireUnlockedWorkspace('deleting collections')) {
+    return;
+  }
   if (!(await confirmActionModal({
     title: 'Delete collection?',
     message: `Delete ${collection.name}?`,
@@ -2074,6 +2260,9 @@ function clearActiveWorkspaceItem() {
 }
 
 async function deleteRequest(collection, folder, request) {
+  if (!requireUnlockedWorkspace('deleting requests')) {
+    return;
+  }
   if (!(await confirmActionModal({
     title: 'Delete request?',
     message: `Delete ${request.name}?`,

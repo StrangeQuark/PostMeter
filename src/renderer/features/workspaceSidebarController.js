@@ -233,10 +233,25 @@ function workspaceNode(workspaceItem) {
     ['Duplicate', () => { void duplicateWorkspace(workspaceItem.id); }],
     ['Export', () => { void exportWorkspace(workspaceItem.id); }]
   ];
-  if (workspaceItem.encrypted === true && workspaceItem.locked === true) {
+  if (activeWorkspaceLocked()) {
+    const lockedMenuItems = [
+      ['View Details', () => { selectWorkspaceItem(workspaceItem.id); }]
+    ];
+    if (workspaceItem.current === true) {
+      lockedMenuItems.push(['Unlock Workspace', () => { void unlockWorkspace(workspaceItem.id); }]);
+    } else {
+      lockedMenuItems.push(['Switch to This Workspace', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }]);
+    }
+    attachTreeContextMenu(button, lockedMenuItems);
+    return wrapper;
+  }
+  if (workspaceItem.encrypted === true && workspaceItem.locked === true && workspaceItem.current === true) {
     menuItems.splice(1, 0, ['Unlock Workspace', () => { void unlockWorkspace(workspaceItem.id); }]);
-  } else if (workspaceItem.encrypted === true) {
+  } else if (workspaceItem.encrypted === true && workspaceItem.locked !== true) {
     menuItems.splice(1, 0, ['Decrypt Workspace', () => { void removeWorkspaceEncryption(workspaceItem.id); }]);
+    if (workspaceItem.current === true) {
+      menuItems.splice(2, 0, ['Reset Key', () => { void resetWorkspaceEncryptionKey(workspaceItem.id); }]);
+    }
   } else {
     menuItems.splice(1, 0, ['Encrypt Workspace', () => { void encryptWorkspace(workspaceItem.id); }]);
   }
@@ -252,13 +267,7 @@ function workspaceNode(workspaceItem) {
 
 function workspaceTreeLabel(workspaceItem) {
   const name = workspaceDisplayName(workspaceItem);
-  if (workspaceItem?.locked === true) {
-    return `${name} (Locked)`;
-  }
-  if (workspaceItem?.encrypted === true) {
-    return `${name} (Encrypted)`;
-  }
-  return name;
+  return workspaceItem?.current === true ? `${name} (Active)` : name;
 }
 
 function renderWorkspacePanel() {
@@ -275,15 +284,19 @@ function renderWorkspacePanel() {
   title.setAttribute('aria-label', 'Workspace name');
   const encrypted = workspaceItem?.encrypted === true;
   const locked = workspaceItem?.locked === true;
-  $('switchWorkspacePanelButton').disabled = !workspaceItem || workspaceItem.current === true;
+  const switchButton = $('switchWorkspacePanelButton');
+  switchButton.textContent = workspaceItem?.current === true && encrypted && locked
+    ? 'Unlock Workspace'
+    : 'Switch to this Workspace';
+  switchButton.disabled = !workspaceItem || (workspaceItem.current === true && !(encrypted && locked));
   $('deleteWorkspacePanelButton').disabled = !workspaceItem || workspaceListItems().length <= 1;
   $('exportWorkspacePanelButton').disabled = !workspaceItem;
-  $('unlockWorkspacePanelButton').hidden = !encrypted || !locked;
-  $('unlockWorkspacePanelButton').disabled = !workspaceItem;
   $('encryptWorkspacePanelButton').hidden = encrypted;
   $('encryptWorkspacePanelButton').disabled = !workspaceItem || locked;
-  $('removeWorkspaceEncryptionPanelButton').hidden = !encrypted || locked;
-  $('removeWorkspaceEncryptionPanelButton').disabled = !workspaceItem;
+  $('removeWorkspaceEncryptionPanelButton').hidden = !encrypted;
+  $('removeWorkspaceEncryptionPanelButton').disabled = !workspaceItem || locked;
+  $('resetWorkspaceEncryptionKeyPanelButton').hidden = !encrypted;
+  $('resetWorkspaceEncryptionKeyPanelButton').disabled = !workspaceItem || locked || workspaceItem.current !== true;
   if ($('trustedScriptSendRequestInput')) {
     $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
   }

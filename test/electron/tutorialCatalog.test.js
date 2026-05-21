@@ -19,7 +19,8 @@ test('workspace tutorial covers encrypted workspace workflow', () => {
   );
   assert.match(stepsByTitle.get('Protect sensitive workspaces')?.body || '', /Encrypt Workspace saves plaintext workspaces encrypted at rest/);
   assert.match(stepsByTitle.get('Protect sensitive workspaces')?.body || '', /removes old unencrypted backups/);
-  assert.match(stepsByTitle.get('Protect sensitive workspaces')?.body || '', /Decrypt Workspace is shown after an encrypted workspace is unlocked/);
+  assert.match(stepsByTitle.get('Protect sensitive workspaces')?.body || '', /Decrypt Workspace appears for encrypted workspaces/);
+  assert.match(stepsByTitle.get('Protect sensitive workspaces')?.body || '', /clickable after the workspace is unlocked/);
   assert.match(stepsByTitle.get('Export workspace definitions')?.body || '', /Encrypted workspaces export as encrypted files/);
   assert.deepEqual(workspaceTutorial.steps.map((step) => step.title), [
     'Open Workspaces',
