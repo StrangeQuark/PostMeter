@@ -449,10 +449,7 @@
                 <span>Callback URL</span>
                 <input id="authOauthCallbackUrlInput" autocomplete="off">
               </label>
-              <label class="checkbox-line" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                <input id="authOauthAuthorizeUsingBrowserInput" type="checkbox">
-                <span>Authorize using browser</span>
-              </label>
+              <input id="authOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked aria-hidden="true" tabindex="-1">
               <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
                 <span>Auth URL</span>
                 <input id="authOauthAuthorizationUrlInput" autocomplete="off">
@@ -1162,7 +1159,6 @@
         </div>
 
       </section>
-
       <section id="environmentMainPanel" class="panel environment-main-panel" role="tabpanel" hidden>
         <div class="environment-main-header">
           <div>
@@ -1869,10 +1865,7 @@
                     <span>Callback URL</span>
                     <input id="performanceAuthOauthCallbackUrlInput" autocomplete="off">
                   </label>
-                  <label class="checkbox-line" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                    <input id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox">
-                    <span>Authorize using browser</span>
-                  </label>
+                  <input id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked aria-hidden="true" tabindex="-1">
                   <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
                     <span>Auth URL</span>
                     <input id="performanceAuthOauthAuthorizationUrlInput" autocomplete="off">
@@ -2641,7 +2634,6 @@
       </section>
 
       <div id="workspacePaneResize" class="splitter horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-
       <section class="results">
         <div class="tabs" role="tablist" aria-label="Result sections" data-tab-group="results">
           <button id="resultsResponseTabButton" class="tab active" type="button" role="tab" data-tab-group="results" data-tab="response" aria-selected="true" aria-controls="responseTab">Response</button>

@@ -2022,13 +2022,14 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
   }
 
   const responseText = await response.text();
-  let payload = {};
-  if (responseText.trim()) {
-    try {
-      payload = JSON.parse(responseText);
-    } catch {
-      throw new Error(`${label} returned invalid JSON.`);
-    }
+  const payload = parseOAuthTokenResponsePayload(responseText, response.headers.get('content-type'), label, {
+    status: response.status
+  });
+  if (payload.error) {
+    const error = new Error(redactOAuthErrorMessage(payload.error_description || payload.error));
+    error.oauthError = String(payload.error);
+    error.status = response.status;
+    throw error;
   }
   if (!response.ok) {
     const error = new Error(redactOAuthErrorMessage(payload.error_description || payload.error || `${label} failed with HTTP ${response.status}.`));
@@ -2040,6 +2041,69 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
     throw new Error(`${label} response did not include an access token.`);
   }
   return payload;
+}
+
+function parseOAuthTokenResponsePayload(responseText, contentType, label, debugContext = {}) {
+  const trimmed = String(responseText || '').trim();
+  if (!trimmed) {
+    return {};
+  }
+  const contentTypeText = String(contentType || '').toLowerCase();
+  if (contentTypeText.includes('json')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      const formPayload = parseOAuthFormEncodedPayload(trimmed);
+      if (formPayload) {
+        return formPayload;
+      }
+      throw oauthTokenParseFailureError({ contentType, label, status: debugContext.status });
+    }
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const formPayload = parseOAuthFormEncodedPayload(trimmed);
+    if (formPayload) {
+      return formPayload;
+    }
+    throw oauthTokenParseFailureError({ contentType, label, status: debugContext.status });
+  }
+}
+
+function oauthTokenParseFailureError({ contentType, label, status }) {
+  const numericStatus = Number(status);
+  if (Number.isInteger(numericStatus) && numericStatus >= 400) {
+    const contentTypeLabel = String(contentType || '').split(';')[0].trim() || 'non-JSON';
+    return new Error(`${label} failed with HTTP ${numericStatus}; token endpoint returned ${contentTypeLabel} instead of an OAuth token response. Check the token URL and provider settings.`);
+  }
+  return new Error(`${label} returned invalid JSON.`);
+}
+
+function parseOAuthFormEncodedPayload(text) {
+  const params = new URLSearchParams(text);
+  const payload = {};
+  for (const [key, value] of params.entries()) {
+    payload[key] = value;
+  }
+  return Object.keys(payload).some(isOAuthTokenResponseField) ? payload : null;
+}
+
+function isOAuthTokenResponseField(key) {
+  return [
+    'access_token',
+    'refresh_token',
+    'token_type',
+    'expires_in',
+    'scope',
+    'error',
+    'error_description',
+    'device_code',
+    'user_code',
+    'verification_uri',
+    'verification_uri_complete',
+    'interval'
+  ].includes(key);
 }
 
 function deviceCodeDeadlineMillis(auth, now = Date.now()) {

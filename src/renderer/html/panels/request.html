@@ -176,10 +176,7 @@
                 <span>Callback URL</span>
                 <input id="authOauthCallbackUrlInput" autocomplete="off">
               </label>
-              <label class="checkbox-line" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                <input id="authOauthAuthorizeUsingBrowserInput" type="checkbox">
-                <span>Authorize using browser</span>
-              </label>
+              <input id="authOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked aria-hidden="true" tabindex="-1">
               <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
                 <span>Auth URL</span>
                 <input id="authOauthAuthorizationUrlInput" autocomplete="off">
@@ -889,4 +886,3 @@
         </div>
 
       </section>
-

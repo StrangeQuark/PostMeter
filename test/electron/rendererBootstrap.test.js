@@ -506,6 +506,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   });
   assert.match(indexSource, /id="authOauthRefreshTokenInput" type="hidden"/);
   assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="authOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="authOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked/);
   assert.match(indexSource, /id="authOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
   assert.match(indexSource, /id="authOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);
   assertOauth2AdvancedMarkup(indexSource, {
@@ -542,8 +543,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   });
   assert.match(indexSource, /id="performanceAuthOauthRefreshTokenInput" type="hidden"/);
   assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="performanceAuthOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked/);
   assert.match(indexSource, /id="performanceAuthOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
   assert.match(indexSource, /id="performanceAuthOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);
+  assert.doesNotMatch(indexSource, />Authorize using browser</);
   assert.match(editorPanelsSource, /\[data-oauth2-grant-field\]\s*\{/);
   assert.match(editorPanelsSource, /data-oauth2-grant-type="passwordCredentials"/);
   assert.match(editorPanelsSource, /data-oauth2-grant-type="authorizationCodePkce"/);

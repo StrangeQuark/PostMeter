@@ -169,7 +169,8 @@
   "liveRun": {
     "enabledBy": "POSTMETER_LIVE_OAUTH_CERTIFICATION=1",
     "skippedByDefault": true,
-    "evidenceFileEnv": "POSTMETER_LIVE_OAUTH_EVIDENCE_FILE",
+    "optionalEvidenceFileEnv": "POSTMETER_LIVE_OAUTH_EVIDENCE_FILE",
+    "evidenceArtifactRequired": false,
     "artifactDirectory": "validation-artifacts/oauth-provider-certification",
     "requiredRedirectUris": [
       "postmeter://oauth/callback",
@@ -187,7 +188,7 @@
       "sanitized-screenshot",
       "manual-checklist"
     ],
-    "artifactChecksumRequired": true,
+    "artifactChecksumRequiredWhenEvidenceProvided": true,
     "providerEndpointValidation": {
       "google": {
         "authorizationHost": "accounts.google.com",

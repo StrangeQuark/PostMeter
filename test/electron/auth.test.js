@@ -1868,6 +1868,48 @@ test('exchanges OAuth 2.0 authorization-code PKCE callback for tokens', async ()
   }
 });
 
+test('accepts form-encoded OAuth 2.0 token responses', async () => {
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      response.setHeader('Content-Type', 'application/x-www-form-urlencoded');
+      response.end(new URLSearchParams({
+        access_token: 'form-access-token',
+        refresh_token: 'form-refresh-token',
+        token_type: 'bearer',
+        expires_in: '900'
+      }).toString());
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    const auth = await exchangeOAuthAuthorizationCode({
+      type: 'oauth2',
+      grantType: 'authorizationCodePkce',
+      tokenType: 'Bearer'
+    }, {
+      tokenUrl: `${server.baseUrl}/token`,
+      redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      clientAuthentication: 'body',
+      state: 'test-state',
+      codeVerifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ'
+    }, 'http://127.0.0.1:49152/oauth/callback?code=auth-code&state=test-state', null, {
+      now: Date.parse('2026-04-21T00:00:00.000Z')
+    });
+
+    assert.equal(auth.accessToken, 'form-access-token');
+    assert.equal(auth.refreshToken, 'form-refresh-token');
+    assert.equal(auth.headerPrefix, 'Bearer');
+    assert.match(auth.expiresAt, /^2026-04-21T00:15:00\.000Z$/);
+  } finally {
+    await server.close();
+  }
+});
+
 test('exchanges OAuth 2.0 authorization-code callbacks without PKCE fields', async () => {
   let tokenRequestBody = '';
   const server = await createServer(async (request, response) => {
@@ -2082,6 +2124,12 @@ test('OAuth 2.0 token request failures are redacted and malformed responses fail
       response.end(JSON.stringify({ token_type: 'Bearer' }));
       return;
     }
+    if (request.url === '/html-error') {
+      response.statusCode = 422;
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      response.end('<!doctype html><title>Provider Error</title>');
+      return;
+    }
     if (request.url === '/revoked') {
       response.statusCode = 400;
       response.setHeader('Content-Type', 'application/json');
@@ -2089,6 +2137,23 @@ test('OAuth 2.0 token request failures are redacted and malformed responses fail
         error: 'invalid_grant',
         error_description: 'revoked refresh_token=refresh-secret client_secret=client-secret'
       }));
+      return;
+    }
+    if (request.url === '/ok-error') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        error: 'bad_verification_code',
+        error_description: 'expired authorization_code=auth-code-secret client_secret=client-secret'
+      }));
+      return;
+    }
+    if (request.url === '/revoked-form') {
+      response.statusCode = 400;
+      response.setHeader('Content-Type', 'application/x-www-form-urlencoded');
+      response.end(new URLSearchParams({
+        error: 'invalid_grant',
+        error_description: 'revoked refresh_token=refresh-secret client_secret=client-secret'
+      }).toString());
       return;
     }
     response.statusCode = 404;
@@ -2117,6 +2182,22 @@ test('OAuth 2.0 token request failures are redacted and malformed responses fail
       /did not include an access token/
     );
     await assert.rejects(
+      () => requestOAuthClientCredentialsToken({
+        type: 'oauth2',
+        grantType: 'clientCredentials',
+        tokenUrl: `${server.baseUrl}/html-error`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret'
+      }, null),
+      (error) => {
+        assert.match(error.message, /failed with HTTP 422/);
+        assert.match(error.message, /text\/html/);
+        assert.match(error.message, /Check the token URL and provider settings/);
+        assert.doesNotMatch(error.message, /invalid JSON|Provider Error/);
+        return true;
+      }
+    );
+    await assert.rejects(
       () => refreshOAuthToken({
         type: 'oauth2',
         tokenUrl: `${server.baseUrl}/revoked`,
@@ -2128,6 +2209,37 @@ test('OAuth 2.0 token request failures are redacted and malformed responses fail
         assert.match(error.message, /refresh_token=\[redacted\]/);
         assert.match(error.message, /client_secret=\[redacted\]/);
         assert.doesNotMatch(error.message, /refresh-secret|client-secret/);
+        return true;
+      }
+    );
+    await assert.rejects(
+      () => refreshOAuthToken({
+        type: 'oauth2',
+        tokenUrl: `${server.baseUrl}/revoked-form`,
+        refreshToken: 'refresh-token',
+        clientId: 'client-id',
+        clientSecret: 'client-secret'
+      }, null),
+      (error) => {
+        assert.match(error.message, /refresh_token=\[redacted\]/);
+        assert.match(error.message, /client_secret=\[redacted\]/);
+        assert.doesNotMatch(error.message, /refresh-secret|client-secret/);
+        return true;
+      }
+    );
+    await assert.rejects(
+      () => requestOAuthClientCredentialsToken({
+        type: 'oauth2',
+        grantType: 'clientCredentials',
+        tokenUrl: `${server.baseUrl}/ok-error`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret'
+      }, null),
+      (error) => {
+        assert.equal(error.oauthError, 'bad_verification_code');
+        assert.match(error.message, /authorization_code=\[redacted\]/);
+        assert.match(error.message, /client_secret=\[redacted\]/);
+        assert.doesNotMatch(error.message, /auth-code-secret|client-secret/);
         return true;
       }
     );

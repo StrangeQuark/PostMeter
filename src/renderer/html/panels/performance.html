@@ -421,10 +421,7 @@
                     <span>Callback URL</span>
                     <input id="performanceAuthOauthCallbackUrlInput" autocomplete="off">
                   </label>
-                  <label class="checkbox-line" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                    <input id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox">
-                    <span>Authorize using browser</span>
-                  </label>
+                  <input id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked aria-hidden="true" tabindex="-1">
                   <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
                     <span>Auth URL</span>
                     <input id="performanceAuthOauthAuthorizationUrlInput" autocomplete="off">
@@ -1193,4 +1190,3 @@
       </section>
 
       <div id="workspacePaneResize" class="splitter horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-
