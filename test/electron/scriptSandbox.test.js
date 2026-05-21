@@ -18,7 +18,8 @@ const {
 const {
   createOsSandboxedProcessLaunch,
   createScriptWorkerLaunch,
-  cleanupPrivateTempDir
+  cleanupPrivateTempDir,
+  scriptWorkerAppReadOnlyPaths
 } = require('../../src/core/sandbox/osSandbox');
 const {
   MemoryVaultStore
@@ -346,6 +347,16 @@ test('builds Windows AppContainer helper launches with private temp and explicit
     cleanupPrivateTempDir(launch.privateTempDir);
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test('Windows AppContainer script worker allowlist includes all runtime source files', () => {
+  const root = path.join(__dirname, '..', '..');
+  const workerPath = path.join(root, 'src', 'core', 'sandbox', 'scriptWorker.js');
+  const readOnlyPaths = scriptWorkerAppReadOnlyPaths(workerPath, 'win32');
+
+  assert.ok(readOnlyPaths.includes(path.join(root, 'src', 'core', 'sandbox')));
+  assert.ok(readOnlyPaths.includes(path.join(root, 'src', 'core', 'workspace')));
+  assert.ok(readOnlyPaths.includes(path.join(root, 'package.json')));
 });
 
 test('builds macOS seatbelt launches with private temp and no broad process allowance', async () => {

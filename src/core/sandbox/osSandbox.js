@@ -1342,6 +1342,7 @@ function scriptWorkerAppReadOnlyPaths(workerPath = path.join(__dirname, 'scriptW
   if (platform === 'win32') {
     return [
       scriptWorkerCoreRoot(workerPath),
+      scriptWorkerWorkspaceRoot(workerPath),
       scriptWorkerPackageScopeReadPath(workerPath)
     ].filter(Boolean);
   }
@@ -1357,6 +1358,10 @@ function scriptWorkerRuntimeReadOnlyPaths(workerPath = path.join(__dirname, 'scr
 
 function scriptWorkerCoreRoot(workerPath = path.join(__dirname, 'scriptWorker.js')) {
   return normalizeExistingPath(path.dirname(workerPath));
+}
+
+function scriptWorkerWorkspaceRoot(workerPath = path.join(__dirname, 'scriptWorker.js')) {
+  return normalizeExistingPath(path.join(path.dirname(workerPath), '..', 'workspace'));
 }
 
 function scriptWorkerPackageScopeReadPath(workerPath = path.join(__dirname, 'scriptWorker.js')) {

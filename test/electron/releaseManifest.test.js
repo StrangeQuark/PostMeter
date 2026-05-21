@@ -54,6 +54,7 @@ test('infers release artifact platforms and types for supported desktop targets'
   assert.equal(inferPlatform('/release/PostMeter.AppImage'), 'linux');
   assert.equal(inferPlatform('/release/postmeter_0.2.0_amd64.deb'), 'linux');
   assert.equal(inferPlatform('/release/PostMeter Setup 0.2.0.exe'), 'windows');
+  assert.equal(inferPlatform('/release/PostMeter-Setup-0.2.0.exe'), 'windows');
   assert.equal(inferPlatform('/release/PostMeter-0.2.0.dmg'), 'macos');
   assert.equal(inferPlatform('/release/PostMeter-0.2.0.zip'), 'macos');
   assert.equal(inferPlatform('/release/PostMeter-0.2.0.msi'), 'unknown');
@@ -198,7 +199,7 @@ test('validates release artifact manifest entries against files and package prot
 test('release validation requires and verifies electron-updater metadata for required platforms', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-updater-metadata-'));
   try {
-    const artifactPath = path.join(tempDir, 'PostMeter Setup 9.9.9.exe');
+    const artifactPath = path.join(tempDir, 'PostMeter-Setup-9.9.9.exe');
     await fs.writeFile(artifactPath, 'installer');
     const artifactBytes = await fs.readFile(artifactPath);
     const hash = crypto.createHash('sha256').update(artifactBytes).digest('hex');
@@ -211,14 +212,14 @@ test('release validation requires and verifies electron-updater metadata for req
       appId: 'com.strangequark.postmeter',
       version: '9.9.9',
       artifacts: [{
-        file: 'PostMeter Setup 9.9.9.exe',
+        file: 'PostMeter-Setup-9.9.9.exe',
         sizeBytes: stat.size,
         sha256: hash,
         platform: 'windows',
         type: 'exe'
       }]
     }));
-    await fs.writeFile(checksumPath, `${hash}  PostMeter Setup 9.9.9.exe\n`);
+    await fs.writeFile(checksumPath, `${hash}  PostMeter-Setup-9.9.9.exe\n`);
 
     await assert.rejects(() => validateReleaseManifest({
       releaseDir: tempDir,
@@ -230,7 +231,7 @@ test('release validation requires and verifies electron-updater metadata for req
       expectedVersion: '9.9.9'
     }), /Missing electron-updater metadata file: latest\.yml/);
 
-    await writeUpdaterMetadata(tempDir, 'latest.yml', 'PostMeter Setup 9.9.9.exe', '9.9.9');
+    await writeUpdaterMetadata(tempDir, 'latest.yml', 'PostMeter-Setup-9.9.9.exe', '9.9.9');
     await assert.doesNotReject(() => validateReleaseManifest({
       releaseDir: tempDir,
       manifestFile: manifestPath,
@@ -244,9 +245,9 @@ test('release validation requires and verifies electron-updater metadata for req
     await fs.writeFile(path.join(tempDir, 'latest.yml'), [
       'version: 9.9.9',
       'files:',
-      '  - url: PostMeter Setup 9.9.9.exe',
+      '  - url: PostMeter-Setup-9.9.9.exe',
       '    sha512: stale',
-      'path: PostMeter Setup 9.9.9.exe',
+      'path: PostMeter-Setup-9.9.9.exe',
       'sha512: stale',
       ''
     ].join('\n'));

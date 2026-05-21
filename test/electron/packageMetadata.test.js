@@ -34,6 +34,7 @@ test('package metadata declares canonical release repository and desktop protoco
     entry.from === 'native/windows-sandbox-helper/bin/PostMeterWindowsSandboxHelper.exe'
     && entry.to === 'native/windows/PostMeterWindowsSandboxHelper.exe'
   )));
+  assert.equal(packageJson.build.nsis.artifactName, '${productName}-Setup-${version}.${ext}');
   assert.equal(packageJson.build.nsis.include, 'build/installer.nsh');
   assert.ok(packageJson.build.protocols.some((protocol) => protocol.schemes.includes('postmeter')));
   assert.match(installerInclude, /WriteRegStr HKCU "Software\\Classes\\postmeter"/);
