@@ -88,6 +88,39 @@ test('workspace panel hides decrypt action for plaintext workspaces', () => {
   assert.equal(elements.get('encryptWorkspacePanelButton').disabled, false);
 });
 
+test('workspace sidebar renders runner and performance tree nodes with actions and empty states', () => {
+  const { elements, sandbox, state } = loadWorkspaceSidebarTreeController({
+    runners: [{ id: 'runner-1', name: 'Smoke Runner' }],
+    performanceTests: [{ id: 'perf-1', name: 'Latency Test', type: 'latency' }]
+  });
+
+  sandbox.renderRunners();
+  sandbox.renderPerformanceTests();
+
+  const runnerNode = elements.get('runnersList').children[0];
+  const performanceNode = elements.get('performanceList').children[0];
+  assert.equal(runnerNode.className, 'tree-node runner-node');
+  assert.equal(runnerNode.children[0].textContent, 'RUN Smoke Runner');
+  assert.deepEqual(fromVm(runnerNode.children[0].contextMenuItems.map((item) => item[0])), ['Rename', 'Duplicate', 'Export', 'Delete']);
+  runnerNode.children[0].listeners.click[0]();
+  assert.deepEqual(fromVm(state.selected), [['runner', 'runner-1']]);
+
+  assert.equal(performanceNode.className, 'tree-node performance-node');
+  assert.equal(performanceNode.children[0].textContent, 'PERF Latency Test');
+  assert.deepEqual(fromVm(performanceNode.children[0].contextMenuItems.map((item) => item[0])), ['Rename', 'Duplicate', 'Export', 'Delete']);
+  performanceNode.children[0].listeners.click[0]();
+  assert.deepEqual(fromVm(state.selected.at(-1)), ['performance', 'perf-1']);
+
+  sandbox.workspace.runners = [];
+  sandbox.workspace.performanceTests = [];
+  elements.get('runnersList').children = [];
+  elements.get('performanceList').children = [];
+  sandbox.renderRunners();
+  sandbox.renderPerformanceTests();
+  assert.equal(elements.get('runnersList').children[0].className, 'empty-state runner-empty-sidebar');
+  assert.equal(elements.get('performanceList').children[0].className, 'empty-state performance-empty-sidebar');
+});
+
 function loadWorkspaceSidebarController(workspaceItem) {
   const elements = createWorkspacePanelElements();
   const sourcePath = path.join(__dirname, '../../src/renderer/features/workspaceSidebarController.js');
@@ -120,6 +153,64 @@ function loadWorkspaceSidebarController(workspaceItem) {
   return { elements, sandbox };
 }
 
+function loadWorkspaceSidebarTreeController(workspace) {
+  const elements = new Map([
+    ['runnersList', createElement()],
+    ['performanceList', createElement()]
+  ]);
+  const state = { selected: [] };
+  const sandbox = {
+    $: (id) => elements.get(id) || null,
+    activeMainPanel: '',
+    activePerformanceTestId: '',
+    activeRunnerConfigId: '',
+    appendSidebarTreeRow(wrapper, button, payload) {
+      wrapper.payload = payload;
+      wrapper.append(button);
+    },
+    appendSidebarTreeRows(parent, rows) {
+      parent.append(...rows);
+    },
+    attachTreeContextMenu(button, items) {
+      button.contextMenuItems = items;
+    },
+    document: { createElement },
+    ensureWorkspaceRunners() {
+      sandbox.workspace.runners ||= [];
+      return sandbox.workspace.runners;
+    },
+    normalizeWorkspacePerformanceTests: (tests) => tests,
+    performanceTestDisplayName: (item) => item?.name || 'Untitled Performance Test',
+    RENDERER_PERFORMANCE_TEST_TYPES: ['diagnosis', 'latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'],
+    runnerDisplayName: (item) => item?.name || 'Untitled Runner',
+    selectPerformanceTestItem: (id) => state.selected.push(['performance', id]),
+    selectRunnerItem: (id) => state.selected.push(['runner', id]),
+    treeButton(text, active, kind, options = {}) {
+      const button = createElement();
+      button.textContent = `${kind} ${text}`;
+      button.dataset = { ...options };
+      button.className = active ? 'active' : '';
+      return button;
+    },
+    workspace
+  };
+  for (const name of [
+    'deletePerformanceTest',
+    'deleteRunner',
+    'duplicatePerformanceTest',
+    'duplicateRunner',
+    'exportActivePerformanceTest',
+    'exportRunnerDefinition',
+    'renamePerformanceTest',
+    'renameRunner'
+  ]) {
+    sandbox[name] = () => {};
+  }
+  const sourcePath = path.join(__dirname, '../../src/renderer/features/workspaceSidebarController.js');
+  vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), sandbox, { filename: sourcePath });
+  return { elements, sandbox, state };
+}
+
 function createWorkspacePanelElements() {
   return new Map([
     ['workspaceMainTitle', createElement()],
@@ -131,6 +222,10 @@ function createWorkspacePanelElements() {
     ['resetWorkspaceEncryptionKeyPanelButton', createElement()],
     ['workspaceSummary', createElement()]
   ]);
+}
+
+function fromVm(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function createElement() {
@@ -145,8 +240,14 @@ function createElement() {
     hidden: false,
     tabIndex: 0,
     textContent: '',
+    className: '',
+    listeners: {},
     append(...children) {
       this.children.push(...children);
+    },
+    addEventListener(type, listener) {
+      this.listeners[type] ||= [];
+      this.listeners[type].push(listener);
     },
     removeAttribute(name) {
       delete this.attributes[name];

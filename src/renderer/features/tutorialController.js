@@ -424,7 +424,7 @@ function positionTutorialCoach(coach, targetRect, step = null) {
   const height = rect.height || 180;
   let left;
   let top;
-  if (!targetRect && step?.coachPlacement === 'top-left') {
+  if (step?.coachPlacement === 'top-left') {
     left = margin;
     top = margin;
   } else if (!targetRect) {

@@ -99,7 +99,7 @@
     }).join('\n');
   }
 
-  global.PostMeterResponseFormatting = {
+  const exported = {
     formatBody,
     formatUrlEncodedBody,
     formatMarkupBody,
@@ -108,4 +108,9 @@
     looksLikeUrlEncoded,
     prettyMarkup
   };
-})(window);
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = exported;
+  }
+  global.PostMeterResponseFormatting = exported;
+})(typeof window !== 'undefined' ? window : globalThis);
