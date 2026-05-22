@@ -11,8 +11,6 @@ const {
 } = require('./seccompPolicy');
 
 const OS_SANDBOX_MODES = Object.freeze({
-  AUTO: 'auto',
-  OFF: 'off',
   REQUIRED: 'required'
 });
 
@@ -98,7 +96,7 @@ const MAX_PROBE_DIAGNOSTICS = 20;
 const MAX_PROBE_OUTPUT_CHARS = 4000;
 
 function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options = {}) {
-  const mode = normalizeOsSandboxMode(options.osSandboxMode);
+  const mode = OS_SANDBOX_MODES.REQUIRED;
   const platform = options.platform || process.platform;
   const workerTransportArg = platform === 'win32'
     ? SCRIPT_WORKER_FILE_TRANSPORT_ARG
@@ -114,7 +112,6 @@ function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options =
         workerTransportArg
       ],
       env,
-      mode,
       readOnlyPaths: scriptWorkerReadOnlyPaths(workerPath),
       bubblewrapPath: options.bubblewrapPath,
       macosSandboxExecPath: options.macosSandboxExecPath,
@@ -132,16 +129,9 @@ function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options =
   }
 
   if (!sandbox.sandboxed) {
-    const launch = {
-      sandboxed: false,
-      backend: OS_SANDBOX_BACKENDS.NONE,
-      transport: 'ipc',
-      workerPath,
-      execArgv,
-      env
-    };
-    recordOsSandboxSelection(options, launch);
-    return launch;
+    const error = new Error('OS-level script sandboxing is required but launch was not sandboxed.');
+    recordOsSandboxLaunchFailure(options, error, mode);
+    throw error;
   }
 
   const launch = {
@@ -153,25 +143,12 @@ function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options =
 }
 
 function createOsSandboxedProcessLaunch(options = {}) {
-  const mode = normalizeOsSandboxMode(options.mode);
   const platform = options.platform || process.platform;
-  if (mode === OS_SANDBOX_MODES.OFF) {
-    return {
-      sandboxed: false,
-      backend: OS_SANDBOX_BACKENDS.NONE,
-      command: options.executablePath || process.execPath,
-      args: options.args || [],
-      env: options.env || {}
-    };
-  }
 
   if (platform === 'darwin') {
     const sandboxExecPath = findMacosSandboxExec(options.macosSandboxExecPath, platform);
     if (!sandboxExecPath) {
-      if (mode === OS_SANDBOX_MODES.REQUIRED) {
-        throw new Error('OS-level script sandboxing is required but no macOS seatbelt launcher was found.');
-      }
-      return unsandboxedLaunch(options);
+      throw new Error('OS-level script sandboxing is required but no macOS seatbelt launcher was found.');
     }
     const executablePath = realPathIfExists(options.executablePath || process.execPath);
     const readOnlyPaths = [
@@ -184,10 +161,7 @@ function createOsSandboxedProcessLaunch(options = {}) {
       probeArgs: options.probeArgs,
       readOnlyPaths
     })) {
-      if (mode === OS_SANDBOX_MODES.REQUIRED) {
-        throw new Error('OS-level script sandboxing is required but the macOS seatbelt launcher failed its functional probe.');
-      }
-      return unsandboxedLaunch(options);
+      throw new Error('OS-level script sandboxing is required but the macOS seatbelt launcher failed its functional probe.');
     }
     const privateTempDir = createPrivateTempDir('postmeter-macos-sandbox-');
     return {
@@ -212,10 +186,7 @@ function createOsSandboxedProcessLaunch(options = {}) {
   if (platform === 'win32') {
     const helperPath = findWindowsSandboxHelper(options.windowsSandboxHelperPath, platform);
     if (!helperPath) {
-      if (mode === OS_SANDBOX_MODES.REQUIRED) {
-        throw new Error('OS-level script sandboxing is required but no Windows AppContainer helper was configured.');
-      }
-      return unsandboxedLaunch(options);
+      throw new Error('OS-level script sandboxing is required but no Windows AppContainer helper was configured.');
     }
     const executablePath = realPathIfExists(options.executablePath || process.execPath);
     const readOnlyPaths = windowsReadOnlyPaths([
@@ -229,10 +200,7 @@ function createOsSandboxedProcessLaunch(options = {}) {
       probeArgs: options.probeArgs,
       readOnlyPaths
     })) {
-      if (mode === OS_SANDBOX_MODES.REQUIRED) {
-        throw new Error('OS-level script sandboxing is required but the Windows AppContainer helper failed its functional probe.');
-      }
-      return unsandboxedLaunch(options);
+      throw new Error('OS-level script sandboxing is required but the Windows AppContainer helper failed its functional probe.');
     }
     const privateTempDir = createWindowsPrivateTempDir(executablePath, 'postmeter-windows-sandbox-');
     return {
@@ -251,18 +219,12 @@ function createOsSandboxedProcessLaunch(options = {}) {
   }
 
   if (platform !== 'linux') {
-    if (mode === OS_SANDBOX_MODES.REQUIRED) {
-      throw new Error(`OS-level script sandboxing is required but no backend is implemented for ${platform}.`);
-    }
-    return unsandboxedLaunch(options);
+    throw new Error(`OS-level script sandboxing is required but no backend is implemented for ${platform}.`);
   }
 
   const bubblewrapPath = findBubblewrap(options.bubblewrapPath);
   if (!bubblewrapPath) {
-    if (mode === OS_SANDBOX_MODES.REQUIRED) {
-      throw new Error('OS-level script sandboxing is required but bubblewrap was not found.');
-    }
-    return unsandboxedLaunch(options);
+    throw new Error('OS-level script sandboxing is required but bubblewrap was not found.');
   }
 
   const executablePath = realPathIfExists(options.executablePath || process.execPath);
@@ -275,10 +237,7 @@ function createOsSandboxedProcessLaunch(options = {}) {
       ...(options.readOnlyPaths || [])
     ]
   })) {
-    if (mode === OS_SANDBOX_MODES.REQUIRED) {
-      throw new Error('OS-level script sandboxing is required but bubblewrap failed its functional probe.');
-    }
-    return unsandboxedLaunch(options);
+    throw new Error('OS-level script sandboxing is required but bubblewrap failed its functional probe.');
   }
   const seccompPolicy = createLinuxSeccompPolicy();
   return {
@@ -328,9 +287,7 @@ function recordOsSandboxLaunchFailure(options = {}, error, mode) {
     type: 'sandbox.os-backend.launch.failed',
     level: 'error',
     outcome: 'failed',
-    failureCode: mode === OS_SANDBOX_MODES.REQUIRED
-      ? 'os_sandbox_backend_required_unavailable'
-      : 'os_sandbox_backend_launch_failed',
+    failureCode: 'os_sandbox_backend_required_unavailable',
     fields: {
       backend: OS_SANDBOX_BACKENDS.NONE,
       mode,
@@ -342,7 +299,7 @@ function recordOsSandboxLaunchFailure(options = {}, error, mode) {
 }
 
 function osSandboxStatus(options = {}) {
-  const mode = normalizeOsSandboxMode(options.mode);
+  const mode = OS_SANDBOX_MODES.REQUIRED;
   const platform = options.platform || process.platform;
   const bubblewrapPath = platform === 'linux' ? findBubblewrap(options.bubblewrapPath) : '';
   const macosSandboxExecPath = platform === 'darwin' ? findMacosSandboxExec(options.macosSandboxExecPath, platform) : '';
@@ -405,16 +362,6 @@ function macosSandboxSupported(macosSandboxExecPath, platform, options = {}) {
     platform !== process.platform
     || macosSandboxExecUsable(macosSandboxExecPath, options)
   );
-}
-
-function normalizeOsSandboxMode(value) {
-  if (value === OS_SANDBOX_MODES.OFF || value === OS_SANDBOX_MODES.REQUIRED || value === OS_SANDBOX_MODES.AUTO) {
-    return value;
-  }
-  if (process.env.POSTMETER_REQUIRE_OS_SANDBOX === '1') {
-    return OS_SANDBOX_MODES.REQUIRED;
-  }
-  return OS_SANDBOX_MODES.AUTO;
 }
 
 function findBubblewrap(explicitPath) {
@@ -980,16 +927,6 @@ function sanitizeProbeOutput(value) {
 
 function shortHash(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 12);
-}
-
-function unsandboxedLaunch(options = {}) {
-  return {
-    sandboxed: false,
-    backend: OS_SANDBOX_BACKENDS.NONE,
-    command: options.executablePath || process.execPath,
-    args: options.args || [],
-    env: options.env || {}
-  };
 }
 
 function bubblewrapArgs(options) {
@@ -1561,7 +1498,6 @@ module.exports = {
   cleanupPrivateTempDir,
   consumeOsSandboxProbeDiagnostics,
   osSandboxStatus,
-  normalizeOsSandboxMode,
   prepareSeccompStdio,
   scriptWorkerAppReadOnlyPaths,
   scriptWorkerRuntimeReadOnlyPaths

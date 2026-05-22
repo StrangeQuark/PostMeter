@@ -12,7 +12,7 @@ PostMeter is a standalone local desktop app. It does not require a PostMeter acc
 
 Scripts must not receive direct access to the host filesystem, process environment, child processes, shell, Electron APIs, renderer DOM, native modules, or raw sockets. Postman-compatible APIs such as `pm.sendRequest`, cookie helpers, package loading, visualizers, vault access, GraphQL hooks, and gRPC hooks are implemented through parent-owned brokers and validators.
 
-Linux script workers use `bubblewrap` plus a dangerous-syscall seccomp policy when available or required. Windows script workers use the release-owned AppContainer helper, and macOS script workers use a seatbelt `sandbox-exec` profile. Platform-equivalent OS sandbox coverage is tracked separately in `docs/os-sandbox-platform-matrix.json` and must stay backed by native runner source and packaged validation evidence.
+Linux script workers require `bubblewrap` plus a dangerous-syscall seccomp policy. Windows script workers require the release-owned AppContainer helper, and macOS script workers require a seatbelt `sandbox-exec` profile. Script execution fails closed when the platform backend is unavailable or fails its functional probe. Platform-equivalent OS sandbox coverage is tracked separately in `docs/os-sandbox-platform-matrix.json` and must stay backed by native runner source and packaged validation evidence.
 
 ## Vault And Secrets
 

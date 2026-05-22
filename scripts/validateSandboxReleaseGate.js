@@ -144,7 +144,6 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /platform:\s*linux/,
   /Prepare native helpers/,
   /Source-tree sandbox runtime validation/,
-  /POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP:\s*\$\{\{ matrix\.allow_os_skip \}\}/,
   /npm run dist:linux/,
   /npm run release:validate:packaged-smoke/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,

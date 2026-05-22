@@ -78,8 +78,6 @@ jobs:
 
       - name: Sandbox runtime validation
         run: npm run sandbox:validate
-        env:
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
 
       - name: OS sandbox platform matrix validation
         run: npm run sandbox:platform:validate
@@ -124,8 +122,6 @@ jobs:
 
       - name: Packaged sandbox validation
         run: xvfb-run -a npm run sandbox:validate:packaged
-        env:
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
 
       - name: Upload Linux validation logs
         if: failure()
@@ -168,7 +164,6 @@ jobs:
             sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
             protocol_command: echo "No protocol registration validation required for linux."
             ci_no_sandbox: "1"
-            allow_os_skip: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -190,8 +185,6 @@ jobs:
 
       - name: Source-tree sandbox runtime validation
         run: npm run sandbox:validate
-        env:
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
 
       - name: OS sandbox platform matrix validation
         run: npm run sandbox:platform:validate
@@ -213,7 +206,6 @@ jobs:
       - name: Packaged sandbox validation
         run: ${{ matrix.sandbox_command }}
         env:
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
           POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
 
       - name: Protocol registration validation

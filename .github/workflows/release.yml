@@ -32,7 +32,6 @@ jobs:
             packaged_sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
             protocol_command: echo "No protocol registration validation required for linux."
             ci_no_sandbox: "1"
-            allow_os_skip: "1"
           - platform: windows
             runner: windows-latest
             command: npm run dist:win
@@ -91,8 +90,6 @@ jobs:
 
       - name: Sandbox runtime validation
         run: npm run sandbox:validate
-        env:
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
 
       - name: OS sandbox platform matrix validation
         run: npm run sandbox:platform:validate
@@ -157,7 +154,6 @@ jobs:
         run: ${{ matrix.packaged_sandbox_command }}
         env:
           POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
 
       - name: Protocol registration validation
         run: ${{ matrix.protocol_command }}

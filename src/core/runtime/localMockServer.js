@@ -99,7 +99,6 @@ async function handleLocalMockRequest(collection, incomingRequest, options = {})
     scriptExecution = await runPostmanScriptIsolated(scriptText, context, {
       filename: options.filename || 'postmeter-local-mock.js',
       mockStateStore: stateStore,
-      osSandboxMode: options.osSandboxMode,
       requireNodePermission: options.requireNodePermission,
       sandboxPackages: options.sandboxPackages || [],
       timeoutMillis: options.timeoutMillis,
