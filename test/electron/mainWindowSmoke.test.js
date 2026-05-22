@@ -275,11 +275,12 @@ test('numpad zoom levels clamp to supported bounds', () => {
 
 test('startup smoke probe prevents renderer shutdown from overwriting marker save', async () => {
   let executedScript = '';
+  const savedMarkers = [];
   const mainWindow = {
     webContents: {
       executeJavaScript: async (script) => {
         executedScript = script;
-        return true;
+        return { markerPresent: false };
       }
     }
   };
@@ -287,10 +288,17 @@ test('startup smoke probe prevents renderer shutdown from overwriting marker sav
   await runStartupSmokeProbe({ quit() {} }, mainWindow, {
     POSTMETER_PACKAGED_SMOKE_MARKER: 'marker',
     POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD: ''
+  }, {
+    saveStartupSmokeMarker: async (key, value, result) => savedMarkers.push({ key, value, result })
   });
 
   assert.match(executedScript, /window\.__postmeterSkipWorkspaceShutdownSave = true/);
-  assert.match(executedScript, /window\.postmeter\.workspace\.save\(loaded\.workspace\)/);
+  assert.doesNotMatch(executedScript, /window\.postmeter\.workspace\.save/);
+  assert.deepEqual(savedMarkers, [{
+    key: '__postmeter_packaged_smoke',
+    value: 'marker',
+    result: { markerPresent: false }
+  }]);
   assert.match(executedScript, /releaseChannel/);
   assert.match(executedScript, /missingApi/);
   assert.match(executedScript, /window\.location\.protocol/);

@@ -77,7 +77,7 @@ function createMainWindow(app, options = {}) {
     getShortcuts: options.getKeyboardShortcuts,
     sendAction: options.sendShortcutAction
   });
-  bindSmokeHooks(app, mainWindow, env);
+  bindSmokeHooks(app, mainWindow, env, options);
   const handleLoadFailure = bindStartupLoadFailureHooks(app, mainWindow, env);
   const loadPromise = mainWindow.loadURL(rendererUrl);
   if (loadPromise && typeof loadPromise.catch === 'function') {
@@ -253,7 +253,7 @@ function normalizedRendererNavigationUrl(value) {
   }
 }
 
-function bindSmokeHooks(app, mainWindow, env) {
+function bindSmokeHooks(app, mainWindow, env, options = {}) {
   const isUiWorkflowSmoke = env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
   const isUiRegressionSmoke = env.POSTMETER_UI_REGRESSION_SMOKE === '1';
   const isUiSnapshotSmoke = env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
@@ -263,7 +263,7 @@ function bindSmokeHooks(app, mainWindow, env) {
   const isUiAwsSmoke = env.POSTMETER_UI_AWS_SMOKE === '1';
   if (env.POSTMETER_STARTUP_SMOKE === '1') {
     mainWindow.webContents.once('did-finish-load', () => {
-      runStartupSmokeProbe(app, mainWindow, env)
+      runStartupSmokeProbe(app, mainWindow, env, options)
         .then(() => completeStartupSmoke(app))
         .catch(async (error) => {
           await writeStartupSmokeFailureArtifacts(mainWindow, env, error);
@@ -386,7 +386,7 @@ function bindStartupLoadFailureHooks(app, mainWindow, env) {
   return fail;
 }
 
-async function runStartupSmokeProbe(app, mainWindow, env) {
+async function runStartupSmokeProbe(app, mainWindow, env, options = {}) {
   await validateSmokeUserDataPath(app, env);
   const markerKey = '__postmeter_packaged_smoke';
   const markerValue = env.POSTMETER_PACKAGED_SMOKE_MARKER || 'startup-smoke';
@@ -398,7 +398,7 @@ async function runStartupSmokeProbe(app, mainWindow, env) {
     pathname: APP_RENDERER_PATHNAME,
     protocol: `${APP_PROTOCOL_SCHEME}:`
   };
-  await mainWindow.webContents.executeJavaScript(`
+  const result = await mainWindow.webContents.executeJavaScript(`
     (async function () {
       const expectedRenderer = ${JSON.stringify(expectedRenderer)};
       if (window.location.protocol !== expectedRenderer.protocol
@@ -441,19 +441,17 @@ async function runStartupSmokeProbe(app, mainWindow, env) {
       const key = ${JSON.stringify(markerKey)};
       const marker = ${JSON.stringify(markerValue)};
       const existing = loaded.workspace.globals.find((item) => item.key === key);
-      if (${JSON.stringify(expectReload)} && (!existing || existing.value !== marker)) {
+      var markerPresent = existing && existing.value === marker;
+      if (${JSON.stringify(expectReload)} && !markerPresent) {
         throw new Error('Packaged smoke workspace persistence did not survive restart.');
       }
-      if (!${JSON.stringify(expectReload)}) {
-        const globals = loaded.workspace.globals.filter((item) => item.key !== key);
-        globals.push({ enabled: true, key, value: marker });
-        loaded.workspace.globals = globals;
-        await window.postmeter.workspace.save(loaded.workspace);
-      }
       window.__postmeterSkipWorkspaceShutdownSave = true;
-      return true;
+      return { markerPresent };
     })();
   `, true);
+  if (!expectReload && typeof options.saveStartupSmokeMarker === 'function') {
+    await options.saveStartupSmokeMarker(markerKey, markerValue, result);
+  }
   await new Promise((resolve) => setTimeout(resolve, 100));
 }
 

@@ -519,7 +519,7 @@ function packagedSmokeLaunchMode(env = process.env, platform = process.platform)
   if (['0', 'false', 'no', 'renderer', 'window'].includes(value)) {
     return 'renderer';
   }
-  return platform === 'win32' ? 'node-main-process' : 'renderer';
+  return platform === 'win32' || platform === 'darwin' ? 'node-main-process' : 'renderer';
 }
 
 function packagedSmokeLaunchArgs(executable, options = {}) {
