@@ -99,7 +99,7 @@ test('packaged smoke writes validation logs when an artifact directory is config
   }
 });
 
-test('packaged smoke uses Electron node mode for Windows packaged validation', async () => {
+test('packaged smoke uses Electron node mode for Windows and macOS packaged validation', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-app-resource-'));
   try {
     const executable = path.join(directory, 'PostMeter.exe');
@@ -108,8 +108,10 @@ test('packaged smoke uses Electron node mode for Windows packaged validation', a
     await fs.writeFile(path.join(resources, 'app.asar'), '');
 
     assert.equal(packagedSmokeLaunchMode({}, 'win32'), 'node-main-process');
+    assert.equal(packagedSmokeLaunchMode({}, 'darwin'), 'node-main-process');
     assert.equal(packagedSmokeLaunchMode({}, 'linux'), 'renderer');
     assert.equal(shouldUseMainProcessPackagedSmoke({}, 'win32'), true);
+    assert.equal(shouldUseMainProcessPackagedSmoke({}, 'darwin'), true);
     assert.equal(packagedSmokeStdioMode('win32', 'renderer'), 'ignore');
     assert.equal(packagedSmokeStdioMode('win32', 'node-main-process'), undefined);
     assert.equal(packagedSmokeTimeoutMillis('', 'win32'), 90_000);

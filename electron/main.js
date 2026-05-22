@@ -121,7 +121,8 @@ function createWindow() {
   mainWindow = createMainWindow(app, {
     preloadPath: path.join(__dirname, 'app-shell', 'preload.js'),
     getKeyboardShortcuts: () => workspace?.settings?.shortcuts || {},
-    sendShortcutAction: sendMenuAction
+    sendShortcutAction: sendMenuAction,
+    saveStartupSmokeMarker
   });
 }
 
@@ -278,6 +279,20 @@ async function saveWorkspaceWithAvailableKey(nextWorkspace) {
   const nextSettings = await saveLocalSettings(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
   const savedWorkspace = await workspaceStore.save(workspacePayloadForPersistence(nextWorkspace, nextSettings));
   return hydrateWorkspaceSettings(savedWorkspace);
+}
+
+async function saveStartupSmokeMarker(key, value) {
+  if (!workspace || typeof workspace !== 'object') {
+    throw new Error('Startup smoke workspace is unavailable.');
+  }
+  const globals = Array.isArray(workspace.globals) ? workspace.globals : [];
+  workspace = await saveWorkspace({
+    ...workspace,
+    globals: [
+      ...globals.filter((item) => item.key !== key),
+      { enabled: true, key, value }
+    ]
+  });
 }
 
 function workspacePayloadForPersistence(nextWorkspace, nextSettings) {

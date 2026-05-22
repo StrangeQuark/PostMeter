@@ -13,12 +13,21 @@ const PACKAGED_SANDBOX_RUNTIME_CLI_PARTS = Object.freeze([
 ]);
 
 function packagedAppResourcePath(executable, relativeParts = []) {
-  const resourcesPath = path.join(path.dirname(path.resolve(executable)), 'resources');
+  const resourcesPath = packagedResourcesPath(executable);
   const appAsar = path.join(resourcesPath, 'app.asar');
   const appRoot = fs.existsSync(appAsar)
     ? appAsar
     : path.join(resourcesPath, 'app');
   return path.join(appRoot, ...relativeParts);
+}
+
+function packagedResourcesPath(executable) {
+  const resolved = path.resolve(executable);
+  const executableDir = path.dirname(resolved);
+  if (path.basename(executableDir) === 'MacOS' && path.basename(path.dirname(executableDir)) === 'Contents') {
+    return path.join(path.dirname(executableDir), 'Resources');
+  }
+  return path.join(executableDir, 'resources');
 }
 
 function packagedStartupSmokeNodePath(executable) {
@@ -31,6 +40,7 @@ function packagedSandboxRuntimeCliPath(executable) {
 
 module.exports = {
   packagedAppResourcePath,
+  packagedResourcesPath,
   packagedSandboxRuntimeCliPath,
   packagedStartupSmokeNodePath,
   PACKAGED_SANDBOX_RUNTIME_CLI_PARTS,
