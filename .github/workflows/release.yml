@@ -19,7 +19,7 @@ jobs:
           - platform: linux
             runner: ubuntu-latest
             command: npm run dist:linux
-            install_dependencies_command: sudo apt-get update && sudo apt-get install -y bubblewrap
+            install_dependencies_command: bash scripts/ci/install-linux-sandbox-backend.sh
             prepare_native_helpers_command: echo "No native helper build required for linux."
             source_smoke_command: |
               xvfb-run -a npm run test:smoke

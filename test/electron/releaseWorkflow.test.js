@@ -14,7 +14,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assertNoPlatformSpecificSkippedSteps(workflowDocument, 'ci.yml');
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /npm ci/);
-  assert.match(workflow, /apt-get install -y bubblewrap/);
+  assert.match(workflow, /bash scripts\/ci\/install-linux-sandbox-backend\.sh/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
@@ -79,7 +79,7 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run dist:mac/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run electron:version/);
-  assert.match(workflow, /apt-get install -y bubblewrap/);
+  assert.match(workflow, /bash scripts\/ci\/install-linux-sandbox-backend\.sh/);
   assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run postman:parity:validate/);
@@ -148,6 +148,7 @@ test('native release validation workflow exercises release evidence without publ
   assertWorkflowRunsOnlyOnMainPullRequests(workflowDocument, 'release-validation.yml', { workflowDispatch: true });
   assert.match(workflow, /contents:\s*read/);
   assert.match(workflow, /platform:\s*linux/);
+  assert.match(workflow, /bash scripts\/ci\/install-linux-sandbox-backend\.sh/);
   assert.match(workflow, /platform:\s*windows/);
   assert.match(workflow, /platform:\s*macos/);
   assert.match(workflow, /npm run dist:linux/);
@@ -251,6 +252,17 @@ test('sandbox validation scripts are timeout bounded instead of using unbounded 
   assert.match(packagedValidation, /POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS/);
   assert.match(packagedValidation, /redactSmokeOutputText/);
   assert.match(packagedValidation, /redactForOutput/);
+});
+
+test('Linux sandbox backend setup hardens bubblewrap before validation', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const setupScript = await fs.readFile(path.join(root, 'scripts', 'ci', 'install-linux-sandbox-backend.sh'), 'utf8');
+
+  assert.match(setupScript, /apt-get install -y bubblewrap apparmor apparmor-utils/);
+  assert.match(setupScript, /profile bwrap \$\{BWRAP_PATH\} flags=\(unconfined\)/);
+  assert.match(setupScript, /userns,/);
+  assert.match(setupScript, /apparmor_parser -r \/etc\/apparmor\.d\/bwrap/);
+  assert.match(setupScript, /--unshare-all --unshare-user --disable-userns --assert-userns-disabled/);
 });
 
 function assertWorkflowHasRunStep(workflow, pattern, workflowName) {
