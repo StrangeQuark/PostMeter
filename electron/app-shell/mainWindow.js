@@ -264,7 +264,7 @@ function bindSmokeHooks(app, mainWindow, env) {
   if (env.POSTMETER_STARTUP_SMOKE === '1') {
     mainWindow.webContents.once('did-finish-load', () => {
       runStartupSmokeProbe(app, mainWindow, env)
-        .then(() => app.quit())
+        .then(() => completeStartupSmoke(app))
         .catch(async (error) => {
           await writeStartupSmokeFailureArtifacts(mainWindow, env, error);
           console.error(redactUiSmokeText(error.stack || error.message || String(error)));
@@ -329,6 +329,14 @@ function bindSmokeHooks(app, mainWindow, env) {
       timeoutMillis: 20_000
     });
   }
+}
+
+function completeStartupSmoke(app) {
+  if (typeof app?.exit === 'function') {
+    app.exit(0);
+    return;
+  }
+  app?.quit?.();
 }
 
 function bindStartupLoadFailureHooks(app, mainWindow, env) {
@@ -1095,6 +1103,7 @@ module.exports = {
   classifyNumpadZoomShortcut,
   createMainWindow,
   expectedDefaultUserDataRoot,
+  completeStartupSmoke,
   nextZoomLevel,
   nextNumpadZoomLevel,
   captureUiSmokeDomState,
