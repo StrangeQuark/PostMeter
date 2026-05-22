@@ -12,6 +12,7 @@ const {
   captureUiSmokeDomState,
   classifyKeyboardShortcutAction,
   classifyNumpadZoomShortcut,
+  completeStartupSmoke,
   expectedDefaultUserDataRoot,
   isPathInside,
   nextNumpadZoomLevel,
@@ -300,6 +301,17 @@ test('startup smoke probe prevents renderer shutdown from overwriting marker sav
   assert.match(executedScript, new RegExp(APP_PROTOCOL_HOST));
   assert.match(executedScript, new RegExp(APP_RENDERER_PATHNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(executedScript, new RegExp(APP_RENDERER_CSP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('startup smoke exits directly after success to avoid macOS app lifecycle hangs', () => {
+  const calls = [];
+
+  completeStartupSmoke({
+    exit: (code) => calls.push(['exit', code]),
+    quit: () => calls.push(['quit'])
+  });
+
+  assert.deepEqual(calls, [['exit', 0]]);
 });
 
 test('packaged startup smoke writes failure logs and screenshots when configured', async () => {
