@@ -123,6 +123,10 @@ function assertOauth2AdvancedMarkup(source, ids) {
   const grantIndex = source.indexOf(`id="${startId}"`);
   assert.notEqual(grantIndex, -1, `Expected ${startId} to exist.`);
 
+  const configureStart = source.lastIndexOf('<details class="auth-advanced auth-configure-token auth-wide">', grantIndex);
+  assert.notEqual(configureStart, -1, `Expected ${ids.grantType} OAuth 2.0 configure-token disclosure to exist.`);
+  assert.match(source.slice(configureStart, grantIndex), /<summary>Configure New Token<\/summary>/);
+
   const advancedStart = source.indexOf('<details class="auth-advanced auth-wide">', grantIndex);
   assert.notEqual(advancedStart, -1, `Expected ${ids.grantType} OAuth 2.0 advanced disclosure to exist.`);
 
@@ -135,6 +139,9 @@ function assertOauth2AdvancedMarkup(source, ids) {
   for (const id of ids.main) {
     assert.match(visibleSource, new RegExp(`id="${id}"`));
   }
+  if (ids.mainOrder) {
+    assertIdsAppearInOrder(visibleSource, ids.mainOrder, `${ids.grantType} OAuth 2.0 configure-token field`);
+  }
   for (const id of ids.advanced) {
     assert.doesNotMatch(visibleSource, new RegExp(`id="${id}"`), `${id} should be inside the OAuth 2.0 advanced disclosure.`);
     assert.match(advancedSource, new RegExp(`id="${id}"`));
@@ -146,6 +153,16 @@ function assertOauth2AdvancedMarkup(source, ids) {
   assert.match(advancedSource, /Refresh Request/);
   if (ids.advanced.includes('clearOauthCookiesButton')) {
     assert.match(advancedSource, /Clear cookies/);
+  }
+}
+
+function assertIdsAppearInOrder(source, ids, label) {
+  let previous = -1;
+  for (const id of ids) {
+    const index = source.indexOf(`id="${id}"`);
+    assert.ok(index >= 0, `${label} should include ${id}`);
+    assert.ok(index > previous, `${id} should appear after the previous ${label}`);
+    previous = index;
   }
 }
 
@@ -371,9 +388,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.doesNotMatch(indexSource, />User Code</);
   assert.doesNotMatch(indexSource, />Verification URL</);
   assert.doesNotMatch(indexSource, />Start Device Flow</);
-  assert.doesNotMatch(indexSource, />Cancel OAuth</);
   assert.doesNotMatch(indexSource, /id="startDeviceFlowButton"/);
-  assert.doesNotMatch(indexSource, /id="cancelOauthFlowButton"/);
+  assert.match(indexSource, />Cancel OAuth</);
+  assert.match(indexSource, /id="cancelOauthFlowButton"/);
   assert.deepEqual(selectOptionValues(indexSource, 'authDigestAlgorithmSelect'), [
     'MD5',
     'MD5-sess',
@@ -477,19 +494,33 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     main: [
       'authOauthTokenNameInput',
       'authOauthGrantTypeSelect',
-      'authOauthCallbackUrlInput',
-      'authOauthAuthorizeUsingBrowserInput',
-      'authOauthAuthorizationUrlInput',
-      'authOauthTokenUrlInput',
+      'authOauthCodeChallengeMethodSelect',
+      'authOauthClientAuthenticationSelect',
       'authOauthClientIdInput',
       'authOauthClientSecretInput',
       'authOauthUsernameInput',
       'authOauthPasswordInput',
+      'authOauthAuthorizationUrlInput',
+      'authOauthTokenUrlInput',
+      'authOauthCallbackUrlInput',
+      'authOauthAuthorizeUsingBrowserInput',
       'authOauthScopesInput',
       'authOauthStateInput',
+      'authOauthCodeVerifierInput'
+    ],
+    mainOrder: [
+      'authOauthTokenNameInput',
+      'authOauthGrantTypeSelect',
       'authOauthCodeChallengeMethodSelect',
-      'authOauthCodeVerifierInput',
-      'authOauthClientAuthenticationSelect'
+      'authOauthClientAuthenticationSelect',
+      'authOauthClientIdInput',
+      'authOauthClientSecretInput',
+      'authOauthAuthorizationUrlInput',
+      'authOauthTokenUrlInput',
+      'authOauthCallbackUrlInput',
+      'authOauthScopesInput',
+      'authOauthStateInput',
+      'authOauthCodeVerifierInput'
     ],
     advanced: [
       'authOauthRefreshTokenUrlInput',
@@ -506,6 +537,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   });
   assert.match(indexSource, /id="authOauthRefreshTokenInput" type="hidden"/);
   assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="authOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="authOauthClientSecretInput" type="password"/);
   assert.match(indexSource, /id="authOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked/);
   assert.match(indexSource, /id="authOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
   assert.match(indexSource, /id="authOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);
@@ -515,19 +547,33 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     main: [
       'performanceAuthOauthTokenNameInput',
       'performanceAuthOauthGrantTypeSelect',
-      'performanceAuthOauthCallbackUrlInput',
-      'performanceAuthOauthAuthorizeUsingBrowserInput',
-      'performanceAuthOauthAuthorizationUrlInput',
-      'performanceAuthOauthTokenUrlInput',
+      'performanceAuthOauthCodeChallengeMethodSelect',
+      'performanceAuthOauthClientAuthenticationSelect',
       'performanceAuthOauthClientIdInput',
       'performanceAuthOauthClientSecretInput',
       'performanceAuthOauthUsernameInput',
       'performanceAuthOauthPasswordInput',
+      'performanceAuthOauthAuthorizationUrlInput',
+      'performanceAuthOauthTokenUrlInput',
+      'performanceAuthOauthCallbackUrlInput',
+      'performanceAuthOauthAuthorizeUsingBrowserInput',
       'performanceAuthOauthScopesInput',
       'performanceAuthOauthStateInput',
+      'performanceAuthOauthCodeVerifierInput'
+    ],
+    mainOrder: [
+      'performanceAuthOauthTokenNameInput',
+      'performanceAuthOauthGrantTypeSelect',
       'performanceAuthOauthCodeChallengeMethodSelect',
-      'performanceAuthOauthCodeVerifierInput',
-      'performanceAuthOauthClientAuthenticationSelect'
+      'performanceAuthOauthClientAuthenticationSelect',
+      'performanceAuthOauthClientIdInput',
+      'performanceAuthOauthClientSecretInput',
+      'performanceAuthOauthAuthorizationUrlInput',
+      'performanceAuthOauthTokenUrlInput',
+      'performanceAuthOauthCallbackUrlInput',
+      'performanceAuthOauthScopesInput',
+      'performanceAuthOauthStateInput',
+      'performanceAuthOauthCodeVerifierInput'
     ],
     advanced: [
       'performanceAuthOauthRefreshTokenUrlInput',
@@ -543,6 +589,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   });
   assert.match(indexSource, /id="performanceAuthOauthRefreshTokenInput" type="hidden"/);
   assert.doesNotMatch(indexSource, /<span>Refresh Token<\/span>\s*<input id="performanceAuthOauthRefreshTokenInput"/);
+  assert.match(indexSource, /id="performanceAuthOauthClientSecretInput" type="password"/);
   assert.match(indexSource, /id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked/);
   assert.match(indexSource, /id="performanceAuthOauthAutoRefreshTokenInput" type="checkbox"[\s\S]*Auto-refresh Token/);
   assert.match(indexSource, /id="performanceAuthOauthShareTokenInput" type="checkbox"[\s\S]*Share Token/);

@@ -8,6 +8,8 @@ const {
   redactOAuthErrorMessage,
   requestOAuthDeviceAuthorization
 } = require('../../src/core/http/auth');
+const { normalizeAuth } = require('../../src/core/http/authModel');
+const { resolveEnvironmentValue } = require('../../src/core/workspace/environmentResolver');
 
 const OAUTH_CUSTOM_SCHEME = 'postmeter';
 const OAUTH_CALLBACK_TIMEOUT_MILLIS = 5 * 60 * 1000;
@@ -38,6 +40,7 @@ function createOAuthFlowController(options = {}) {
       const redirectUri = redirectStrategy === 'customScheme'
         ? `${OAUTH_CUSTOM_SCHEME}://oauth/callback`
         : (loopbackServer = await createLoopbackCallbackServer(abortController.signal, {
+            redirectHost: loopbackRedirectHostFromAuth(auth, environment),
             onRejectedCallback: () => emitProgress(id, {
               type: 'pkce',
               status: 'callbackRejected',
@@ -345,17 +348,40 @@ function safeOAuthExternalUrl(value) {
   return parsed;
 }
 
+function loopbackRedirectHostFromAuth(auth = {}, environment) {
+  const normalized = normalizeAuth(auth);
+  const configuredRedirectUri = resolveEnvironmentValue(normalized.redirectUri, environment).trim();
+  try {
+    const parsed = new URL(configuredRedirectUri);
+    if (
+      parsed.protocol === 'http:'
+      && isLoopbackOAuthUrl(parsed)
+      && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+    ) {
+      return parsed.hostname;
+    }
+  } catch {
+    // The PKCE session validator reports invalid callback URLs later.
+  }
+  return '127.0.0.1';
+}
+
+function normalizeLoopbackRedirectHost(host) {
+  return host === 'localhost' ? 'localhost' : '127.0.0.1';
+}
+
 async function createLoopbackCallbackServer(signal, options = {}) {
   let server;
   let resolveCallback;
   let rejectCallback;
   let expectedState = '';
+  const redirectHost = normalizeLoopbackRedirectHost(options.redirectHost);
   const callbackPromise = new Promise((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
   });
   server = http.createServer((request, response) => {
-    const requestUrl = new URL(request.url, 'http://127.0.0.1');
+    const requestUrl = new URL(request.url, `http://${redirectHost}`);
     if (requestUrl.pathname !== '/oauth/callback') {
       response.statusCode = 404;
       response.end('Not found');
@@ -378,11 +404,11 @@ async function createLoopbackCallbackServer(signal, options = {}) {
     response.statusCode = 200;
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.end('<!doctype html><title>PostMeter OAuth</title><p>OAuth callback received. Return to PostMeter for the final result.</p>');
-    resolveCallback(`http://127.0.0.1:${server.address().port}${request.url}`);
+    resolveCallback(`http://${redirectHost}:${server.address().port}${request.url}`);
   });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, redirectHost, () => {
       server.off('error', reject);
       resolve();
     });
@@ -393,7 +419,7 @@ async function createLoopbackCallbackServer(signal, options = {}) {
   };
   signal?.addEventListener('abort', onAbort, { once: true });
   return {
-    redirectUri: `http://127.0.0.1:${server.address().port}/oauth/callback`,
+    redirectUri: `http://${redirectHost}:${server.address().port}/oauth/callback`,
     setExpectedState(state) {
       expectedState = String(state || '');
     },

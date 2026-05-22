@@ -402,121 +402,125 @@
                       <option value="query">Request URL</option>
                     </select>
                   </label>
-                  <div class="auth-subsection-title auth-wide">Configure New Token</div>
-                  <label class="field">
-                    <span>Token Name</span>
-                    <input id="performanceAuthOauthTokenNameInput" autocomplete="off">
-                  </label>
-                  <label class="field">
-                    <span>Grant type</span>
-                    <select id="performanceAuthOauthGrantTypeSelect">
-                      <option value="authorizationCode">Authorization Code</option>
-                      <option value="authorizationCodePkce">Authorization Code (With PKCE)</option>
-                      <option value="implicit">Implicit</option>
-                      <option value="passwordCredentials">Password Credentials</option>
-                      <option value="clientCredentials">Client Credentials</option>
-                    </select>
-                  </label>
-                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                    <span>Callback URL</span>
-                    <input id="performanceAuthOauthCallbackUrlInput" autocomplete="off">
-                  </label>
-                  <input id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked aria-hidden="true" tabindex="-1">
-                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                    <span>Auth URL</span>
-                    <input id="performanceAuthOauthAuthorizationUrlInput" autocomplete="off">
-                  </label>
-                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
-                    <span>Access Token URL</span>
-                    <input id="performanceAuthOauthTokenUrlInput" autocomplete="off">
-                  </label>
-                  <input id="performanceAuthOauthDeviceAuthorizationUrlInput" type="hidden">
-                  <input id="performanceAuthOauthRedirectStrategySelect" type="hidden" value="loopback">
-                  <label class="field">
-                    <span>Client ID</span>
-                    <input id="performanceAuthOauthClientIdInput" autocomplete="off">
-                  </label>
-                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
-                    <span>Client Secret</span>
-                    <input id="performanceAuthOauthClientSecretInput" type="text" autocomplete="off">
-                  </label>
-                  <label class="field" data-oauth2-grant-field="passwordCredentials">
-                    <span>Username</span>
-                    <input id="performanceAuthOauthUsernameInput" autocomplete="off">
-                  </label>
-                  <label class="field" data-oauth2-grant-field="passwordCredentials">
-                    <span>Password</span>
-                    <input id="performanceAuthOauthPasswordInput" type="text" autocomplete="off">
-                  </label>
-                  <label class="field">
-                    <span>Scope</span>
-                    <input id="performanceAuthOauthScopesInput" autocomplete="off">
-                  </label>
-                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                    <span>State</span>
-                    <input id="performanceAuthOauthStateInput" autocomplete="off">
-                  </label>
-                  <label class="field" data-oauth2-grant-field="authorizationCodePkce">
-                    <span>Code Challenge Method</span>
-                    <select id="performanceAuthOauthCodeChallengeMethodSelect">
-                      <option value="S256">SHA-256</option>
-                      <option value="plain">Plain</option>
-                    </select>
-                  </label>
-                  <label class="field" data-oauth2-grant-field="authorizationCodePkce">
-                    <span>Code Verifier</span>
-                    <input id="performanceAuthOauthCodeVerifierInput" autocomplete="off">
-                  </label>
-                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
-                    <span>Client Authentication</span>
-                    <select id="performanceAuthOauthClientAuthenticationSelect">
-                      <option value="basic">Send as Basic Auth header</option>
-                      <option value="body">Send client credentials in body</option>
-                    </select>
-                  </label>
-                  <details class="auth-advanced auth-wide">
-                    <summary>Advanced</summary>
+                  <details class="auth-advanced auth-configure-token auth-wide">
+                    <summary>Configure New Token</summary>
                     <div class="auth-advanced-grid">
-                      <label class="field auth-wide">
-                        <span>Refresh Token URL</span>
-                        <input id="performanceAuthOauthRefreshTokenUrlInput" autocomplete="off">
+                      <label class="field">
+                        <span>Token Name</span>
+                        <input id="performanceAuthOauthTokenNameInput" autocomplete="off">
                       </label>
-                      <div class="auth-wide oauth2-param-table">
-                        <div class="auth-param-title">Auth Request</div>
-                        <div class="auth-param-row auth-param-head"><span>Key</span><span>Value</span></div>
-                        <div class="auth-param-row">
-                          <input id="performanceAuthOauthAuthRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
-                          <input id="performanceAuthOauthAuthRequestParamValueInput" autocomplete="off" placeholder="Value">
+                      <label class="field">
+                        <span>Grant type</span>
+                        <select id="performanceAuthOauthGrantTypeSelect">
+                          <option value="authorizationCode">Authorization Code</option>
+                          <option value="authorizationCodePkce">Authorization Code (With PKCE)</option>
+                          <option value="implicit">Implicit</option>
+                          <option value="passwordCredentials">Password Credentials</option>
+                          <option value="clientCredentials">Client Credentials</option>
+                        </select>
+                      </label>
+                      <label class="field" data-oauth2-grant-field="authorizationCodePkce">
+                        <span>Code Challenge Method</span>
+                        <select id="performanceAuthOauthCodeChallengeMethodSelect">
+                          <option value="S256">SHA-256</option>
+                          <option value="plain">Plain</option>
+                        </select>
+                      </label>
+                      <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                        <span>Client Authentication</span>
+                        <select id="performanceAuthOauthClientAuthenticationSelect">
+                          <option value="basic">Send as Basic Auth header</option>
+                          <option value="body">Send client credentials in body</option>
+                        </select>
+                      </label>
+                      <label class="field">
+                        <span>Client ID</span>
+                        <input id="performanceAuthOauthClientIdInput" autocomplete="off">
+                      </label>
+                      <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                        <span>Client Secret</span>
+                        <input id="performanceAuthOauthClientSecretInput" type="password" autocomplete="off">
+                      </label>
+                      <label class="field" data-oauth2-grant-field="passwordCredentials">
+                        <span>Username</span>
+                        <input id="performanceAuthOauthUsernameInput" autocomplete="off">
+                      </label>
+                      <label class="field" data-oauth2-grant-field="passwordCredentials">
+                        <span>Password</span>
+                        <input id="performanceAuthOauthPasswordInput" type="text" autocomplete="off">
+                      </label>
+                      <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                        <span>Auth URL</span>
+                        <input id="performanceAuthOauthAuthorizationUrlInput" autocomplete="off">
+                      </label>
+                      <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                        <span>Access Token URL</span>
+                        <input id="performanceAuthOauthTokenUrlInput" autocomplete="off">
+                      </label>
+                      <input id="performanceAuthOauthDeviceAuthorizationUrlInput" type="hidden">
+                      <input id="performanceAuthOauthRedirectStrategySelect" type="hidden" value="loopback">
+                      <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                        <span>Callback URL</span>
+                        <input id="performanceAuthOauthCallbackUrlInput" autocomplete="off">
+                      </label>
+                      <input id="performanceAuthOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked aria-hidden="true" tabindex="-1">
+                      <label class="field">
+                        <span>Scope</span>
+                        <input id="performanceAuthOauthScopesInput" autocomplete="off">
+                      </label>
+                      <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                        <span>State</span>
+                        <input id="performanceAuthOauthStateInput" autocomplete="off">
+                      </label>
+                      <label class="field" data-oauth2-grant-field="authorizationCodePkce">
+                        <span>Code Verifier</span>
+                        <input id="performanceAuthOauthCodeVerifierInput" autocomplete="off">
+                      </label>
+                      <details class="auth-advanced auth-wide">
+                        <summary>Advanced</summary>
+                        <div class="auth-advanced-grid">
+                          <label class="field auth-wide">
+                            <span>Refresh Token URL</span>
+                            <input id="performanceAuthOauthRefreshTokenUrlInput" autocomplete="off">
+                          </label>
+                          <div class="auth-wide oauth2-param-table">
+                            <div class="auth-param-title">Auth Request</div>
+                            <div class="auth-param-row auth-param-head"><span>Key</span><span>Value</span></div>
+                            <div class="auth-param-row">
+                              <input id="performanceAuthOauthAuthRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                              <input id="performanceAuthOauthAuthRequestParamValueInput" autocomplete="off" placeholder="Value">
+                            </div>
+                          </div>
+                          <div class="auth-wide oauth2-param-table">
+                            <div class="auth-param-title">Token Request</div>
+                            <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
+                            <div class="auth-param-row auth-param-row-send-in">
+                              <input id="performanceAuthOauthTokenRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                              <input id="performanceAuthOauthTokenRequestParamValueInput" autocomplete="off" placeholder="Value">
+                              <select id="performanceAuthOauthTokenRequestParamSendInSelect">
+                                <option value="body">Body</option>
+                                <option value="header">Header</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="auth-wide oauth2-param-table">
+                            <div class="auth-param-title">Refresh Request</div>
+                            <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
+                            <div class="auth-param-row auth-param-row-send-in">
+                              <input id="performanceAuthOauthRefreshRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                              <input id="performanceAuthOauthRefreshRequestParamValueInput" autocomplete="off" placeholder="Value">
+                              <select id="performanceAuthOauthRefreshRequestParamSendInSelect">
+                                <option value="body">Body</option>
+                                <option value="header">Header</option>
+                              </select>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div class="auth-wide oauth2-param-table">
-                        <div class="auth-param-title">Token Request</div>
-                        <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
-                        <div class="auth-param-row auth-param-row-send-in">
-                          <input id="performanceAuthOauthTokenRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
-                          <input id="performanceAuthOauthTokenRequestParamValueInput" autocomplete="off" placeholder="Value">
-                          <select id="performanceAuthOauthTokenRequestParamSendInSelect">
-                            <option value="body">Body</option>
-                            <option value="header">Header</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div class="auth-wide oauth2-param-table">
-                        <div class="auth-param-title">Refresh Request</div>
-                        <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
-                        <div class="auth-param-row auth-param-row-send-in">
-                          <input id="performanceAuthOauthRefreshRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
-                          <input id="performanceAuthOauthRefreshRequestParamValueInput" autocomplete="off" placeholder="Value">
-                          <select id="performanceAuthOauthRefreshRequestParamSendInSelect">
-                            <option value="body">Body</option>
-                            <option value="header">Header</option>
-                          </select>
-                        </div>
-                      </div>
+                      </details>
+                      <input id="performanceAuthOauthUserCodeInput" type="hidden">
+                      <input id="performanceAuthOauthVerificationUriInput" type="hidden">
                     </div>
                   </details>
-                  <input id="performanceAuthOauthUserCodeInput" type="hidden">
-                  <input id="performanceAuthOauthVerificationUriInput" type="hidden">
                 </div>
 
                 <div class="auth-section" data-auth-section="oauth1">
