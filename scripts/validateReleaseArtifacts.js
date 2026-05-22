@@ -357,7 +357,7 @@ function validateArtifactPlatformAndName(artifact, artifactType, expectedVersion
     },
     exe: {
       platform: 'windows',
-      pattern: new RegExp(`^PostMeter(?: Setup)?[ -]${version}(?:-[A-Za-z0-9._-]+)?\\.exe$`)
+      pattern: new RegExp(`^PostMeter(?:[ -]Setup)?[ -]${version}(?:-[A-Za-z0-9._-]+)?\\.exe$`)
     },
   };
   const expectation = expectations[artifactType];

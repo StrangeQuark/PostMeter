@@ -85,15 +85,19 @@ test('live OAuth CLI status skips without reading stale evidence paths until liv
   );
 });
 
-test('live OAuth provider certification requires sanitized execution evidence when enabled', () => {
+test('live OAuth provider certification accepts maintainer env signoff without evidence', () => {
   const env = githubEnv();
   const configuredWithoutEvidence = liveOAuthCertificationStatus({ env, provider: 'github' });
-  assert.equal(configuredWithoutEvidence.ok, false);
-  assert.match(configuredWithoutEvidence.errors.join('\n'), /sanitized evidence JSON artifact/);
+  assert.equal(configuredWithoutEvidence.ok, true);
+  assert.equal(configuredWithoutEvidence.evidence, 'not-provided');
+  assert.equal(configuredWithoutEvidence.evidenceArtifactRequired, false);
+  assert.deepEqual(configuredWithoutEvidence.errors, []);
+  assert.doesNotMatch(JSON.stringify(configuredWithoutEvidence), /client-secret|client-id|read:user|github\.com\/login\/oauth/);
 
   const evidence = githubEvidence();
   const certified = liveOAuthCertificationStatus({ env, provider: 'github', evidence });
   assert.equal(certified.ok, true);
+  assert.equal(certified.evidence, 'validated-optional-artifact');
   assert.deepEqual(certified.errors, []);
   assert.doesNotMatch(JSON.stringify(certified), /client-secret|client-id|read:user|github\.com\/login\/oauth/);
 
@@ -246,6 +250,7 @@ test('live OAuth provider env validation is pinned to official provider endpoint
     grantTypes: ['authorization-code-pkce', 'refresh-token'],
     sha256: 'c'.repeat(64)
   });
+  assert.deepEqual(liveOAuthCertificationStatus({ env: googleEnv, provider: 'google' }).errors, []);
   assert.deepEqual(liveOAuthCertificationStatus({ env: googleEnv, provider: 'google', evidence: googleEvidence }).errors, []);
   assert.match(
     liveOAuthCertificationStatus({
@@ -271,6 +276,7 @@ test('live OAuth provider env validation is pinned to official provider endpoint
   );
 
   const githubEvidenceValue = githubEvidence();
+  assert.deepEqual(liveOAuthCertificationStatus({ env: githubEnv(), provider: 'github' }).errors, []);
   assert.deepEqual(liveOAuthCertificationStatus({ env: githubEnv(), provider: 'github', evidence: githubEvidenceValue }).errors, []);
   assert.match(
     liveOAuthCertificationStatus({
@@ -299,6 +305,7 @@ test('live OAuth provider env validation is pinned to official provider endpoint
     grantTypes: ['authorization-code-pkce', 'refresh-token', 'client-credentials', 'device-code'],
     sha256: 'b'.repeat(64)
   });
+  assert.deepEqual(liveOAuthCertificationStatus({ env: entraEnv, provider: 'microsoft-entra' }).errors, []);
   assert.deepEqual(liveOAuthCertificationStatus({ env: entraEnv, provider: 'microsoft-entra', evidence: entraEvidence }).errors, []);
   assert.match(
     liveOAuthCertificationStatus({

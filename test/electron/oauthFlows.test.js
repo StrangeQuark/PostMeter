@@ -101,6 +101,61 @@ test('loopback PKCE ignores wrong-state callbacks and completes the later valid 
   }
 });
 
+test('loopback PKCE preserves configured localhost callback host', async () => {
+  const tokenRequests = [];
+  const tokenServer = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequests.push(await readRequestBody(request));
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'localhost-flow-token',
+        token_type: 'Bearer',
+        expires_in: 600
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+  const controller = createOAuthFlowController({
+    app: { setAsDefaultProtocolClient: () => true },
+    env: {},
+    shell: {
+      openExternal: async (url) => {
+        const authorizationUrl = new URL(url);
+        const redirectUri = authorizationUrl.searchParams.get('redirect_uri');
+        const redirectUrl = new URL(redirectUri);
+        assert.equal(redirectUrl.protocol, 'http:');
+        assert.equal(redirectUrl.hostname, 'localhost');
+        assert.equal(redirectUrl.pathname, '/oauth/callback');
+        const state = authorizationUrl.searchParams.get('state');
+        const callback = await fetch(`${redirectUri}?code=auth-code&state=${state}`);
+        assert.equal(callback.status, 200);
+        return true;
+      }
+    }
+  });
+
+  try {
+    const result = await controller.startPkce('localhost-flow', {
+      type: 'oauth2',
+      grantType: 'authorizationCodePkce',
+      authorizationUrl: 'https://auth.example.test/authorize',
+      tokenUrl: `${tokenServer.baseUrl}/token`,
+      redirectUri: 'http://localhost/oauth/callback',
+      clientId: 'client-id'
+    }, null, 'loopback');
+
+    assert.equal(result.cancelled, false);
+    assert.equal(result.auth.accessToken, 'localhost-flow-token');
+    assert.equal(tokenRequests.length, 1);
+    const tokenBody = new URLSearchParams(tokenRequests[0]);
+    assert.equal(new URL(tokenBody.get('redirect_uri')).hostname, 'localhost');
+  } finally {
+    await tokenServer.close();
+  }
+});
+
 test('OAuth flow controller rejects duplicate active flow ids and preserves cancellation ownership', async () => {
   const progress = [];
   const controller = createOAuthFlowController({

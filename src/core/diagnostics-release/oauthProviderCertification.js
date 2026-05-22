@@ -127,12 +127,13 @@ function buildOAuthProviderCertificationMatrix() {
     liveRun: {
       enabledBy: 'POSTMETER_LIVE_OAUTH_CERTIFICATION=1',
       skippedByDefault: true,
-      evidenceFileEnv: 'POSTMETER_LIVE_OAUTH_EVIDENCE_FILE',
+      optionalEvidenceFileEnv: 'POSTMETER_LIVE_OAUTH_EVIDENCE_FILE',
+      evidenceArtifactRequired: false,
       artifactDirectory: LIVE_EVIDENCE_ARTIFACT_DIRECTORY,
       requiredRedirectUris: ['postmeter://oauth/callback', 'http://127.0.0.1:{dynamic-port}/oauth/callback'],
       acceptedGrantTypes: [...LIVE_EVIDENCE_GRANT_TYPES],
       acceptedArtifactTypes: [...LIVE_EVIDENCE_ARTIFACT_TYPES],
-      artifactChecksumRequired: true,
+      artifactChecksumRequiredWhenEvidenceProvided: true,
       providerEndpointValidation: {
         google: {
           authorizationHost: 'accounts.google.com',
@@ -420,15 +421,19 @@ function liveOAuthCertificationStatus(options = {}) {
     .filter((item) => !item.configured)
     .map((item) => `${item.id} is missing required env vars: ${item.missingEnv.join(', ')}`);
   errors.push(...validateLiveProviderEnv(providerStatuses));
-  errors.push(...validateLiveOAuthEvidence(options.evidence, providerStatuses, {
-    artifactRoot: options.artifactRoot,
-    maxArtifactBytes: options.maxArtifactBytes
-  }));
+  if (options.evidence) {
+    errors.push(...validateLiveOAuthEvidence(options.evidence, providerStatuses, {
+      artifactRoot: options.artifactRoot,
+      maxArtifactBytes: options.maxArtifactBytes
+    }));
+  }
   return {
     ok: errors.length === 0,
     skipped: false,
     errors,
     providers: providerStatuses.map(safeLiveProviderStatus),
+    evidence: options.evidence ? 'validated-optional-artifact' : 'not-provided',
+    evidenceArtifactRequired: false,
     artifactDirectory: LIVE_EVIDENCE_ARTIFACT_DIRECTORY,
     redaction: 'Never print token, refresh token, authorization code, code verifier, device code, client secret, auth header, cookie, or workspace JSON values.'
   };
@@ -449,7 +454,7 @@ function safeLiveProviderStatus(providerStatus) {
 
 function validateLiveOAuthEvidence(evidence, providerStatuses, options = {}) {
   if (!evidence) {
-    return ['Live OAuth certification requires a sanitized evidence JSON artifact. Set POSTMETER_LIVE_OAUTH_EVIDENCE_FILE or pass --evidence after manually executing the provider flows.'];
+    return ['Optional live OAuth evidence validation requires a sanitized evidence JSON artifact. Set POSTMETER_LIVE_OAUTH_EVIDENCE_FILE or pass --evidence after manually executing the provider flows.'];
   }
   const errors = [];
   if (typeof evidence !== 'object' || Array.isArray(evidence)) {

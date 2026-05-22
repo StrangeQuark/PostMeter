@@ -334,7 +334,7 @@ function assertValidationLogUploadsFailClosed(workflow, workflowName) {
   }
 }
 
-test('manual OAuth provider certification workflow is evidence-gated and fail-closed', async () => {
+test('manual OAuth provider certification workflow supports env signoff with optional evidence', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'oauth-provider-certification.yml'), 'utf8');
 

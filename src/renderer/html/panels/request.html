@@ -157,133 +157,135 @@
                   <option value="query">Request URL</option>
                 </select>
               </label>
-              <div class="auth-subsection-title auth-wide">Configure New Token</div>
-              <label class="field">
-                <span>Token Name</span>
-                <input id="authOauthTokenNameInput" autocomplete="off">
-              </label>
-              <label class="field">
-                <span>Grant type</span>
-                <select id="authOauthGrantTypeSelect">
-                  <option value="authorizationCode">Authorization Code</option>
-                  <option value="authorizationCodePkce">Authorization Code (With PKCE)</option>
-                  <option value="implicit">Implicit</option>
-                  <option value="passwordCredentials">Password Credentials</option>
-                  <option value="clientCredentials">Client Credentials</option>
-                </select>
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                <span>Callback URL</span>
-                <input id="authOauthCallbackUrlInput" autocomplete="off">
-              </label>
-              <label class="checkbox-line" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                <input id="authOauthAuthorizeUsingBrowserInput" type="checkbox">
-                <span>Authorize using browser</span>
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                <span>Auth URL</span>
-                <input id="authOauthAuthorizationUrlInput" autocomplete="off">
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
-                <span>Access Token URL</span>
-                <input id="authOauthTokenUrlInput" autocomplete="off">
-              </label>
-              <input id="authOauthDeviceAuthorizationUrlInput" type="hidden">
-              <input id="authOauthRedirectStrategySelect" type="hidden" value="loopback">
-              <label class="field">
-                <span>Client ID</span>
-                <input id="authOauthClientIdInput" autocomplete="off">
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
-                <span>Client Secret</span>
-                <input id="authOauthClientSecretInput" type="text" autocomplete="off">
-              </label>
-              <label class="field" data-oauth2-grant-field="passwordCredentials">
-                <span>Username</span>
-                <input id="authOauthUsernameInput" autocomplete="off">
-              </label>
-              <label class="field" data-oauth2-grant-field="passwordCredentials">
-                <span>Password</span>
-                <input id="authOauthPasswordInput" type="text" autocomplete="off">
-              </label>
-              <label class="field">
-                <span>Scope</span>
-                <input id="authOauthScopesInput" autocomplete="off">
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
-                <span>State</span>
-                <input id="authOauthStateInput" autocomplete="off">
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCodePkce">
-                <span>Code Challenge Method</span>
-                <select id="authOauthCodeChallengeMethodSelect">
-                  <option value="S256">SHA-256</option>
-                  <option value="plain">Plain</option>
-                </select>
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCodePkce">
-                <span>Code Verifier</span>
-                <input id="authOauthCodeVerifierInput" autocomplete="off">
-              </label>
-              <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
-                <span>Client Authentication</span>
-                <select id="authOauthClientAuthenticationSelect">
-                  <option value="basic">Send as Basic Auth header</option>
-                  <option value="body">Send client credentials in body</option>
-                </select>
-              </label>
-              <details class="auth-advanced auth-wide">
-                <summary>Advanced</summary>
+              <details class="auth-advanced auth-configure-token auth-wide">
+                <summary>Configure New Token</summary>
                 <div class="auth-advanced-grid">
-                  <label class="field auth-wide">
-                    <span>Refresh Token URL</span>
-                    <input id="authOauthRefreshTokenUrlInput" autocomplete="off">
+                  <label class="field">
+                    <span>Token Name</span>
+                    <input id="authOauthTokenNameInput" autocomplete="off">
                   </label>
-                  <div class="auth-wide oauth2-param-table">
-                    <div class="auth-param-title">Auth Request</div>
-                    <div class="auth-param-row auth-param-head"><span>Key</span><span>Value</span></div>
-                    <div class="auth-param-row">
-                      <input id="authOauthAuthRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
-                      <input id="authOauthAuthRequestParamValueInput" autocomplete="off" placeholder="Value">
+                  <label class="field">
+                    <span>Grant type</span>
+                    <select id="authOauthGrantTypeSelect">
+                      <option value="authorizationCode">Authorization Code</option>
+                      <option value="authorizationCodePkce">Authorization Code (With PKCE)</option>
+                      <option value="implicit">Implicit</option>
+                      <option value="passwordCredentials">Password Credentials</option>
+                      <option value="clientCredentials">Client Credentials</option>
+                    </select>
+                  </label>
+                  <label class="field" data-oauth2-grant-field="authorizationCodePkce">
+                    <span>Code Challenge Method</span>
+                    <select id="authOauthCodeChallengeMethodSelect">
+                      <option value="S256">SHA-256</option>
+                      <option value="plain">Plain</option>
+                    </select>
+                  </label>
+                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                    <span>Client Authentication</span>
+                    <select id="authOauthClientAuthenticationSelect">
+                      <option value="basic">Send as Basic Auth header</option>
+                      <option value="body">Send client credentials in body</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Client ID</span>
+                    <input id="authOauthClientIdInput" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                    <span>Client Secret</span>
+                    <input id="authOauthClientSecretInput" type="password" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth2-grant-field="passwordCredentials">
+                    <span>Username</span>
+                    <input id="authOauthUsernameInput" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth2-grant-field="passwordCredentials">
+                    <span>Password</span>
+                    <input id="authOauthPasswordInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                    <span>Auth URL</span>
+                    <input id="authOauthAuthorizationUrlInput" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce passwordCredentials clientCredentials">
+                    <span>Access Token URL</span>
+                    <input id="authOauthTokenUrlInput" autocomplete="off">
+                  </label>
+                  <input id="authOauthDeviceAuthorizationUrlInput" type="hidden">
+                  <input id="authOauthRedirectStrategySelect" type="hidden" value="loopback">
+                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                    <span>Callback URL</span>
+                    <input id="authOauthCallbackUrlInput" autocomplete="off">
+                  </label>
+                  <input id="authOauthAuthorizeUsingBrowserInput" type="checkbox" hidden checked aria-hidden="true" tabindex="-1">
+                  <label class="field">
+                    <span>Scope</span>
+                    <input id="authOauthScopesInput" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth2-grant-field="authorizationCode authorizationCodePkce implicit">
+                    <span>State</span>
+                    <input id="authOauthStateInput" autocomplete="off">
+                  </label>
+                  <label class="field" data-oauth2-grant-field="authorizationCodePkce">
+                    <span>Code Verifier</span>
+                    <input id="authOauthCodeVerifierInput" autocomplete="off">
+                  </label>
+                  <details class="auth-advanced auth-wide">
+                    <summary>Advanced</summary>
+                    <div class="auth-advanced-grid">
+                      <label class="field auth-wide">
+                        <span>Refresh Token URL</span>
+                        <input id="authOauthRefreshTokenUrlInput" autocomplete="off">
+                      </label>
+                      <div class="auth-wide oauth2-param-table">
+                        <div class="auth-param-title">Auth Request</div>
+                        <div class="auth-param-row auth-param-head"><span>Key</span><span>Value</span></div>
+                        <div class="auth-param-row">
+                          <input id="authOauthAuthRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                          <input id="authOauthAuthRequestParamValueInput" autocomplete="off" placeholder="Value">
+                        </div>
+                      </div>
+                      <div class="auth-wide oauth2-param-table">
+                        <div class="auth-param-title">Token Request</div>
+                        <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
+                        <div class="auth-param-row auth-param-row-send-in">
+                          <input id="authOauthTokenRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                          <input id="authOauthTokenRequestParamValueInput" autocomplete="off" placeholder="Value">
+                          <select id="authOauthTokenRequestParamSendInSelect">
+                            <option value="body">Body</option>
+                            <option value="header">Header</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="auth-wide oauth2-param-table">
+                        <div class="auth-param-title">Refresh Request</div>
+                        <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
+                        <div class="auth-param-row auth-param-row-send-in">
+                          <input id="authOauthRefreshRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
+                          <input id="authOauthRefreshRequestParamValueInput" autocomplete="off" placeholder="Value">
+                          <select id="authOauthRefreshRequestParamSendInSelect">
+                            <option value="body">Body</option>
+                            <option value="header">Header</option>
+                          </select>
+                        </div>
+                      </div>
+                      <button id="clearOauthCookiesButton" type="button">Clear cookies</button>
                     </div>
+                  </details>
+                  <div class="oauth-actions auth-wide">
+                    <button id="startPkceFlowButton" type="button">Get New Access Token</button>
+                    <button id="cancelOauthFlowButton" type="button" disabled>Cancel OAuth</button>
                   </div>
-                  <div class="auth-wide oauth2-param-table">
-                    <div class="auth-param-title">Token Request</div>
-                    <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
-                    <div class="auth-param-row auth-param-row-send-in">
-                      <input id="authOauthTokenRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
-                      <input id="authOauthTokenRequestParamValueInput" autocomplete="off" placeholder="Value">
-                      <select id="authOauthTokenRequestParamSendInSelect">
-                        <option value="body">Body</option>
-                        <option value="header">Header</option>
-                      </select>
-                    </div>
+                  <div id="oauthProgressPanel" class="oauth-progress" role="status" aria-live="polite" aria-atomic="true" hidden>
+                    <div class="oauth-progress-title">OAuth progress</div>
+                    <div id="oauthProgressStatus" class="oauth-progress-status">Idle</div>
+                    <div id="oauthProgressDetail" class="oauth-progress-detail"></div>
                   </div>
-                  <div class="auth-wide oauth2-param-table">
-                    <div class="auth-param-title">Refresh Request</div>
-                    <div class="auth-param-row auth-param-head auth-param-row-send-in"><span>Key</span><span>Value</span><span>Send In</span></div>
-                    <div class="auth-param-row auth-param-row-send-in">
-                      <input id="authOauthRefreshRequestParamKeyInput" autocomplete="off" placeholder="Create parameter">
-                      <input id="authOauthRefreshRequestParamValueInput" autocomplete="off" placeholder="Value">
-                      <select id="authOauthRefreshRequestParamSendInSelect">
-                        <option value="body">Body</option>
-                        <option value="header">Header</option>
-                      </select>
-                    </div>
-                  </div>
-                  <button id="clearOauthCookiesButton" type="button">Clear cookies</button>
+                  <input id="authOauthUserCodeInput" type="hidden">
+                  <input id="authOauthVerificationUriInput" type="hidden">
                 </div>
               </details>
-              <div class="oauth-actions">
-                <button id="startPkceFlowButton" type="button">Get New Access Token</button>
-              </div>
-              <div id="oauthProgressPanel" class="oauth-progress" role="status" aria-live="polite" aria-atomic="true" hidden>
-                <div class="oauth-progress-title">OAuth progress</div>
-                <div id="oauthProgressStatus" class="oauth-progress-status">Idle</div>
-                <div id="oauthProgressDetail" class="oauth-progress-detail"></div>
-              </div>
-              <input id="authOauthUserCodeInput" type="hidden">
-              <input id="authOauthVerificationUriInput" type="hidden">
             </div>
 
             <div class="auth-section" data-auth-section="oauth1">
@@ -889,4 +891,3 @@
         </div>
 
       </section>
-
