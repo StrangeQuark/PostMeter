@@ -66,6 +66,7 @@ test('production readiness matrix tracks release areas and stable-release blocke
   assert.equal(byId.get('grpc.pfx-p12-mtls').area, 'transport');
   assert.equal(byId.get('diagnostics.privacy').status, 'validated');
   assert.ok(byId.get('diagnostics.privacy').commands.includes('npm run diagnostics:privacy:validate'));
+  assert.equal(byId.get('oauth.live-certification').status, 'validated');
   assert.equal(byId.get('performance.local-v1').status, 'implemented');
   assert.equal(byId.get('performance.local-v1').releaseBlocking, false);
   assert.ok(byId.get('performance.local-v1').commands.includes('npm run ux:accessibility:validate'));
@@ -100,6 +101,7 @@ test('production readiness matrix tracks release areas and stable-release blocke
     rows: matrix.rows.map((row) => row.id === 'oauth.live-certification'
       ? {
           ...row,
+          status: 'external-validation-required',
           waiver: {
             releaseLevels: ['rc'],
             reason: 'Temporary release-candidate waiver documented for maintainer review.',

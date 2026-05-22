@@ -8,7 +8,7 @@ PostMeter is a standalone local desktop app. OAuth is only for authenticating ou
 
 - Mocked OAuth certification is implemented and automated: `npm run oauth:certify:validate && npm run oauth:certify:mock`.
 - Live provider certification tooling is implemented but skipped by default: `npm run oauth:certify:live`. When explicitly enabled, it fails closed unless provider env vars and official provider OAuth endpoint URLs are supplied. A sanitized forward-slash live evidence JSON artifact under `validation-artifacts/oauth-provider-certification/` is optional; when supplied, it is validated strictly.
-- Stable release signoff still requires maintainer-owned Google OAuth 2.0, Microsoft Entra ID / Azure AD, and GitHub OAuth App registrations and manual provider verification.
+- Stable release OAuth signoff is complete for maintainer-owned Google OAuth 2.0, Microsoft Entra ID / Azure AD, and GitHub OAuth App registrations. No provider credentials or validation artifacts are committed; temporary provider credentials should be deleted or rotated after certification.
 - The source-owned matrix is `docs/oauth-provider-certification-matrix.json`, generated from `src/core/diagnostics-release/oauthProviderCertification.js`.
 
 ## Provider Targets

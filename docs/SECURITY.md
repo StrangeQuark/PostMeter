@@ -36,7 +36,7 @@ npm run postman:parity:claim
 npm run sandbox:platform:validate
 ```
 
-`npm run production:readiness:claim` is the stable-release gate and remains expected to fail until every release-blocking row is validated, including live OAuth certification, native release evidence, UX/accessibility evidence, and signing/notarization. Beta and release-candidate thresholds are exposed separately by `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. `npm run sandbox:platform:claim` is the separate platform OS-sandbox gate and should pass when the Linux, Windows, and macOS backend matrix is current.
+`npm run production:readiness:claim` is the stable-release gate and remains expected to fail until every release-blocking row is validated, including native release evidence, UX/accessibility evidence, signing/notarization, and any rows still marked implemented rather than validated. Beta and release-candidate thresholds are exposed separately by `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. `npm run sandbox:platform:claim` is the separate platform OS-sandbox gate and should pass when the Linux, Windows, and macOS backend matrix is current.
 
 ## Reporting
 

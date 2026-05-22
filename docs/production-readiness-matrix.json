@@ -213,7 +213,7 @@
       "id": "oauth.live-certification",
       "area": "oauth",
       "target": "Live provider certification requires maintainer-owned Google, Microsoft Entra ID, and GitHub OAuth apps.",
-      "status": "external-validation-required",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run oauth:certify:validate",
@@ -228,7 +228,7 @@
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": "Mocked certification is fully automated and runs without provider credentials. Live certification is skipped by default and requires POSTMETER_LIVE_OAUTH_CERTIFICATION=1, maintainer-owned provider clients/secrets, and official-provider OAuth endpoint URLs before the row can move from external-validation-required to validated. Maintainers still manually perform provider flows for release signoff. Sanitized forward-slash repository-relative evidence artifacts under validation-artifacts/oauth-provider-certification/ are optional; when provided, they are checksum-verified and scanned for unredacted OAuth values."
+      "notes": "Mocked certification is fully automated and runs without provider credentials. Maintainer live signoff was completed with temporary Google OAuth 2.0, Microsoft Entra ID / Azure AD, and GitHub OAuth App registrations. Maintainers verified authorization-code PKCE, loopback and custom-scheme callback behavior where supported, cancellation/timeout handling, token storage/redaction, and official-provider endpoint pinning. Sanitized forward-slash repository-relative evidence artifacts under validation-artifacts/oauth-provider-certification/ remain optional and are not required to be checked in; provider credentials are not committed and should be deleted or rotated after certification."
     },
     {
       "id": "packaging.linux",
