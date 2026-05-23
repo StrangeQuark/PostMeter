@@ -3,7 +3,6 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
-  OS_SANDBOX_MODES,
   cleanupPrivateTempDir,
   createOsSandboxedProcessLaunch,
   osSandboxStatus,
@@ -35,18 +34,16 @@ async function validateSandboxRuntime(options = {}) {
   validateWorkerLaunchPolicy(scriptWorkerExecArgv({ requireNodePermission: true }), scriptWorkerEnv());
   validationProgress('node permission model');
   validateNodePermissionModel();
-  let requireOsSandbox = false;
+  let skipOsSandboxFunctionalProbe = false;
   if (platformRequiresOsSandbox(process.platform)) {
     validationProgress('os sandbox status');
-    const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
+    const status = osSandboxStatus();
     if (status.supported) {
       validationProgress('os sandbox launch policy');
       validateOsSandboxLaunchPolicy();
       validationProgress('os sandbox boundary');
       validateOsSandboxBoundary();
-      requireOsSandbox = true;
-    } else if (process.platform === 'linux' && process.env.POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP === '1') {
-      console.warn('Linux OS-level script sandbox validation skipped because no functional bubblewrap backend is available in this environment.');
+      skipOsSandboxFunctionalProbe = true;
     } else {
       throw new Error([
         `${platformLabel(process.platform)} OS-level script sandboxing requires a functional ${platformBackendLabel(process.platform)} backend.`,
@@ -56,7 +53,7 @@ async function validateSandboxRuntime(options = {}) {
   }
   validationProgress('script boundary');
   await validateScriptBoundary({
-    requireOsSandbox
+    skipOsSandboxFunctionalProbe
   });
   validationProgress('complete');
 }
@@ -139,13 +136,12 @@ function validateNodePermissionModel() {
 }
 
 function validateOsSandboxLaunchPolicy() {
-  const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
+  const status = osSandboxStatus();
   if (!status.supported) {
     throw new Error(`${platformLabel(process.platform)} OS-level script sandboxing requires ${platformBackendLabel(process.platform)}, but no functional backend was found.`);
   }
 
   const launch = createOsSandboxedProcessLaunch({
-    mode: OS_SANDBOX_MODES.REQUIRED,
     args: ['-e', 'process.exit(0)'],
     env: scriptWorkerEnv()
   });
@@ -237,7 +233,7 @@ function validateWindowsSandboxLaunchPolicy(launch) {
     throw new Error('Windows stdio script worker launches must preserve Electron stdio initialization for the worker protocol.');
   }
   if (isFileWorkerLaunch) {
-    if (!childArgs.includes('--no-stdio-init')) {
+    if (launch.env.ELECTRON_RUN_AS_NODE === '1' && !childArgs.includes('--no-stdio-init')) {
       throw new Error('Windows file-transport script worker launches must disable Electron stdio initialization.');
     }
     if (
@@ -584,7 +580,6 @@ function probeResultOutput(result = {}) {
 
 function runOsSandboxProbe(code, options = {}) {
   const launch = createOsSandboxedProcessLaunch({
-    mode: OS_SANDBOX_MODES.REQUIRED,
     args: [
       ...(options.execArgv || []),
       '-e',
@@ -708,7 +703,6 @@ async function validateScriptBoundary(options = {}) {
     environment: { id: 'sandbox-validation', name: 'Sandbox Validation', variables: [] }
   }, {
     requireNodePermission: true,
-    osSandboxMode: options.requireOsSandbox ? OS_SANDBOX_MODES.REQUIRED : OS_SANDBOX_MODES.AUTO,
     sendRequest: async () => ({
       statusCode: 200,
       headers: { 'content-type': ['application/json'] },
@@ -716,7 +710,7 @@ async function validateScriptBoundary(options = {}) {
       durationMillis: 1,
       responseBytes: 28
     }),
-    skipOsSandboxFunctionalProbe: options.requireOsSandbox === true,
+    skipOsSandboxFunctionalProbe: options.skipOsSandboxFunctionalProbe === true,
     onWorkerProgress: workerProgress,
     timeoutMillis: 1000,
     workerTimeoutMillis: scriptBoundaryWorkerTimeoutMillis()

@@ -11,6 +11,7 @@ const {
   runPostmanScriptIsolated,
   scriptWorkerEnv,
   scriptWorkerExecArgv,
+  scriptWorkerExecutablePath,
   scriptWorkerMaxOldSpaceMb,
   scriptWorkerRequiresNodePermission,
   supportsNodePermissionFlags
@@ -25,6 +26,7 @@ const {
   MemoryVaultStore
 } = require('../../src/core/sandbox/vaultStore');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
+const { scriptWorkerTestTimeoutMillis } = require('./scriptWorkerTestTimeouts');
 
 test('runs scripts in an isolated worker and returns variable mutations', async () => {
   const environment = { variables: [{ enabled: true, key: 'token', value: 'old' }] };
@@ -120,7 +122,7 @@ test('fails closed when script worker permission flags are required but unavaila
     `, {}, {
       requireNodePermission: true,
       timeoutMillis: 500,
-      workerTimeoutMillis: 1000
+      workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
     });
 
     assert.equal(execution.result.passed, false);
@@ -156,8 +158,32 @@ test('starts script workers with a minimal environment', () => {
   }
 });
 
+test('uses the release Electron runtime for Windows source workers unless an executable override is provided', () => {
+  const electronPath = 'C:\\PostMeter\\node_modules\\electron\\dist\\electron.exe';
+  const windowsDefault = scriptWorkerExecutablePath({ platform: 'win32' });
+
+  assert.match(path.basename(windowsDefault).toLowerCase(), /^electron(?:\.exe)?$/);
+  assert.equal(scriptWorkerExecutablePath({ executablePath: electronPath }), electronPath);
+  assert.equal(scriptWorkerEnv({ electronRunAsNode: true }).ELECTRON_RUN_AS_NODE, '1');
+});
+
+test('does not fall back when an explicit Windows helper path is unavailable', () => {
+  assert.throws(
+    () => createScriptWorkerLaunch(
+      path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
+      [],
+      scriptWorkerEnv(),
+      {
+        platform: 'win32',
+        windowsSandboxHelperPath: path.join(os.tmpdir(), 'definitely-not-postmeter-helper.exe')
+      }
+    ),
+    /no Windows AppContainer helper was configured/
+  );
+});
+
 test('runs workers inside the required OS sandbox when a backend is available', async (t) => {
-  const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
+  const status = osSandboxStatus();
   if (!status.supported) {
     t.skip('No OS sandbox backend is available on this platform.');
     return;
@@ -171,9 +197,8 @@ test('runs workers inside the required OS sandbox when a backend is available', 
   `, {
     environment: { id: 'env', name: 'Env', variables: [] }
   }, {
-    osSandboxMode: OS_SANDBOX_MODES.REQUIRED,
     timeoutMillis: 500,
-    workerTimeoutMillis: 2000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(2000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -181,14 +206,13 @@ test('runs workers inside the required OS sandbox when a backend is available', 
 });
 
 test('adds a Linux seccomp syscall policy to bubblewrap launches', (t) => {
-  const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
+  const status = osSandboxStatus();
   if (!status.supported || !status.seccompSupported) {
     t.skip('No seccomp-capable Linux OS sandbox backend is available on this platform.');
     return;
   }
 
   const launch = createOsSandboxedProcessLaunch({
-    mode: OS_SANDBOX_MODES.REQUIRED,
     args: ['-e', 'process.exit(0)'],
     env: scriptWorkerEnv()
   });
@@ -204,58 +228,66 @@ test('adds a Linux seccomp syscall policy to bubblewrap launches', (t) => {
   assert.ok(launch.seccompPolicy.deniedSyscalls.includes('clone3'));
 });
 
-test('falls back in auto mode when a Linux OS sandbox backend exists but cannot launch', async (t) => {
+test('treats legacy auto/off sandbox requests as required and fails closed', async (t) => {
   if (process.platform !== 'linux') {
     t.skip('Linux-only bubblewrap launch probe.');
     return;
   }
 
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-bwrap-probe-'));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
   const failingBwrap = path.join(dir, 'bwrap');
   await fs.writeFile(failingBwrap, '#!/bin/sh\necho "probe failed" >&2\nexit 1\n', { mode: 0o755 });
 
-  const autoLaunch = createScriptWorkerLaunch(
-    path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
-    [],
-    scriptWorkerEnv(),
-    { osSandboxMode: OS_SANDBOX_MODES.AUTO, bubblewrapPath: failingBwrap }
-  );
-  assert.equal(autoLaunch.sandboxed, false);
+  assert.deepEqual(Object.keys(OS_SANDBOX_MODES), ['REQUIRED']);
+
+  for (const osSandboxMode of ['auto', 'off', OS_SANDBOX_MODES.REQUIRED]) {
+    assert.throws(
+      () => createScriptWorkerLaunch(
+        path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
+        [],
+        scriptWorkerEnv(),
+        { osSandboxMode, bubblewrapPath: failingBwrap }
+      ),
+      /bubblewrap failed its functional probe/
+    );
+  }
+});
+
+test('records required OS sandbox diagnostics for legacy disabled requests', async () => {
+  const events = [];
+  const unavailableBackendOptions = process.platform === 'win32'
+    ? { windowsSandboxHelperPath: path.join(os.tmpdir(), 'definitely-not-postmeter-helper.exe') }
+    : process.platform === 'darwin'
+      ? { macosSandboxExecPath: '/definitely/not/sandbox-exec' }
+      : { bubblewrapPath: '/definitely/not/bwrap' };
 
   assert.throws(
     () => createScriptWorkerLaunch(
       path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
       [],
       scriptWorkerEnv(),
-      { osSandboxMode: OS_SANDBOX_MODES.REQUIRED, bubblewrapPath: failingBwrap }
-    ),
-    /bubblewrap failed its functional probe/
-  );
-});
-
-test('records OS sandbox backend selection diagnostics for script workers', async () => {
-  const events = [];
-  const launch = createScriptWorkerLaunch(
-    path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js'),
-    [],
-    scriptWorkerEnv(),
-    {
-      osSandboxMode: OS_SANDBOX_MODES.OFF,
-      recordDiagnosticEvent: async (event) => {
-        events.push(event);
+      {
+        osSandboxMode: 'off',
+        ...unavailableBackendOptions,
+        recordDiagnosticEvent: async (event) => {
+          events.push(event);
+        }
       }
-    }
+    ),
+    /OS-level script sandboxing is required/
   );
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(launch.sandboxed, false);
   assert.ok(events.some((event) => (
-    event.type === 'sandbox.os-backend.selected'
-      && event.outcome === 'degraded'
-      && event.failureCode === 'os_sandbox_backend_unavailable'
-      && event.fields.backend === 'none'
+    event.type === 'sandbox.os-backend.launch.failed'
+      && event.outcome === 'failed'
+      && event.failureCode === 'os_sandbox_backend_required_unavailable'
       && event.fields.sandboxed === false
   )));
+  assert.equal(events.some((event) => event.type === 'sandbox.os-backend.selected' && event.outcome === 'degraded'), false);
 });
 
 test('fails closed when the required OS sandbox backend is unavailable', async () => {
@@ -272,7 +304,6 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
       [],
       scriptWorkerEnv(),
       {
-        osSandboxMode: OS_SANDBOX_MODES.REQUIRED,
         ...unavailableBackendOptions,
         recordDiagnosticEvent: async (event) => {
           events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
@@ -296,10 +327,9 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
   `, {
     environment: { id: 'env', name: 'Env', variables: [] }
   }, {
-    osSandboxMode: OS_SANDBOX_MODES.REQUIRED,
     ...unavailableBackendOptions,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, false);
@@ -315,7 +345,6 @@ test('builds Windows AppContainer helper launches with private temp and explicit
 
   const launch = createOsSandboxedProcessLaunch({
     platform: 'win32',
-    mode: OS_SANDBOX_MODES.REQUIRED,
     windowsSandboxHelperPath: helperPath,
     executablePath: process.execPath,
     args: ['-e', 'process.exit(0)'],
@@ -349,6 +378,74 @@ test('builds Windows AppContainer helper launches with private temp and explicit
   }
 });
 
+test('explicit Windows Node script worker overrides use stdio through the AppContainer helper', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-win-worker-test-'));
+  const helperPath = path.join(tempDir, 'PostMeterWindowsSandboxHelper.exe');
+  const workerPath = path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js');
+  await fs.writeFile(helperPath, 'placeholder');
+
+  const launch = createScriptWorkerLaunch(
+    workerPath,
+    scriptWorkerExecArgv({ requireNodePermission: true }),
+    scriptWorkerEnv(),
+    {
+      platform: 'win32',
+      windowsSandboxHelperPath: helperPath,
+      executablePath: process.execPath,
+      skipFunctionalProbe: true
+    }
+  );
+  const childArgs = launch.args.slice(launch.args.indexOf('--') + 2);
+
+  try {
+    assert.equal(launch.transport, 'stdio');
+    assert.equal(launch.env.POSTMETER_SCRIPT_WORKER_TRANSPORT_DIR, launch.privateTempDir);
+    assert.ok(childArgs.includes('--postmeter-stdio-worker'));
+    assert.equal(childArgs.includes('--postmeter-file-worker'), false);
+    assert.ok(childArgs.includes('--permission'));
+    assert.equal(childArgs.includes(`--allow-fs-read=${launch.privateTempDir}`), false);
+    assert.equal(childArgs.includes(`--allow-fs-write=${launch.privateTempDir}`), false);
+    assert.equal(childArgs.includes('--no-stdio-init'), false);
+  } finally {
+    cleanupPrivateTempDir(launch.privateTempDir);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('Windows Electron script workers use private file transport without stdio initialization', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-win-electron-worker-test-'));
+  const helperPath = path.join(tempDir, 'PostMeterWindowsSandboxHelper.exe');
+  const workerPath = path.join(__dirname, '..', '..', 'src', 'core', 'sandbox', 'scriptWorker.js');
+  await fs.writeFile(helperPath, 'placeholder');
+
+  const launch = createScriptWorkerLaunch(
+    workerPath,
+    scriptWorkerExecArgv({ requireNodePermission: true }),
+    scriptWorkerEnv({ electronRunAsNode: true }),
+    {
+      platform: 'win32',
+      windowsSandboxHelperPath: helperPath,
+      executablePath: process.execPath,
+      skipFunctionalProbe: true
+    }
+  );
+  const childArgs = launch.args.slice(launch.args.indexOf('--') + 2);
+
+  try {
+    assert.equal(launch.transport, 'file');
+    assert.equal(launch.env.POSTMETER_SCRIPT_WORKER_TRANSPORT_DIR, launch.privateTempDir);
+    assert.ok(childArgs.includes('--postmeter-file-worker'));
+    assert.equal(childArgs.includes('--postmeter-stdio-worker'), false);
+    assert.ok(childArgs.includes('--permission'));
+    assert.ok(childArgs.includes(`--allow-fs-read=${launch.privateTempDir}`));
+    assert.ok(childArgs.includes(`--allow-fs-write=${launch.privateTempDir}`));
+    assert.ok(childArgs.includes('--no-stdio-init'));
+  } finally {
+    cleanupPrivateTempDir(launch.privateTempDir);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('Windows AppContainer script worker allowlist includes all runtime source files', () => {
   const root = path.join(__dirname, '..', '..');
   const workerPath = path.join(root, 'src', 'core', 'sandbox', 'scriptWorker.js');
@@ -366,7 +463,6 @@ test('builds macOS seatbelt launches with private temp and no broad process allo
 
   const launch = createOsSandboxedProcessLaunch({
     platform: 'darwin',
-    mode: OS_SANDBOX_MODES.REQUIRED,
     macosSandboxExecPath: sandboxExecPath,
     executablePath: process.execPath,
     args: ['-e', 'process.exit(0)'],
@@ -504,7 +600,7 @@ test('does not expose host constructors, errors, or promises to sandbox scripts'
       responseBytes: 2
     }),
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -560,7 +656,7 @@ test('supports async tests and brokered timers in isolated scripts', async () =>
     environment: { id: 'env', name: 'Env', variables: [] }
   }, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -578,7 +674,7 @@ test('captures pm.visualizer output in isolated scripts', async () => {
     });
   `, {}, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -592,7 +688,7 @@ test('reports explicit context errors for pm.execution.runRequest outside collec
     });
   `, {}, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, false);
@@ -612,7 +708,7 @@ test('bounds and can disable pm.execution.runRequest broker calls', async () => 
     },
     trustedCapabilities: { sendRequest: false },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(disabled.result.passed, false);
@@ -638,7 +734,7 @@ test('bounds and can disable pm.execution.runRequest broker calls', async () => 
       };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(bounded.result.passed, false);
@@ -656,7 +752,7 @@ test('runs pm.vault through the broker unless explicitly disabled', async () => 
     trustedCapabilities: { vault: false },
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(disabled.result.passed, false);
@@ -670,7 +766,7 @@ test('runs pm.vault through the broker unless explicitly disabled', async () => 
     trustedCapabilities: {},
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(defaultEnabled.result.passed, true);
@@ -687,7 +783,7 @@ test('runs pm.vault through the broker unless explicitly disabled', async () => 
     trustedCapabilities: { vault: true },
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(enabled.result.passed, true);
@@ -710,7 +806,7 @@ test('supports scoped pm.vault grants for collections and requests', async () =>
     trustedCapabilities: { vault: false, vaultGrants: { collections: ['collection-a'] } },
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(collectionGranted.result.passed, true);
 
@@ -721,7 +817,7 @@ test('supports scoped pm.vault grants for collections and requests', async () =>
     trustedCapabilities: { vault: false, vaultGrants: { requests: ['request-b'] } },
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(requestGranted.result.passed, true);
 
@@ -732,7 +828,7 @@ test('supports scoped pm.vault grants for collections and requests', async () =>
     trustedCapabilities: { vault: true, vaultGrants: { workspace: true, deniedRequests: ['request-c'] } },
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(deniedOverride.result.passed, false);
   assert.match(deniedOverride.result.tests[0].error, /pm\.vault is disabled/);
@@ -750,7 +846,7 @@ test('supports scoped pm.vault grants for collections and requests', async () =>
     },
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(collectionDeniedOverride.result.passed, false);
   assert.match(collectionDeniedOverride.result.tests[0].error, /pm\.vault is disabled/);
@@ -775,7 +871,7 @@ test('supports per-request pm.vault prompt grants without exposing vault handles
       return { granted: true, scope: 'request' };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(prompted.result.passed, true);
@@ -802,7 +898,7 @@ test('supports per-request pm.vault prompt grants without exposing vault handles
     vault,
     vaultPrompt: async () => ({ granted: false, scope: 'request' }),
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(denied.result.passed, false);
   assert.match(denied.result.tests[0].error, /pm\.vault access was denied/);
@@ -833,7 +929,7 @@ test('audits unavailable pm.vault encryption without logging values', async () =
     trustedCapabilities: { vault: true },
     vault: unavailableVault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, false);
@@ -864,7 +960,7 @@ test('bounds pm.vault broker calls and values', async () => {
     trustedCapabilities: { vault: true },
     vault,
     timeoutMillis: 1000,
-    workerTimeoutMillis: 1500
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1500)
   });
 
   assert.equal(bounded.result.passed, false);
@@ -878,7 +974,7 @@ test('bounds pm.vault broker calls and values', async () => {
     trustedCapabilities: { vault: true },
     vault,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(oversized.result.passed, false);
@@ -895,7 +991,7 @@ test('runs pm.sendRequest through the broker by default and can disable it per w
   }, {
     trustedCapabilities: { sendRequest: false },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(denied.result.passed, false);
@@ -928,7 +1024,7 @@ test('runs pm.sendRequest through the broker by default and can disable it per w
       };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(allowed.result.passed, true);
@@ -955,7 +1051,7 @@ test('rejects oversized brokered pm.sendRequest payloads and response bodies', a
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(oversizedPayload.result.passed, false);
@@ -981,7 +1077,7 @@ test('rejects oversized brokered pm.sendRequest payloads and response bodies', a
       };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(oversizedResponse.result.passed, false);
@@ -1073,7 +1169,7 @@ test('normalizes broader Postman pm.sendRequest inputs and commits jar side effe
       };
     },
     timeoutMillis: 1000,
-    workerTimeoutMillis: 1500
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1500)
   });
 
   assert.equal(execution.result.passed, true);
@@ -1110,7 +1206,7 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(rejected.result.passed, false);
   assert.match(rejected.result.tests[0].error, /configured certificate binding/);
@@ -1129,7 +1225,7 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(rejectedPfx.result.passed, false);
   assert.match(rejectedPfx.result.tests[0].error, /configured certificate binding/);
@@ -1154,7 +1250,7 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
   assert.equal(disabledBinding.result.passed, false);
   assert.match(disabledBinding.result.tests[0].error, /not available/);
@@ -1189,7 +1285,7 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(allowed.result.passed, true);
@@ -1224,7 +1320,7 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(allowedPfx.result.passed, true);
@@ -1265,7 +1361,7 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(settingsBinding.result.passed, true);
@@ -1294,7 +1390,7 @@ test('requires user-granted file bindings for brokered pm.sendRequest bodies', a
       throw new Error('sendRequest should not be called for unbound file bodies');
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(rejected.result.passed, false);
@@ -1314,7 +1410,7 @@ test('requires user-granted file bindings for brokered pm.sendRequest bodies', a
       throw new Error('sendRequest should not be called for mismatched file binding IDs');
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(idBypass.result.passed, false);
@@ -1348,7 +1444,7 @@ test('requires user-granted file bindings for brokered pm.sendRequest bodies', a
       return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0, finalUrl: request.url };
     },
     timeoutMillis: 1000,
-    workerTimeoutMillis: 1500
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1500)
   });
 
   assert.equal(allowed.result.passed, true);
@@ -1371,7 +1467,7 @@ test('discards side effects when aggregate worker result payloads are oversized'
     }
   }, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, false);
@@ -1427,7 +1523,7 @@ test('supports true globals, iteration data, and Postman-style cookie helpers by
     ]
   }, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -1453,7 +1549,7 @@ test('can disable Postman cookie helpers per workspace', async () => {
   }, {
     trustedCapabilities: { cookies: false },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, false);
@@ -1473,7 +1569,7 @@ test('rejects pm.cookies.jar object-set cookies for unrelated domains', async ()
     cookieJar: []
   }, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, false);
@@ -1500,7 +1596,7 @@ test('supports pm.cookies.jar clear for hostname targets', async () => {
     ]
   }, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);

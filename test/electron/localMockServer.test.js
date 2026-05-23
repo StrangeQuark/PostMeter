@@ -11,13 +11,14 @@ const {
   matchMockRequest,
   startLocalMockServer
 } = require('../../src/core/runtime/localMockServer');
+const { scriptWorkerTestTimeoutMillis } = require('./scriptWorkerTestTimeouts');
 
 function localMockOptions(stateStore) {
   return {
     requireNodePermission: false,
     stateStore,
     timeoutMillis: 1000,
-    workerTimeoutMillis: 2000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(2000)
   };
 }
 

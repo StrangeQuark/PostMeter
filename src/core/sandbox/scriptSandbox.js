@@ -147,7 +147,15 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
   try {
     workerProgress({ label: 'preparing worker launch' });
     execArgv = scriptWorkerExecArgv(options);
-    launch = createScriptWorkerLaunch(workerPath, execArgv, scriptWorkerEnv(options), options);
+    const workerExecutable = scriptWorkerExecutablePath(options);
+    const workerEnv = scriptWorkerEnv({
+      ...options,
+      electronRunAsNode: scriptWorkerExecutableUsesElectron(workerExecutable)
+    });
+    launch = createScriptWorkerLaunch(workerPath, execArgv, workerEnv, {
+      ...options,
+      executablePath: workerExecutable
+    });
     workerProgress({
       label: 'worker launch selected',
       backend: launch.backend || '',
@@ -2429,9 +2437,38 @@ function scriptWorkerMaxOldSpaceMb(options = {}) {
   );
 }
 
-function scriptWorkerEnv() {
+function scriptWorkerExecutablePath(options = {}) {
+  if (options.executablePath) {
+    return options.executablePath;
+  }
+  if ((options.platform || process.platform) === 'win32' && !process.versions.electron) {
+    return sourceElectronExecutablePath() || process.execPath;
+  }
+  return process.execPath;
+}
+
+function scriptWorkerExecutableUsesElectron(executablePath) {
+  return process.versions.electron || /(^|[\\/])electron(?:\.exe)?$/i.test(String(executablePath || ''));
+}
+
+let cachedSourceElectronExecutablePath;
+
+function sourceElectronExecutablePath() {
+  if (cachedSourceElectronExecutablePath !== undefined) {
+    return cachedSourceElectronExecutablePath;
+  }
+  try {
+    const electronPath = require('electron');
+    cachedSourceElectronExecutablePath = typeof electronPath === 'string' && electronPath ? electronPath : '';
+  } catch {
+    cachedSourceElectronExecutablePath = '';
+  }
+  return cachedSourceElectronExecutablePath;
+}
+
+function scriptWorkerEnv(options = {}) {
   const env = { POSTMETER_SCRIPT_WORKER: '1' };
-  if (process.versions.electron) {
+  if (process.versions.electron || options.electronRunAsNode === true) {
     env.ELECTRON_RUN_AS_NODE = '1';
   }
   for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR']) {
@@ -2454,6 +2491,7 @@ module.exports = {
   runPostmanScriptIsolated,
   scriptWorkerExecArgv,
   scriptWorkerEnv,
+  scriptWorkerExecutablePath,
   scriptWorkerMaxOldSpaceMb,
   scriptWorkerRequiresNodePermission,
   supportsNodePermissionFlags

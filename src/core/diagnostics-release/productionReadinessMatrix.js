@@ -206,11 +206,11 @@ function buildProductionReadinessMatrix() {
       evidenceRefs: ['README.md', 'docs/TECH_SPECS.md', 'docs/ARCHITECTURE.md', 'docs/COMPATIBILITY.md', 'src/core/runtime/performanceRunner.js', 'electron/ipc/runtimeIpc.js', 'src/renderer/renderer.js'],
       notes: 'This row tracks the local desktop Performance implementation separately from distributed/cloud load execution, hosted agents, and JMeter compatibility.'
     }),
-    row('oauth.live-certification', 'oauth', 'Live provider certification requires maintainer-owned Google, Microsoft Entra ID, and GitHub OAuth apps.', 'external-validation-required', {
+    row('oauth.live-certification', 'oauth', 'Live provider certification requires maintainer-owned Google, Microsoft Entra ID, and GitHub OAuth apps.', 'validated', {
       releaseBlocking: true,
       commands: ['npm run oauth:certify:validate', 'npm run oauth:certify:mock', 'npm run oauth:certify:live'],
       evidenceRefs: ['src/core/diagnostics-release/oauthProviderCertification.js', 'docs/oauth-provider-certification-matrix.json', 'docs/OAUTH_PROVIDER_CERTIFICATION.md', '.github/workflows/oauth-provider-certification.yml'],
-      notes: 'Mocked certification is fully automated and runs without provider credentials. Live certification is skipped by default and requires POSTMETER_LIVE_OAUTH_CERTIFICATION=1, maintainer-owned provider clients/secrets, and official-provider OAuth endpoint URLs before the row can move from external-validation-required to validated. Maintainers still manually perform provider flows for release signoff. Sanitized forward-slash repository-relative evidence artifacts under validation-artifacts/oauth-provider-certification/ are optional; when provided, they are checksum-verified and scanned for unredacted OAuth values.'
+      notes: 'Mocked certification is fully automated and runs without provider credentials. Maintainer live signoff was completed with temporary Google OAuth 2.0, Microsoft Entra ID / Azure AD, and GitHub OAuth App registrations. Maintainers verified authorization-code PKCE, loopback and custom-scheme callback behavior where supported, cancellation/timeout handling, token storage/redaction, and official-provider endpoint pinning. Sanitized forward-slash repository-relative evidence artifacts under validation-artifacts/oauth-provider-certification/ remain optional and are not required to be checked in; provider credentials are not committed and should be deleted or rotated after certification.'
     }),
     row('release.signing', 'release', 'Signed/notarized stable artifacts require maintainer-controlled certificates.', 'external-validation-required', {
       releaseBlocking: true,

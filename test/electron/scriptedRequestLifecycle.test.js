@@ -6,6 +6,7 @@ const {
   runScriptedRequestLifecycle
 } = require('../../src/core/runtime/scriptedRequestLifecycle');
 const { runRequestWithScripts } = require('../../src/core/runtime/requestScriptRunner');
+const { scriptWorkerTestTimeoutMillis } = require('./scriptWorkerTestTimeouts');
 
 test('runs the shared scripted request lifecycle and applies script mutations across both phases', async () => {
   const environment = {
@@ -603,7 +604,7 @@ test('propagates diagnostics callbacks into single-request sandbox broker denial
     },
     scriptOptions: {
       timeoutMillis: 500,
-      workerTimeoutMillis: 1000
+      workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
     },
     sendRequest: async () => response(200, '{}')
   });

@@ -12,7 +12,7 @@ PostMeter is a standalone local desktop app. It does not require a PostMeter acc
 
 Scripts must not receive direct access to the host filesystem, process environment, child processes, shell, Electron APIs, renderer DOM, native modules, or raw sockets. Postman-compatible APIs such as `pm.sendRequest`, cookie helpers, package loading, visualizers, vault access, GraphQL hooks, and gRPC hooks are implemented through parent-owned brokers and validators.
 
-Linux script workers use `bubblewrap` plus a dangerous-syscall seccomp policy when available or required. Windows script workers use the release-owned AppContainer helper, and macOS script workers use a seatbelt `sandbox-exec` profile. Platform-equivalent OS sandbox coverage is tracked separately in `docs/os-sandbox-platform-matrix.json` and must stay backed by native runner source and packaged validation evidence.
+Linux script workers require `bubblewrap` plus a dangerous-syscall seccomp policy. Windows script workers require the release-owned AppContainer helper, and macOS script workers require a seatbelt `sandbox-exec` profile. Script execution fails closed when the platform backend is unavailable or fails its functional probe. Platform-equivalent OS sandbox coverage is tracked separately in `docs/os-sandbox-platform-matrix.json` and must stay backed by native runner source and packaged validation evidence.
 
 ## Vault And Secrets
 
@@ -36,7 +36,7 @@ npm run postman:parity:claim
 npm run sandbox:platform:validate
 ```
 
-`npm run production:readiness:claim` is the stable-release gate and remains expected to fail until every release-blocking row is validated, including live OAuth certification, native release evidence, UX/accessibility evidence, and signing/notarization. Beta and release-candidate thresholds are exposed separately by `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. `npm run sandbox:platform:claim` is the separate platform OS-sandbox gate and should pass when the Linux, Windows, and macOS backend matrix is current.
+`npm run production:readiness:claim` is the stable-release gate and remains expected to fail until every release-blocking row is validated, including native release evidence, UX/accessibility evidence, signing/notarization, and any rows still marked implemented rather than validated. Beta and release-candidate thresholds are exposed separately by `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. `npm run sandbox:platform:claim` is the separate platform OS-sandbox gate and should pass when the Linux, Windows, and macOS backend matrix is current.
 
 ## Reporting
 

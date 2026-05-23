@@ -16,6 +16,7 @@ const releaseWorkflowDocument = parseWorkflow('Release workflow', releaseWorkflo
 const releaseValidationWorkflowDocument = parseWorkflow('Manual native release validation workflow', releaseValidationWorkflow);
 const validateSandboxRuntimeScript = readText('scripts/validateSandboxRuntime.js');
 const validatePackagedSandboxRuntimeScript = readText('scripts/validatePackagedSandboxRuntime.js');
+const linuxSandboxBackendSetupScript = readText('scripts/ci/install-linux-sandbox-backend.sh');
 const productionSupportMatricesSource = readText('src/core/diagnostics-release/productionSupportMatrices.js');
 const productionReadinessMatrixSource = readText('src/core/diagnostics-release/productionReadinessMatrix.js');
 
@@ -104,6 +105,13 @@ requireFile('Packaged sandbox validation timeout guard', validatePackagedSandbox
   /POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS/,
   /timed out/
 ]);
+requireFile('Linux sandbox backend CI setup', linuxSandboxBackendSetupScript, [
+  /apt-get install -y bubblewrap apparmor apparmor-utils/,
+  /profile bwrap \$\{BWRAP_PATH\} flags=\(unconfined\)/,
+  /userns,/,
+  /apparmor_parser -r \/etc\/apparmor\.d\/bwrap/,
+  /--unshare-all --unshare-user --disable-userns --assert-userns-disabled/
+]);
 requireFile('UX/accessibility source matrix', productionSupportMatricesSource, [
   /npm run test:smoke/,
   /test\/electron\/smokeProcess\.test\.js/,
@@ -117,7 +125,7 @@ requireFile('Production readiness source matrix', productionReadinessMatrixSourc
 requireWorkflow('CI workflow', ciWorkflow, [
   /node-version:\s*22/,
   /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
-  /apt-get install -y bubblewrap/,
+  /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
   /npm test/,
   /npm run postman:parity:validate/,
   /npm run postman:docs:validate/,
@@ -144,7 +152,6 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /platform:\s*linux/,
   /Prepare native helpers/,
   /Source-tree sandbox runtime validation/,
-  /POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP:\s*\$\{\{ matrix\.allow_os_skip \}\}/,
   /npm run dist:linux/,
   /npm run release:validate:packaged-smoke/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
@@ -162,6 +169,7 @@ requireWorkflow('CI workflow', ciWorkflow, [
 
 requireWorkflow('Release workflow', releaseWorkflow, [
   /platform:\s*linux/,
+  /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
   /ci_no_sandbox:\s*"1"/,
   /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*\$\{\{ matrix\.ci_no_sandbox \}\}/,
   /platform:\s*windows/,
@@ -210,6 +218,7 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /workflow_dispatch:/,
   /contents:\s*read/,
   /platform:\s*linux/,
+  /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
   /ci_no_sandbox:\s*"1"/,
   /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*\$\{\{ matrix\.ci_no_sandbox \}\}/,
   /platform:\s*windows/,
@@ -257,6 +266,7 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
 
 for (const [label, workflowDocument, requiredRunSteps] of [
   ['CI workflow', ciWorkflowDocument, [
+    /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
     /npm test/,
     /npm run sandbox:validate/,
     /npm run sandbox:platform:validate/,
@@ -287,6 +297,7 @@ for (const [label, workflowDocument, requiredRunSteps] of [
     /npm run release:validate:mac-protocol/
   ]],
   ['Release workflow', releaseWorkflowDocument, [
+    /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
     /npm test/,
     /npm run sandbox:validate/,
     /npm run sandbox:platform:validate/,
@@ -317,6 +328,7 @@ for (const [label, workflowDocument, requiredRunSteps] of [
     /npm run release:validate/
   ]],
   ['Manual native release validation workflow', releaseValidationWorkflowDocument, [
+    /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
     /npm test/,
     /npm run sandbox:validate/,
     /npm run sandbox:platform:validate/,

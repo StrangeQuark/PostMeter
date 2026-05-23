@@ -8,6 +8,7 @@ const {
 } = require('../../src/core/runtime/localMockServer');
 const { scriptPackageIntegrity } = require('../../src/core/sandbox/scriptRuntime');
 const { MemoryVaultStore } = require('../../src/core/sandbox/vaultStore');
+const { scriptWorkerTestTimeoutMillis } = require('./scriptWorkerTestTimeouts');
 
 test('executes simple imported Postman collection, folder, and request scripts with expected outputs', async () => {
   const collection = importPostmanCollection({
@@ -547,7 +548,7 @@ test('executes imported local mock scripts and rolls back complex negative mock 
     requireNodePermission: false,
     stateStore,
     timeoutMillis: 1000,
-    workerTimeoutMillis: 2000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(2000)
   });
   assert.equal(positive.matched, true);
   assert.equal(positive.response.statusCode, 203);
@@ -563,7 +564,7 @@ test('executes imported local mock scripts and rolls back complex negative mock 
     requireNodePermission: false,
     stateStore,
     timeoutMillis: 1000,
-    workerTimeoutMillis: 2000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(2000)
   });
   assert.equal(negative.matched, true);
   assert.equal(negative.response.statusCode, 500);

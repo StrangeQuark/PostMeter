@@ -361,10 +361,71 @@ bool grantPathAccess(const std::wstring& path, PSID sid, DWORD permissions, bool
   return true;
 }
 
+bool daclHasSidAccess(PACL dacl, PSID sid, DWORD permissions, bool inheritChildren) {
+  if (!dacl || !sid) {
+    return false;
+  }
+  for (DWORD index = 0; index < dacl->AceCount; ++index) {
+    void* rawAce = nullptr;
+    if (!GetAce(dacl, index, &rawAce) || !rawAce) {
+      continue;
+    }
+    auto* header = reinterpret_cast<ACE_HEADER*>(rawAce);
+    if (header->AceType != ACCESS_ALLOWED_ACE_TYPE) {
+      continue;
+    }
+    auto* ace = reinterpret_cast<ACCESS_ALLOWED_ACE*>(rawAce);
+    PSID aceSid = reinterpret_cast<PSID>(&ace->SidStart);
+    if (!EqualSid(aceSid, sid)) {
+      continue;
+    }
+    if ((ace->Mask & permissions) != permissions) {
+      continue;
+    }
+    if (inheritChildren) {
+      constexpr BYTE requiredInheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
+      if ((header->AceFlags & requiredInheritance) != requiredInheritance) {
+        continue;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+bool pathAlreadyGrantsAccess(const std::wstring& path, PSID sid, DWORD permissions, bool inheritChildren) {
+  PACL dacl = nullptr;
+  PSECURITY_DESCRIPTOR securityDescriptor = nullptr;
+  DWORD result = GetNamedSecurityInfoW(
+    const_cast<LPWSTR>(path.c_str()),
+    SE_FILE_OBJECT,
+    DACL_SECURITY_INFORMATION,
+    nullptr,
+    nullptr,
+    &dacl,
+    nullptr,
+    &securityDescriptor
+  );
+  UniqueLocal securityDescriptorOwner(securityDescriptor);
+  if (result != ERROR_SUCCESS) {
+    return false;
+  }
+  return daclHasSidAccess(dacl, sid, permissions, inheritChildren);
+}
+
 void grantParentPathAccess(const std::wstring& path, PSID sid) {
+  static std::vector<std::wstring> grantedParents;
+  constexpr DWORD parentPermissions = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
   std::wstring current = containingDirectory(path);
   while (!current.empty()) {
-    grantPathAccess(current, sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE, false, false);
+    if (std::find(grantedParents.begin(), grantedParents.end(), current) == grantedParents.end()) {
+      if (
+        pathAlreadyGrantsAccess(current, sid, parentPermissions, false)
+        || grantPathAccess(current, sid, parentPermissions, false, false)
+      ) {
+        grantedParents.push_back(current);
+      }
+    }
     if (isDriveRoot(current)) {
       break;
     }
@@ -374,9 +435,14 @@ void grantParentPathAccess(const std::wstring& path, PSID sid) {
 
 void grantPathTreeAccess(const std::wstring& path, PSID sid, DWORD permissions) {
   const DWORD attributes = fileAttributesOrFail(path);
+  const bool isDirectory = (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+  const bool canInheritToChildren = isDirectory && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0;
+  if (pathAlreadyGrantsAccess(path, sid, permissions, canInheritToChildren)) {
+    return;
+  }
   grantPathAccess(path, sid, permissions);
 
-  if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+  if (!canInheritToChildren) {
     return;
   }
 

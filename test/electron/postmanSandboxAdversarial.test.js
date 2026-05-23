@@ -8,6 +8,7 @@ const {
   createScriptedRequestState,
   runScriptedRequestLifecycle
 } = require('../../src/core/runtime/scriptedRequestLifecycle');
+const { scriptWorkerTestTimeoutMillis } = require('./scriptWorkerTestTimeouts');
 
 test('blocks prototype and constructor escapes from script-visible objects', async () => {
   const execution = await runPostmanScriptIsolated(`
@@ -39,7 +40,7 @@ test('blocks prototype and constructor escapes from script-visible objects', asy
     }
   }, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -140,7 +141,7 @@ test('normalizes broker payloads without prototype pollution or parent mutation'
       return jsonResponse(200, { ok: true });
     },
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -171,7 +172,7 @@ test('blocks raw networking, filesystem, process, and shell access in isolated w
     });
   `, {}, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(execution.result.passed, true);
@@ -224,7 +225,7 @@ test('rolls back hostile mock-state mutations and prevents prototype pollution',
     requireNodePermission: false,
     stateStore: store,
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
 
   assert.equal(result.response.statusCode, 500);
@@ -285,7 +286,7 @@ test('fails closed on oversized worker output without committing side effects', 
     environment: { id: 'env', name: 'Env', variables: [{ enabled: true, key: 'stable', value: 'yes' }] }
   }, {
     timeoutMillis: 500,
-    workerTimeoutMillis: 1000
+    workerTimeoutMillis: oversizedResultWorkerTimeoutMillis()
   });
 
   assert.equal(execution.result.passed, false);
@@ -302,7 +303,7 @@ test('terminates infinite async work without committing earlier mutations', asyn
     environment: { id: 'env', name: 'Env', variables: [] }
   }, {
     timeoutMillis: 50,
-    workerTimeoutMillis: 500
+    workerTimeoutMillis: scriptWorkerTestTimeoutMillis(500)
   });
 
   assert.equal(execution.result.passed, false);
@@ -320,4 +321,8 @@ function jsonResponse(statusCode, body) {
     responseBytes: Buffer.byteLength(text),
     finalUrl: 'https://api.example.test/broker'
   };
+}
+
+function oversizedResultWorkerTimeoutMillis(platform = process.platform) {
+  return scriptWorkerTestTimeoutMillis(1_000, platform);
 }

@@ -108,7 +108,7 @@ function buildOsSandboxPlatformMatrix() {
         '.github/workflows/release.yml'
       ]
     }),
-    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Windows script workers launch through the release-owned AppContainer helper with a stable AppContainer profile, minimal child environment, private temp directory, no broad filesystem grants, no declared network capabilities, inherited stdio only, and a kill-on-close single-process job object.', 'implemented', {
+    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Windows script workers launch through the release-owned AppContainer helper with a stable AppContainer profile, minimal child environment, private temp directory, no broad filesystem grants, no declared network capabilities, source-mode stdio IPC, Electron Node-mode private file IPC, and a kill-on-close single-process job object.', 'implemented', {
       claimBlocking: true,
       securityDecision: 'Use a release-owned AppContainer helper instead of relying on node:vm alone; source and packaged Windows validation must fail closed if the helper is missing or cannot launch.',
       sourceRefs: ['sandboxContract', 'osSandbox', 'runtimeValidation', 'ciWorkflow', 'releaseWorkflow'],
