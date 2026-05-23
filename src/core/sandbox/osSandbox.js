@@ -98,21 +98,23 @@ const MAX_PROBE_OUTPUT_CHARS = 4000;
 function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options = {}) {
   const mode = OS_SANDBOX_MODES.REQUIRED;
   const platform = options.platform || process.platform;
-  const workerTransportArg = platform === 'win32'
+  const executablePath = options.executablePath || process.execPath;
+  const useWindowsFileTransport = platform === 'win32' && env.ELECTRON_RUN_AS_NODE === '1';
+  const workerTransportArg = useWindowsFileTransport
     ? SCRIPT_WORKER_FILE_TRANSPORT_ARG
     : SCRIPT_WORKER_STDIO_TRANSPORT_ARG;
   let sandbox;
   try {
     sandbox = createOsSandboxedProcessLaunch({
       platform,
-      executablePath: process.execPath,
+      executablePath,
       args: [
         ...execArgv,
         workerPath,
         workerTransportArg
       ],
       env,
-      readOnlyPaths: scriptWorkerReadOnlyPaths(workerPath),
+      readOnlyPaths: scriptWorkerReadOnlyPaths(workerPath, executablePath),
       bubblewrapPath: options.bubblewrapPath,
       macosSandboxExecPath: options.macosSandboxExecPath,
       probeArgs: [
@@ -136,7 +138,7 @@ function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options =
 
   const launch = {
     ...sandbox,
-    transport: sandbox.backend === OS_SANDBOX_BACKENDS.WINDOWS_HELPER ? 'file' : 'stdio'
+    transport: sandbox.backend === OS_SANDBOX_BACKENDS.WINDOWS_HELPER && useWindowsFileTransport ? 'file' : 'stdio'
   };
   recordOsSandboxSelection(options, launch);
   return launch;
@@ -301,23 +303,25 @@ function recordOsSandboxLaunchFailure(options = {}, error, mode) {
 function osSandboxStatus(options = {}) {
   const mode = OS_SANDBOX_MODES.REQUIRED;
   const platform = options.platform || process.platform;
+  const executablePath = realPathIfExists(options.executablePath || defaultOsSandboxExecutablePath(platform));
+  const probeEnv = osSandboxProbeEnv(executablePath);
   const bubblewrapPath = platform === 'linux' ? findBubblewrap(options.bubblewrapPath) : '';
   const macosSandboxExecPath = platform === 'darwin' ? findMacosSandboxExec(options.macosSandboxExecPath, platform) : '';
   const windowsHelperPath = platform === 'win32' ? findWindowsSandboxHelper(options.windowsSandboxHelperPath, platform) : '';
   const linuxProbe = {
-    env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
-    executablePath: realPathIfExists(process.execPath),
-    readOnlyPaths: [runtimeExecutableRoot(process.execPath), ...scriptWorkerAppReadOnlyPaths()]
+    env: probeEnv,
+    executablePath,
+    readOnlyPaths: [runtimeExecutableRoot(executablePath), ...scriptWorkerAppReadOnlyPaths()]
   };
   const macosProbe = {
-    env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
-    executablePath: realPathIfExists(process.execPath),
-    readOnlyPaths: [runtimeExecutableRoot(process.execPath), ...scriptWorkerAppReadOnlyPaths()]
+    env: probeEnv,
+    executablePath,
+    readOnlyPaths: [runtimeExecutableRoot(executablePath), ...scriptWorkerAppReadOnlyPaths()]
   };
   const windowsProbe = {
-    env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
-    executablePath: realPathIfExists(process.execPath),
-    readOnlyPaths: [runtimeExecutableRoot(process.execPath), ...scriptWorkerAppReadOnlyPaths()]
+    env: probeEnv,
+    executablePath,
+    readOnlyPaths: [runtimeExecutableRoot(executablePath), ...scriptWorkerAppReadOnlyPaths()]
   };
   const linuxSupported = platform === 'linux' && Boolean(bubblewrapPath) && bubblewrapUsable(bubblewrapPath, linuxProbe);
   const macosSupported = macosSandboxSupported(macosSandboxExecPath, platform, macosProbe);
@@ -355,6 +359,36 @@ function windowsSandboxSupported(windowsHelperPath, platform, options = {}) {
     platform !== process.platform
     || windowsSandboxHelperUsable(windowsHelperPath, options)
   );
+}
+
+function defaultOsSandboxExecutablePath(platform = process.platform) {
+  if (platform === 'win32' && platform === process.platform && !process.versions.electron) {
+    return sourceElectronExecutablePath() || process.execPath;
+  }
+  return process.execPath;
+}
+
+let cachedSourceElectronExecutablePath;
+
+function sourceElectronExecutablePath() {
+  if (cachedSourceElectronExecutablePath !== undefined) {
+    return cachedSourceElectronExecutablePath;
+  }
+  try {
+    const electronPath = require('electron');
+    cachedSourceElectronExecutablePath = typeof electronPath === 'string' && electronPath ? electronPath : '';
+  } catch {
+    cachedSourceElectronExecutablePath = '';
+  }
+  return cachedSourceElectronExecutablePath;
+}
+
+function osSandboxProbeEnv(executablePath, env = {}) {
+  const output = { ...(env || {}) };
+  if (process.versions.electron || /(^|[\\/])electron(?:\.exe)?$/i.test(String(executablePath || ''))) {
+    output.ELECTRON_RUN_AS_NODE = '1';
+  }
+  return output;
 }
 
 function macosSandboxSupported(macosSandboxExecPath, platform, options = {}) {
@@ -675,7 +709,7 @@ function windowsProbeFailure(platform, helperPath, options = {}) {
     return '';
   }
   const executablePath = realPathIfExists(options.executablePath || process.execPath);
-  const env = options.env || {};
+  const env = osSandboxProbeEnv(executablePath, options.env);
   const probeArgs = Array.isArray(options.probeArgs) ? options.probeArgs : ['-e', 'process.exit(0)'];
   const readOnlyPaths = windowsReadOnlyPaths([
     runtimeExecutableRoot(executablePath),
@@ -1170,14 +1204,14 @@ function windowsHelperArgs(options = {}) {
 
 function windowsElectronNodeArgs(args = [], env = {}, privateTempDir = '') {
   let values = Array.isArray(args) ? args.slice() : [];
+  if (values.includes(SCRIPT_WORKER_FILE_TRANSPORT_ARG)) {
+    values = windowsScriptWorkerFileTransportArgs(values, privateTempDir);
+  }
   if (
     env.ELECTRON_RUN_AS_NODE !== '1'
     || values.includes(SCRIPT_WORKER_STDIO_TRANSPORT_ARG)
   ) {
     return values;
-  }
-  if (values.includes(SCRIPT_WORKER_FILE_TRANSPORT_ARG)) {
-    values = windowsScriptWorkerFileTransportArgs(values, privateTempDir);
   }
   if (values.includes(WINDOWS_ELECTRON_NO_STDIO_INIT)) {
     return values;
@@ -1237,8 +1271,10 @@ function windowsSandboxEnv(env, privateTempDir = os.tmpdir()) {
 }
 
 function findWindowsSandboxHelper(explicitPath, platform = process.platform) {
+  if (explicitPath) {
+    return executableFile(explicitPath, platform) ? explicitPath : '';
+  }
   const candidates = [
-    explicitPath,
     process.env.POSTMETER_WINDOWS_OS_SANDBOX_HELPER,
     process.resourcesPath ? path.join(process.resourcesPath, 'native', 'windows', WINDOWS_SANDBOX_HELPER_NAME) : '',
     path.join(projectRoot(), 'native', 'windows-sandbox-helper', 'bin', WINDOWS_SANDBOX_HELPER_NAME)
@@ -1260,9 +1296,9 @@ function windowsReadOnlyPaths(paths) {
   return output;
 }
 
-function scriptWorkerReadOnlyPaths(workerPath) {
+function scriptWorkerReadOnlyPaths(workerPath, executablePath = process.execPath) {
   const paths = [
-    runtimeExecutableRoot(process.execPath),
+    runtimeExecutableRoot(executablePath),
     ...scriptWorkerAppReadOnlyPaths(workerPath)
   ];
   return paths.filter(Boolean);

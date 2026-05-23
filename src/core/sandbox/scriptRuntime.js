@@ -616,15 +616,19 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
     }
     const delayMillis = Math.min(MAX_TIMER_DELAY_MILLIS, Math.max(0, Number(delay) || 0));
     const id = ++timerSequence;
-    const timer = { id, cancelled: false };
+    const timer = { id, cancelled: false, nativeTimer: null, resolve: null };
     timers.set(id, timer);
-    const task = brokerRequest('timer', { timerId: id, delayMillis })
-      .then(() => {
+    const task = new Promise((resolve) => {
+      timer.resolve = resolve;
+      timer.nativeTimer = setTimeout(() => {
+        timer.nativeTimer = null;
         if (!timer.cancelled) {
-          return runCallback(callback, args);
+          runCallback(callback, args).finally(resolve);
+          return;
         }
-        return undefined;
-      })
+        resolve();
+      }, delayMillis);
+    })
       .catch(recordFatal)
       .finally(() => {
         timers.delete(id);
@@ -642,11 +646,11 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
     }
     const delayMillis = Math.min(MAX_TIMER_DELAY_MILLIS, Math.max(0, Number(delay) || 0));
     const id = ++timerSequence;
-    const timer = { id, cancelled: false, interval: true };
+    const timer = { id, cancelled: false, interval: true, nativeTimer: null, resolve: null };
     timers.set(id, timer);
     const task = (async () => {
       while (!timer.cancelled) {
-        await brokerRequest('timer', { timerId: id, delayMillis });
+        await waitForTrackedTimer(timer, delayMillis);
         if (!timer.cancelled) {
           await runCallback(callback, args);
         }
@@ -667,7 +671,13 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
     }
     timer.cancelled = true;
     timers.delete(Number(id));
-    brokerRequest('clearTimer', { timerId: timer.id }).catch(() => {});
+    if (timer.nativeTimer) {
+      clearTimeout(timer.nativeTimer);
+      timer.nativeTimer = null;
+    }
+    if (typeof timer.resolve === 'function') {
+      timer.resolve();
+    }
   };
 
   const queueMicrotaskForScript = (callback) => {
@@ -689,6 +699,21 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
       throw sandboxError(`Scripts cannot make more than ${MAX_BROKER_REQUESTS} brokered requests.`);
     }
     return broker.request(operation, payload);
+  }
+
+  function waitForTrackedTimer(timer, delayMillis) {
+    return new Promise((resolve) => {
+      if (timer.cancelled) {
+        resolve();
+        return;
+      }
+      timer.resolve = resolve;
+      timer.nativeTimer = setTimeout(() => {
+        timer.nativeTimer = null;
+        timer.resolve = null;
+        resolve();
+      }, delayMillis);
+    });
   }
 
   async function waitForIdle() {

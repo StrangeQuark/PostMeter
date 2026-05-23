@@ -250,7 +250,7 @@
       "id": "windows.appcontainer-backend",
       "platform": "windows",
       "area": "native-backend",
-      "target": "Windows script workers launch through the release-owned AppContainer helper with a stable AppContainer profile, minimal child environment, private temp directory, no broad filesystem grants, no declared network capabilities, inherited stdio only, and a kill-on-close single-process job object.",
+      "target": "Windows script workers launch through the release-owned AppContainer helper with a stable AppContainer profile, minimal child environment, private temp directory, no broad filesystem grants, no declared network capabilities, source-mode stdio IPC, Electron Node-mode private file IPC, and a kill-on-close single-process job object.",
       "status": "implemented",
       "claimSurface": "platform-os-sandbox",
       "claimBlocking": true,

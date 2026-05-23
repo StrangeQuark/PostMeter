@@ -901,6 +901,35 @@ test('supports bounded interval timers, microtasks, and console methods in async
   assert.match(result.logs.join('\n'), /phase: \d+ms/);
 });
 
+test('keeps script timers local to the sandbox worker', async () => {
+  const result = await runPostmanScriptAsync(`
+    var intervalCount = 0;
+    var interval = setInterval(function () {
+      intervalCount += 1;
+      if (intervalCount >= 2) {
+        clearInterval(interval);
+      }
+    }, 1);
+    setTimeout(function () {
+      pm.test('local timers are not blocked by broker latency', function () {
+        pm.expect(intervalCount >= 2).to.equal(true);
+      });
+    }, 25);
+  `, {}, {
+    broker: {
+      request(operation) {
+        if (operation === 'timer' || operation === 'clearTimer') {
+          return Promise.reject(new Error(`Timer operation should stay local: ${operation}`));
+        }
+        return Promise.reject(new Error(`Unexpected broker operation: ${operation}`));
+      }
+    },
+    timeoutMillis: 1000
+  });
+
+  assert.equal(result.passed, true);
+});
+
 test('does not expose prototype-polluting keys through object conversion helpers', () => {
   const result = runPostmanScript(`
     pm.test('safe object helpers', function () {

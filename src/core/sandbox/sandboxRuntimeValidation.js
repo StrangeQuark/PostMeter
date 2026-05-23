@@ -233,7 +233,7 @@ function validateWindowsSandboxLaunchPolicy(launch) {
     throw new Error('Windows stdio script worker launches must preserve Electron stdio initialization for the worker protocol.');
   }
   if (isFileWorkerLaunch) {
-    if (!childArgs.includes('--no-stdio-init')) {
+    if (launch.env.ELECTRON_RUN_AS_NODE === '1' && !childArgs.includes('--no-stdio-init')) {
       throw new Error('Windows file-transport script worker launches must disable Electron stdio initialization.');
     }
     if (
