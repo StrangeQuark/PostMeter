@@ -2,6 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const test = require('node:test');
+const {
+  APP_RENDERER_ALLOWED_ASSET_PATHS
+} = require('../../electron/app-shell/rendererAssetManifest');
 
 test('package metadata points to a valid production PNG icon', async () => {
   const root = path.join(__dirname, '..', '..');
@@ -30,6 +33,14 @@ test('package metadata declares canonical release repository and desktop protoco
   assert.equal(packageJson.build.linux.maintainer, 'StrangeQuark <support@qrksw.com>');
   assert.ok(packageJson.build.files.includes('src/**/*'));
   assert.ok(packageJson.build.files.includes('electron/**/*'));
+  for (const assetPath of APP_RENDERER_ALLOWED_ASSET_PATHS) {
+    const packagePath = assetPath.replace(/^\//, '');
+    assert.ok(
+      packageJson.build.files.includes(packagePath)
+        || packageJson.build.files.some((pattern) => pattern.endsWith('/**/*') && packagePath.startsWith(pattern.slice(0, -'/**/*'.length))),
+      `Packaged files must include app protocol asset ${assetPath}.`
+    );
+  }
   assert.ok(packageJson.build.win.extraResources.some((entry) => (
     entry.from === 'native/windows-sandbox-helper/bin/PostMeterWindowsSandboxHelper.exe'
     && entry.to === 'native/windows/PostMeterWindowsSandboxHelper.exe'
