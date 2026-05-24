@@ -109,6 +109,7 @@
     "files": [
       "electron/**/*",
       "src/**/*",
+      "build/icon.png",
       "package.json",
       "LICENSE",
       "README.md"
