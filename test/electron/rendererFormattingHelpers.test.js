@@ -36,7 +36,9 @@ test('renderer UI utilities normalize bytes, notifications, and smoke query flag
     'uiTypographySmoke',
     'uiOauthSmoke',
     'uiHawkSmoke',
-    'uiAwsSmoke'
+    'uiAwsSmoke',
+    'uiA11ySmoke',
+    'uiAuthMatrixSmoke'
   ]);
   assert.equal(formatBytes(-1), '0 B');
   assert.equal(formatBytes(1023), '1023 B');

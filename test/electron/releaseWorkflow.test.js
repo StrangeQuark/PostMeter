@@ -15,6 +15,8 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /bash scripts\/ci\/install-linux-sandbox-backend\.sh/);
+  assert.match(workflow, /npm run renderer:html:check/);
+  assert.match(workflow, /npm run refactor:structure:validate/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
@@ -35,6 +37,10 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /xvfb-run -a npm run test:ui:regression/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:typography/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:hawk/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:aws/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:a11y/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:auth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run pack:linux/);
   assert.match(workflow, /ci_no_sandbox:\s*"1"/);
@@ -50,6 +56,8 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run dist:linux/);
   assert.match(workflow, /xvfb-run -a npm run release:validate:packaged-smoke/);
+  assert.match(workflow, /xvfb-run -a npm run release:validate:packaged-workflow/);
+  assert.match(workflow, /xvfb-run -a npm run release:validate:packaged-auth/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
   assert.match(workflow, /Upload native package artifacts/);
@@ -78,6 +86,8 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run dist:win/);
   assert.match(workflow, /npm run dist:mac/);
   assert.match(workflow, /npm test/);
+  assert.match(workflow, /npm run renderer:html:check/);
+  assert.match(workflow, /npm run refactor:structure:validate/);
   assert.match(workflow, /npm run electron:version/);
   assert.match(workflow, /bash scripts\/ci\/install-linux-sandbox-backend\.sh/);
   assert.match(workflow, /npm run sandbox:validate/);
@@ -96,6 +106,14 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /xvfb-run -a npm run test:ui:typography/);
   assert.match(workflow, /npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
+  assert.match(workflow, /npm run test:ui:hawk/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:hawk/);
+  assert.match(workflow, /npm run test:ui:aws/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:aws/);
+  assert.match(workflow, /npm run test:ui:auth/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:auth/);
+  assert.match(workflow, /npm run test:ui:a11y/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:a11y/);
   assert.match(workflow, /npm run test:ui:snapshot/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run production:readiness:validate/);
@@ -118,6 +136,8 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /Protocol registration validation/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
+  assert.match(workflow, /npm run release:validate:packaged-workflow/);
+  assert.match(workflow, /npm run release:validate:packaged-auth/);
   assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/\$\{\{ matrix\.platform \}\}/);
   assert.match(workflow, /Upload validation logs/);
   assert.match(workflow, /if:\s*always\(\)/);
@@ -155,6 +175,8 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /npm run dist:win/);
   assert.match(workflow, /npm run dist:mac/);
   assert.match(workflow, /npm test/);
+  assert.match(workflow, /npm run renderer:html:check/);
+  assert.match(workflow, /npm run refactor:structure:validate/);
   assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run postman:parity:validate/);
@@ -171,6 +193,14 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /xvfb-run -a npm run test:ui:typography/);
   assert.match(workflow, /npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
+  assert.match(workflow, /npm run test:ui:hawk/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:hawk/);
+  assert.match(workflow, /npm run test:ui:aws/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:aws/);
+  assert.match(workflow, /npm run test:ui:auth/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:auth/);
+  assert.match(workflow, /npm run test:ui:a11y/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:a11y/);
   assert.match(workflow, /npm run test:ui:snapshot/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run production:readiness:validate/);
@@ -180,6 +210,8 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /npm run ux:accessibility:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm run release:validate:packaged-smoke/);
+  assert.match(workflow, /npm run release:validate:packaged-workflow/);
+  assert.match(workflow, /npm run release:validate:packaged-auth/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
   assert.match(workflow, /ci_no_sandbox:\s*"1"/);
@@ -221,7 +253,13 @@ test('release workflows keep Step 11 and Step 12 validators as executable YAML r
       /npm run test:ui:regression/,
       /npm run test:ui:typography/,
       /npm run test:ui:oauth/,
-      /npm run test:ui:snapshot/
+      /npm run test:ui:hawk/,
+      /npm run test:ui:aws/,
+      /npm run test:ui:a11y/,
+      /npm run test:ui:auth/,
+      /npm run test:ui:snapshot/,
+      /npm run release:validate:packaged-workflow/,
+      /npm run release:validate:packaged-auth/
     ]) {
       assertWorkflowHasRunStep(workflow, requiredRun, workflowName);
     }
@@ -252,6 +290,45 @@ test('sandbox validation scripts are timeout bounded instead of using unbounded 
   assert.match(packagedValidation, /POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS/);
   assert.match(packagedValidation, /redactSmokeOutputText/);
   assert.match(packagedValidation, /redactForOutput/);
+  assert.match(packagedValidation, /killProcessTree:\s*true/);
+});
+
+test('packaged workflow smoke launches the packaged app through the real UI workflow', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const packagedWorkflow = await fs.readFile(path.join(root, 'scripts', 'validatePackagedWorkflowSmoke.js'), 'utf8');
+
+  assert.match(packagedWorkflow, /POSTMETER_UI_WORKFLOW_SMOKE/);
+  assert.match(packagedWorkflow, /POSTMETER_UI_WORKFLOW_BASE_URL/);
+  assert.match(packagedWorkflow, /createFixtureServer/);
+  assert.match(packagedWorkflow, /spawnWithTimeout/);
+  assert.match(packagedWorkflow, /POSTMETER_PACKAGED_WORKFLOW_TIMEOUT_MS/);
+  assert.match(packagedWorkflow, /withCiNoSandboxArgs/);
+  assert.match(packagedWorkflow, /killProcessTree:\s*true/);
+  assert.match(packagedWorkflow, /redactSmokeOutputText/);
+  assert.match(packagedWorkflow, /packaged-workflow-smoke-\$\{process\.platform\}\.log/);
+});
+
+test('packaged auth smoke launches the packaged app against the UI auth matrix verifier', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const packagedAuth = await fs.readFile(path.join(root, 'scripts', 'validatePackagedAuthSmoke.js'), 'utf8');
+  const fixture = await fs.readFile(path.join(root, 'scripts', 'uiAuthMatrixFixture.js'), 'utf8');
+  const uiSmoke = await fs.readFile(path.join(root, 'src', 'renderer', 'smoke', 'uiAuthMatrixSmoke.js'), 'utf8');
+
+  assert.match(packagedAuth, /POSTMETER_UI_AUTH_MATRIX_SMOKE/);
+  assert.match(packagedAuth, /POSTMETER_UI_AUTH_MATRIX_BASE_URL/);
+  assert.match(packagedAuth, /createAuthMatrixServer/);
+  assert.match(packagedAuth, /findPackagedExecutable/);
+  assert.match(packagedAuth, /APPIMAGE_EXTRACT_AND_RUN/);
+  assert.match(packagedAuth, /POSTMETER_PACKAGED_AUTH_TIMEOUT_MS/);
+  assert.match(packagedAuth, /spawnWithTimeout/);
+  assert.match(packagedAuth, /withCiNoSandboxArgs/);
+  assert.match(packagedAuth, /killProcessTree:\s*true/);
+  assert.match(packagedAuth, /packaged-auth-smoke-\$\{process\.platform\}\.log/);
+  for (const type of ['basic', 'bearer', 'apiKey', 'cookie', 'digest', 'oauth1', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap']) {
+    assert.match(fixture, new RegExp(type));
+  }
+  assert.match(uiSmoke, /setAuthType\('cookie'\)/);
+  assert.match(uiSmoke, /setAuthType\('clientCertificate'\)/);
 });
 
 test('Linux sandbox backend setup hardens bubblewrap before validation', async () => {

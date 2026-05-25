@@ -261,6 +261,8 @@ function bindSmokeHooks(app, mainWindow, env, options = {}) {
   const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
   const isUiHawkSmoke = env.POSTMETER_UI_HAWK_SMOKE === '1';
   const isUiAwsSmoke = env.POSTMETER_UI_AWS_SMOKE === '1';
+  const isUiA11ySmoke = env.POSTMETER_UI_A11Y_SMOKE === '1';
+  const isUiAuthMatrixSmoke = env.POSTMETER_UI_AUTH_MATRIX_SMOKE === '1';
   if (env.POSTMETER_STARTUP_SMOKE === '1') {
     mainWindow.webContents.once('did-finish-load', () => {
       runStartupSmokeProbe(app, mainWindow, env, options)
@@ -327,6 +329,24 @@ function bindSmokeHooks(app, mainWindow, env, options = {}) {
       passTitle: 'PostMeter UI AWS:PASS',
       timeoutMessage: 'PostMeter UI AWS smoke timed out.',
       timeoutMillis: 20_000
+    });
+  }
+  if (isUiA11ySmoke) {
+    bindTitleSmoke(app, mainWindow, {
+      env,
+      prefix: 'PostMeter UI Accessibility:',
+      passTitle: 'PostMeter UI Accessibility:PASS',
+      timeoutMessage: 'PostMeter UI accessibility smoke timed out.',
+      timeoutMillis: 45_000
+    });
+  }
+  if (isUiAuthMatrixSmoke) {
+    bindTitleSmoke(app, mainWindow, {
+      env,
+      prefix: 'PostMeter UI Auth Matrix:',
+      passTitle: 'PostMeter UI Auth Matrix:PASS',
+      timeoutMessage: 'PostMeter UI auth matrix smoke timed out.',
+      timeoutMillis: 60_000
     });
   }
 }
@@ -754,6 +774,14 @@ async function captureUiSmokeDomState(mainWindow) {
             aws: {
               enabled: searchParams.get('uiAwsSmoke') === '1',
               state: document.documentElement?.dataset?.uiAwsSmoke || ''
+            },
+            a11y: {
+              enabled: searchParams.get('uiA11ySmoke') === '1',
+              state: document.documentElement?.dataset?.uiA11ySmoke || ''
+            },
+            authMatrix: {
+              enabled: searchParams.get('uiAuthMatrixSmoke') === '1',
+              state: document.documentElement?.dataset?.uiAuthMatrixSmoke || ''
             }
           },
           activeElement: active ? {
@@ -973,7 +1001,9 @@ function loadQuery(env) {
   const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
   const isUiHawkSmoke = env.POSTMETER_UI_HAWK_SMOKE === '1';
   const isUiAwsSmoke = env.POSTMETER_UI_AWS_SMOKE === '1';
-  return isUiWorkflowSmoke || isUiRegressionSmoke || isUiSnapshotSmoke || isUiTypographySmoke || isUiOauthSmoke || isUiHawkSmoke || isUiAwsSmoke
+  const isUiA11ySmoke = env.POSTMETER_UI_A11Y_SMOKE === '1';
+  const isUiAuthMatrixSmoke = env.POSTMETER_UI_AUTH_MATRIX_SMOKE === '1';
+  return isUiWorkflowSmoke || isUiRegressionSmoke || isUiSnapshotSmoke || isUiTypographySmoke || isUiOauthSmoke || isUiHawkSmoke || isUiAwsSmoke || isUiA11ySmoke || isUiAuthMatrixSmoke
     ? {
         uiWorkflowSmoke: isUiWorkflowSmoke ? '1' : '',
         uiRegressionSmoke: isUiRegressionSmoke ? '1' : '',
@@ -982,16 +1012,20 @@ function loadQuery(env) {
         uiOauthSmoke: isUiOauthSmoke ? '1' : '',
         uiHawkSmoke: isUiHawkSmoke ? '1' : '',
         uiAwsSmoke: isUiAwsSmoke ? '1' : '',
+        uiA11ySmoke: isUiA11ySmoke ? '1' : '',
+        uiAuthMatrixSmoke: isUiAuthMatrixSmoke ? '1' : '',
         uiWorkflowBaseUrl: env.POSTMETER_UI_WORKFLOW_BASE_URL || '',
         uiOauthBaseUrl: env.POSTMETER_UI_OAUTH_BASE_URL || '',
         uiHawkBaseUrl: env.POSTMETER_UI_HAWK_BASE_URL || '',
-        uiAwsBaseUrl: env.POSTMETER_UI_AWS_BASE_URL || ''
+        uiAwsBaseUrl: env.POSTMETER_UI_AWS_BASE_URL || '',
+        uiAuthBaseUrl: env.POSTMETER_UI_AUTH_MATRIX_BASE_URL || ''
       }
     : undefined;
 }
 
 function bindUiSnapshotSmoke(app, mainWindow, env) {
-  const expectedCaptures = new Set(['empty-state', 'request', 'context-menu', 'cookies', 'auth-oauth', 'response', 'test-results', 'runner', 'workspace-sandbox', 'long-labels', 'export-menu']);
+  const { UI_SNAPSHOT_LABELS } = require('../../src/renderer/smoke/uiSnapshotManifest');
+  const expectedCaptures = new Set(UI_SNAPSHOT_LABELS);
   const captured = new Set();
   let finished = false;
   const failSnapshot = async (message) => {

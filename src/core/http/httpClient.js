@@ -383,6 +383,13 @@ function nodeAgentForUrl(url, tlsOptions = null) {
   });
 }
 
+function agentForRedirect(agent, currentUrl, redirectUrl) {
+  if (agent === false || agent == null) {
+    return agent;
+  }
+  return currentUrl.protocol === redirectUrl.protocol ? agent : null;
+}
+
 function applyCookieJar(request, headers, url, cookieJar) {
   if (request.cookieJar?.enabled !== true) {
     return;
@@ -559,6 +566,7 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   });
   const redirected = await sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, {
     ...options,
+    agent: agentForRedirect(options.agent, url, redirectUrl),
     includeExplicitCookies,
     requestSettings
   });

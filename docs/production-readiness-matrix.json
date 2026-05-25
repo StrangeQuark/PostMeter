@@ -111,7 +111,7 @@
       "id": "docs.public-release",
       "area": "docs",
       "target": "Public release docs explain readiness gates, compatibility claims, unsigned artifacts, support channel, and platform limitations.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run production:readiness:validate"
@@ -146,7 +146,7 @@
       "id": "electron.security",
       "area": "security",
       "target": "Electron BrowserWindow, main-frame-only preload, channel-level IPC, IPC sender validation, navigation, webview, permissions, file dialogs, external URL, protocol, CSP, fuse-review, and packaged-preload controls are matrixed and validated.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run electron:security:validate",
@@ -172,7 +172,7 @@
       "id": "grpc.pfx-p12-mtls",
       "area": "transport",
       "target": "HTTP and gRPC mTLS share parent-owned in-memory PFX/P12 extraction aligned with client-certificate handling.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm test"
@@ -234,16 +234,18 @@
       "id": "packaging.linux",
       "area": "packaging",
       "target": "Linux deb/AppImage metadata, protocol registration, artifact checksums, and packaged sandbox validation are covered.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run dist:linux",
         "npm run release:validate:packaged-smoke",
+        "npm run release:validate:packaged-workflow",
         "npm run release:validate",
         "npm run sandbox:validate:packaged"
       ],
       "evidenceRefs": [
         "scripts/validatePackagedAppSmoke.js",
+        "scripts/validatePackagedWorkflowSmoke.js",
         "scripts/validateReleaseArtifacts.js",
         ".github/workflows/ci.yml",
         ".github/workflows/release.yml",
@@ -262,11 +264,13 @@
       "commands": [
         "npm run dist:mac",
         "npm run release:validate:packaged-smoke",
+        "npm run release:validate:packaged-workflow",
         "npm run release:validate:mac-protocol",
         "npm run sandbox:validate:packaged"
       ],
       "evidenceRefs": [
         "scripts/validatePackagedAppSmoke.js",
+        "scripts/validatePackagedWorkflowSmoke.js",
         "scripts/validateMacProtocolRegistration.sh",
         ".github/workflows/ci.yml",
         ".github/workflows/release.yml",
@@ -285,11 +289,13 @@
       "commands": [
         "npm run dist:win",
         "npm run release:validate:packaged-smoke",
+        "npm run release:validate:packaged-workflow",
         "npm run release:validate:win-protocol",
         "npm run sandbox:validate:packaged"
       ],
       "evidenceRefs": [
         "scripts/validatePackagedAppSmoke.js",
+        "scripts/validatePackagedWorkflowSmoke.js",
         "scripts/validateWindowsProtocolRegistration.ps1",
         ".github/workflows/ci.yml",
         ".github/workflows/release.yml",
@@ -328,7 +334,7 @@
       "id": "postman.newman-json-reports",
       "area": "compatibility",
       "target": "Deterministic Newman JSON evidence reports for approved differential fixtures are checked in and validated.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run postman:newman-reports:validate"
@@ -408,7 +414,7 @@
       "id": "sandbox.platform-os",
       "area": "security",
       "target": "Platform-equivalent OS sandbox claim is implemented and tracked separately from Postman API parity.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run sandbox:platform:validate",
@@ -446,7 +452,7 @@
       "id": "updates.metadata",
       "area": "release",
       "target": "Release/update metadata and opt-in automatic update wiring point to GitHub Releases without introducing a cloud account gate.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run release:manifest",
@@ -477,15 +483,20 @@
         "npm run test:ui",
         "npm run test:ui:regression",
         "npm run test:ui:oauth",
+        "npm run test:ui:hawk",
+        "npm run test:ui:aws",
+        "npm run test:ui:a11y",
         "npm run test:ui:snapshot"
       ],
       "evidenceRefs": [
         "docs/ux-accessibility-matrix.json",
         "docs/TECH_SPECS.md",
         "src/renderer/index.html",
+        "src/renderer/smoke/uiA11ySmoke.js",
         "src/renderer/smoke/uiRegressionSmoke.js",
         "src/renderer/smoke/uiSnapshotSmoke.js",
         "test/electron/startupSmoke.js",
+        "test/electron/uiA11ySmoke.js",
         "scripts/smokeProcess.js",
         "electron/app-shell/mainWindow.js"
       ],
@@ -497,7 +508,7 @@
       "id": "vault.per-request-prompts",
       "area": "security",
       "target": "Per-request vault prompt decisions are brokered without exposing vault secrets to scripts or renderer APIs.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm test"

@@ -19,6 +19,7 @@
       ],
       "tests": [
         "npm run test:ui:regression",
+        "npm run test:ui:a11y",
         "test/electron/rendererBootstrap.test.js"
       ],
       "notes": ""
@@ -33,7 +34,8 @@
         "src/renderer/renderer.js"
       ],
       "tests": [
-        "npm run test:ui:regression"
+        "npm run test:ui:regression",
+        "npm run test:ui:a11y"
       ],
       "notes": ""
     },
@@ -49,6 +51,7 @@
       ],
       "tests": [
         "npm run test:ui:regression",
+        "npm run test:ui:a11y",
         "test/electron/rendererBootstrap.test.js"
       ],
       "notes": ""
@@ -66,6 +69,7 @@
       ],
       "tests": [
         "npm run test:ui:regression",
+        "npm run test:ui:a11y",
         "test/electron/requestTabs.test.js"
       ],
       "notes": ""
@@ -76,13 +80,16 @@
       "target": "Linux headless UI smoke covers constrained desktop size, system/light/dark theme switching, active forced-colors focus visibility, long labels, empty workspaces, and large workspaces.",
       "status": "implemented",
       "evidenceRefs": [
+        "src/renderer/smoke/uiA11ySmoke.js",
         "src/renderer/smoke/uiRegressionSmoke.js",
         "src/renderer/smoke/uiSnapshotSmoke.js",
+        "test/electron/uiA11ySmoke.js",
         "test/electron/uiRegressionSmoke.js",
         "test/electron/uiSnapshotSmoke.js"
       ],
       "tests": [
         "npm run test:ui:regression",
+        "npm run test:ui:a11y",
         "npm run test:ui:snapshot"
       ],
       "notes": ""
@@ -106,6 +113,9 @@
         "npm run test:ui",
         "npm run test:ui:regression",
         "npm run test:ui:oauth",
+        "npm run test:ui:hawk",
+        "npm run test:ui:aws",
+        "npm run test:ui:a11y",
         "npm run test:ui:snapshot",
         "test/electron/mainWindowSmoke.test.js",
         "test/electron/smokeProcess.test.js"
@@ -186,11 +196,13 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
+        "src/renderer/smoke/uiA11ySmoke.js",
         "src/renderer/smoke/uiRegressionSmoke.js",
         "src/renderer/smoke/uiSnapshotSmoke.js"
       ],
       "tests": [
         "npm run test:ui:regression",
+        "npm run test:ui:a11y",
         "npm run test:ui:snapshot"
       ],
       "notes": ""
@@ -344,7 +356,9 @@
       ],
       "tests": [
         "npm run test:ui:regression",
-        "test/electron/appIpc.test.js"
+        "test/electron/appIpc.test.js",
+        "test/electron/updateChecker.test.js",
+        "test/electron/autoUpdateService.test.js"
       ],
       "notes": ""
     },

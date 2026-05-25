@@ -84,6 +84,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   const memoryStarted = diagnosisContext ? process.memoryUsage().heapUsed : 0;
   const requestTimeoutMillis = normalizePerformanceRequestTimeoutMillis(options.requestTimeoutMillis);
   const collectTransportTimings = normalized.type === DIAGNOSIS_TYPE || capturePolicy.transportTimings === true;
+  const shareSampleRuntimeMutations = normalized.allowEnvironmentMutation === true;
   eventLoopMonitor?.enable();
 
   try {
@@ -111,9 +112,11 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
           nextIteration += 1;
           const scheduledAtMillis = Date.now();
           applyAuthRefreshSnapshot(await authRefreshManager.ensureFresh(authRefreshScope()));
+          const sampleEnvironment = cloneJson(currentEnvironment);
+          const sampleCookies = cloneJson(currentCookies);
           activeRequests += 1;
           maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
-          const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
+          const sample = await executeIteration(normalized, sampleEnvironment, sampleCookies, iteration, {
             ...options,
             collectTransportTimings,
             diagnosisContext,
@@ -141,10 +144,10 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
               totalRequests: plan.totalRequests
             });
           }
-          if (sample.environment) {
+          if (shareSampleRuntimeMutations && sample.environment) {
             currentEnvironment = sample.environment;
           }
-          if (Array.isArray(sample.cookies)) {
+          if (shareSampleRuntimeMutations && Array.isArray(sample.cookies)) {
             currentCookies = sample.cookies;
           }
           progress({

@@ -692,6 +692,8 @@ initializeRenderer({
     queueUiOauthSmoke();
     queueUiHawkSmoke();
     queueUiAwsSmoke();
+    queueUiA11ySmoke();
+    queueUiAuthMatrixSmoke();
     scheduleStartupUpdateReminder();
     markUiWorkflowStartupStep('after-smoke-queue');
   }

@@ -45,9 +45,11 @@ function spawnWithTimeout(command, args = [], options = {}) {
   const killGraceMillis = Number(options.killGraceMillis || DEFAULT_KILL_GRACE_MILLIS);
   const maxOutputBytes = Number(options.maxOutputBytes || DEFAULT_MAX_OUTPUT_BYTES);
   const timeoutMessage = options.timeoutMessage || `${command} timed out after ${timeoutMillis} ms.`;
+  const killProcessTree = Boolean(options.killProcessTree) && process.platform !== 'win32';
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
+      detached: killProcessTree,
       env: options.env,
       stdio: options.stdio || ['ignore', 'pipe', 'pipe']
     });
@@ -66,10 +68,10 @@ function spawnWithTimeout(command, args = [], options = {}) {
     };
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      killChild(child, 'SIGTERM', killProcessTree);
       forceKillTimer = setTimeout(() => {
         forceKilled = true;
-        child.kill('SIGKILL');
+        killChild(child, 'SIGKILL', killProcessTree);
       }, killGraceMillis);
     }, timeoutMillis);
     child.stdout?.on('data', (chunk) => {
@@ -105,6 +107,20 @@ function spawnWithTimeout(command, args = [], options = {}) {
       });
     });
   });
+}
+
+function killChild(child, signal, killProcessTree = false) {
+  if (killProcessTree && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return true;
+    } catch {}
+  }
+  try {
+    return child.kill(signal);
+  } catch {
+    return false;
+  }
 }
 
 function appendBoundedText(current, chunk, maxBytes = DEFAULT_MAX_OUTPUT_BYTES) {
@@ -172,6 +188,7 @@ function redactCookieHeaderValue(_match, key, separator, value = '') {
 
 module.exports = {
   appendBoundedText,
+  killChild,
   redactSmokeOutputText,
   spawnWithTimeout
 };

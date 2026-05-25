@@ -7,6 +7,7 @@ const {
   buildNodeTestArgs,
   collectTestFiles,
   defaultTestRoot,
+  formatOsSandboxPreflightFailure,
   runElectronTests
 } = require('../../scripts/runElectronTests');
 
@@ -51,6 +52,7 @@ test('Electron test runner forwards discovered files to the configured node exec
   const status = runElectronTests({
     env: { POSTMETER_TEST_CONCURRENCY: '2' },
     execPath: '/tmp/node-under-test',
+    preflight: false,
     spawn: (execPath, args, options) => {
       spawnCalls.push({ execPath, args, options });
       return { status: 7 };
@@ -74,6 +76,7 @@ test('Electron test runner returns failure when no tests are discovered', (t) =>
   const errors = [];
 
   const status = runElectronTests({
+    preflight: false,
     stderr: (message) => errors.push(message),
     testRoot
   });
@@ -89,6 +92,7 @@ test('Electron test runner reports spawn errors and null child status as failure
 
   assert.equal(
     runElectronTests({
+      preflight: false,
       spawn: () => ({ error: new Error('spawn failed') }),
       stderr: (message) => errors.push(message),
       testRoot
@@ -98,6 +102,7 @@ test('Electron test runner reports spawn errors and null child status as failure
   assert.deepEqual(errors, ['spawn failed']);
   assert.equal(
     runElectronTests({
+      preflight: false,
       spawn: () => ({ status: null }),
       testRoot
     }),
@@ -107,6 +112,44 @@ test('Electron test runner reports spawn errors and null child status as failure
 
 test('Electron test runner default root points at test/electron', () => {
   assert.equal(path.relative(path.join(__dirname, '..', '..'), defaultTestRoot()), path.join('test', 'electron'));
+});
+
+test('Electron test runner stops before spawning when preflight fails', (t) => {
+  const testRoot = makeTempDirectory(t);
+  fs.writeFileSync(path.join(testRoot, 'alpha.test.js'), '');
+  const errors = [];
+  let spawned = false;
+
+  const status = runElectronTests({
+    preflight: ({ stderr }) => {
+      stderr('preflight failed');
+      return 1;
+    },
+    spawn: () => {
+      spawned = true;
+      return { status: 0 };
+    },
+    stderr: (message) => errors.push(message),
+    testRoot
+  });
+
+  assert.equal(status, 1);
+  assert.equal(spawned, false);
+  assert.deepEqual(errors, ['preflight failed']);
+});
+
+test('Electron test runner formats Windows sandbox preflight failures with recovery steps', () => {
+  const message = formatOsSandboxPreflightFailure({
+    platform: 'win32',
+    supported: false,
+    windowsHelperPath: 'C:\\PostMeter\\native\\windows-sandbox-helper\\bin\\PostMeterWindowsSandboxHelper.exe',
+    probeFailure: 'exit status 1: CreateProcessW failed'
+  });
+
+  assert.match(message, /Windows AppContainer helper/);
+  assert.match(message, /npm run native:windows-sandbox:build/);
+  assert.match(message, /npm run sandbox:validate/);
+  assert.match(message, /CreateProcessW failed/);
 });
 
 function makeTempDirectory(t) {

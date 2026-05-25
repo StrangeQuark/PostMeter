@@ -1152,5 +1152,6 @@ function isAutomatedUiSmoke() {
     || params.get('uiTypographySmoke') === '1'
     || params.get('uiOauthSmoke') === '1'
     || params.get('uiHawkSmoke') === '1'
-    || params.get('uiAwsSmoke') === '1';
+    || params.get('uiAwsSmoke') === '1'
+    || params.get('uiA11ySmoke') === '1';
 }

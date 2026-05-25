@@ -1342,6 +1342,51 @@ test('keeps script failures out of performance sample top-level errors', async (
   assert.equal(sample.testScriptResult.error, 'post failed');
 });
 
+test('isolates performance sample environment and cookies unless mutation persistence is allowed', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-isolation',
+    name: 'Performance Isolation',
+    type: 'latency',
+    request: {
+      id: 'request-isolation',
+      name: 'Isolated Request',
+      method: 'GET',
+      url: 'https://api.example.test/isolation',
+      cookieJar: { enabled: true, storeResponses: true },
+      scripts: { tests: "pm.environment.set('token', 'sample-runtime');" }
+    },
+    config: { iterations: 2, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 2, maxConcurrency: 1, maxDurationSeconds: 10 }
+  });
+  const observed = [];
+
+  const result = await runPerformanceTest(performanceTest, {
+    id: 'env',
+    name: 'Env',
+    variables: [{ enabled: true, key: 'token', value: 'base' }]
+  }, {
+    cookieJar: [{ enabled: true, name: 'sid', value: 'base-cookie', domain: 'api.example.test', path: '/' }],
+    sendRequest: async (_request, environment, options = {}) => {
+      observed.push({
+        token: environment.variables.find((item) => item.key === 'token')?.value || '',
+        cookies: (options.cookieJar || []).map((cookie) => `${cookie.name}=${cookie.value}`)
+      });
+      return {
+        ...response(200, '{}'),
+        updatedCookies: [{ enabled: true, name: 'sid', value: 'sample-cookie', domain: 'api.example.test', path: '/' }]
+      };
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(observed, [
+    { token: 'base', cookies: ['sid=base-cookie'] },
+    { token: 'base', cookies: ['sid=base-cookie'] }
+  ]);
+  assert.equal(result.environment.variables.find((item) => item.key === 'token').value, 'base');
+  assert.equal(result.cookies.find((item) => item.name === 'sid').value, 'base-cookie');
+});
+
 test('keeps performance environment mutations temporary unless persistence is allowed', async () => {
   const base = {
     id: 'env',
@@ -1374,7 +1419,7 @@ test('keeps performance environment mutations temporary unless persistence is al
   });
 
   assert.equal(base.variables[0].value, 'base');
-  assert.equal(temporary.environment.variables.find((item) => item.key === 'token').value, 'runtime');
+  assert.equal(temporary.environment.variables.find((item) => item.key === 'token').value, 'base');
   assert.equal(temporary.mutatedEnvironment, undefined);
   assert.equal(persisted.mutatedEnvironment.variables.find((item) => item.key === 'token').value, 'runtime');
 });

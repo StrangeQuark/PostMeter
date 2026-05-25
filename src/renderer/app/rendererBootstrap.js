@@ -175,7 +175,8 @@
       ['uiTypographySmoke', 'PostMeter UI Typography'],
       ['uiOauthSmoke', 'PostMeter UI OAuth'],
       ['uiHawkSmoke', 'PostMeter UI Hawk'],
-      ['uiAwsSmoke', 'PostMeter UI AWS']
+      ['uiAwsSmoke', 'PostMeter UI AWS'],
+      ['uiA11ySmoke', 'PostMeter UI Accessibility']
     ]) {
       if (params.get(flag) === '1') {
         doc.title = `${prefix}:FAIL:${message}`;

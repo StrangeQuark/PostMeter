@@ -63,7 +63,9 @@ async function findPackagedExecutable() {
   if (process.env.POSTMETER_PACKAGED_APP_PATH) {
     return path.resolve(process.env.POSTMETER_PACKAGED_APP_PATH);
   }
-  const candidates = platformCandidates();
+  const candidates = process.platform === 'linux'
+    ? [...await linuxAppImageCandidates(), ...platformCandidates()]
+    : platformCandidates();
   for (const candidate of candidates) {
     if (await executableExists(candidate)) {
       return candidate;
@@ -90,6 +92,19 @@ function platformCandidates() {
     path.join(RELEASE_DIR, 'linux-unpacked', 'postmeter'),
     path.join(RELEASE_DIR, 'linux-unpacked', 'PostMeter')
   ];
+}
+
+async function linuxAppImageCandidates(releaseDir = RELEASE_DIR) {
+  let entries = [];
+  try {
+    entries = await fs.readdir(releaseDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.appimage'))
+    .map((entry) => path.join(releaseDir, entry.name))
+    .sort((left, right) => right.localeCompare(left));
 }
 
 async function validateExecutable(executable) {
@@ -170,6 +185,9 @@ async function runStartupSmokeOnce(executable, options = {}) {
     POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || '',
     [MAIN_PROCESS_SMOKE_ENV]: launchMode === 'main-process' ? '1' : ''
   };
+  if (isAppImageExecutable(executable)) {
+    env.APPIMAGE_EXTRACT_AND_RUN = env.APPIMAGE_EXTRACT_AND_RUN || '1';
+  }
   if (launchMode === 'node-main-process') {
     env.ELECTRON_RUN_AS_NODE = '1';
     delete env.NODE_OPTIONS;
@@ -191,6 +209,7 @@ async function runStartupSmokeOnce(executable, options = {}) {
   });
   const result = await spawnWithTimeout(executable, withCiNoSandboxArgs(launchArgs, env), {
     env,
+    killProcessTree: true,
     stdio: packagedSmokeStdioMode(process.platform, launchMode),
     timeoutMillis: TIMEOUT_MILLIS,
     timeoutMessage: `Packaged app startup smoke timed out after ${TIMEOUT_MILLIS} ms.`
@@ -541,6 +560,10 @@ function packagedSmokeStdioMode(platform = process.platform, mode = packagedSmok
   return platform === 'win32' && mode !== 'node-main-process' ? 'ignore' : undefined;
 }
 
+function isAppImageExecutable(executable) {
+  return String(executable || '').toLowerCase().endsWith('.appimage');
+}
+
 function smokeSafeLabel(label) {
   return String(label || 'run').replace(/[^a-z0-9._-]+/gi, '-').slice(0, 64) || 'run';
 }
@@ -640,7 +663,9 @@ module.exports = {
   defaultUserDataPathCandidates,
   findPackagedExecutable,
   isolatedDefaultPathEnv,
+  isAppImageExecutable,
   loadPersistedSmokeWorkspace,
+  linuxAppImageCandidates,
   minimalEnv,
   packagedAppResourcePath,
   packagedSmokeCliErrorText,

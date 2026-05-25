@@ -6,7 +6,9 @@
     'uiTypographySmoke',
     'uiOauthSmoke',
     'uiHawkSmoke',
-    'uiAwsSmoke'
+    'uiAwsSmoke',
+    'uiA11ySmoke',
+    'uiAuthMatrixSmoke'
   ]);
 
   function formatBytes(bytes) {

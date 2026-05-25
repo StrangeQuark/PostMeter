@@ -69,3 +69,37 @@ test('can opt in to prerelease checks using the releases list endpoint', async (
   assert.equal(result.prerelease, true);
   assert.equal(result.includePrereleases, true);
 });
+
+test('reports no update when prerelease listing has no usable newer release', async () => {
+  const result = await checkForUpdates({
+    currentVersion: '0.3.0',
+    includePrereleases: true,
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => [
+        { tag_name: 'v0.2.9', draft: false, prerelease: false },
+        { tag_name: 'v0.4.0-beta.1', draft: true, prerelease: true },
+        { tag_name: 'not-a-version', draft: false, prerelease: false }
+      ]
+    })
+  });
+
+  assert.equal(result.updateAvailable, false);
+  assert.equal(result.latestVersion, '0.3.0');
+  assert.equal(result.releaseUrl, '');
+});
+
+test('fails update checks on HTTP errors and malformed release metadata', async () => {
+  await assert.rejects(() => checkForUpdates({
+    currentVersion: '0.2.0',
+    fetchImpl: async () => ({ ok: false, status: 503 })
+  }), /HTTP 503/);
+
+  await assert.rejects(() => checkForUpdates({
+    currentVersion: '0.2.0',
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({ html_url: 'https://github.com/StrangeQuark/PostMeter/releases/latest' })
+    })
+  }), /release version/);
+});

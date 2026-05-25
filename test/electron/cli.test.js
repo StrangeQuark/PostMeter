@@ -6,7 +6,14 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { CURRENT_SCHEMA_VERSION } = require('../../src/core/workspace/models');
-const { cliShouldRequireNodePermission, cliTlsSettings, loadCollectionInput, parseArgs } = require('../../scripts/postmeter-cli');
+const {
+  cliShouldRequireNodePermission,
+  cliTlsSettings,
+  loadCollectionInput,
+  parseArgs,
+  parseAssignment,
+  reportFormatFromPath
+} = require('../../scripts/postmeter-cli');
 
 test('requires Node permission flags for CLI script workers on supported Node baselines', () => {
   const major = Number(String(process.versions.node || '').split('.')[0]);
@@ -31,6 +38,17 @@ test('parses CLI TLS verification and certificate flags', () => {
   assert.equal(settings.request.clientCertificates[0].host, '*.example.test');
   assert.equal(settings.request.clientCertificates[0].port, '8443');
   assert.equal(settings.request.clientCertificates[0].passphrase, 'secret');
+});
+
+test('parses CLI assignments, report formats, and malformed options', () => {
+  assert.deepEqual(parseAssignment('token=a=b=c', '--var'), ['token', 'a=b=c']);
+  assert.throws(() => parseAssignment('=missing-key', '--var'), /--var expects key=value/);
+  assert.throws(() => parseAssignment('missing-value-separator', '--collection-var'), /--collection-var expects key=value/);
+  assert.equal(reportFormatFromPath('/tmp/report.csv'), 'csv');
+  assert.equal(reportFormatFromPath('/tmp/report.HTML'), 'html');
+  assert.equal(reportFormatFromPath('/tmp/report.unknown'), 'json');
+  assert.throws(() => parseArgs(['run', '--file']), /--file requires a value/);
+  assert.throws(() => parseArgs(['run', '--unknown']), /Unknown option: --unknown/);
 });
 
 test('loads managed workspace TLS local settings for CLI runs', async () => {
@@ -81,6 +99,45 @@ test('loads managed workspace TLS local settings for CLI runs', async () => {
   assert.equal(settings.request.sslCertificateVerification, false);
   assert.equal(settings.request.caCertificatePath, '/tmp/ca.pem');
   assert.equal(settings.request.clientCertificates[0].id, 'managed-cert');
+});
+
+test('selects CLI collections and environments by id or name and reports missing selectors', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-cli-selectors-'));
+  const workspacePath = path.join(tempDir, 'workspace.json');
+  await fs.writeFile(workspacePath, JSON.stringify({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    collections: [
+      collectionDocument('collection-1', 'First CLI', 'https://first.example.test'),
+      collectionDocument('collection-2', 'Second CLI', 'https://second.example.test')
+    ],
+    environments: [
+      { id: 'env-1', name: 'Local', variables: [{ enabled: true, key: 'baseUrl', value: 'https://local.example.test' }] },
+      { id: 'env-2', name: 'Staging', variables: [{ enabled: true, key: 'baseUrl', value: 'https://staging.example.test' }] }
+    ],
+    globals: [{ enabled: true, key: 'globalToken', value: 'global-value' }],
+    cookies: [],
+    history: [],
+    runners: [],
+    performanceTests: []
+  }, null, 2));
+
+  let loaded = await loadCollectionInput(workspacePath, { collectionSelector: 'Second CLI', environmentSelector: 'env-2' });
+  assert.equal(loaded.collection.id, 'collection-2');
+  assert.equal(loaded.environment.name, 'Staging');
+  assert.equal(loaded.globals[0].key, 'globalToken');
+
+  loaded = await loadCollectionInput(workspacePath, { collectionSelector: 'collection-1', environmentSelector: 'Local' });
+  assert.equal(loaded.collection.name, 'First CLI');
+  assert.equal(loaded.environment.id, 'env-1');
+
+  await assert.rejects(
+    () => loadCollectionInput(workspacePath, { collectionSelector: 'Missing' }),
+    /No collection matched "Missing"/
+  );
+  await assert.rejects(
+    () => loadCollectionInput(workspacePath, { collectionSelector: 'First CLI', environmentSelector: 'Missing Env' }),
+    /No environment matched "Missing Env"/
+  );
 });
 
 test('runs collections headlessly and writes reports', async () => {
@@ -174,6 +231,28 @@ function workspace(baseUrl, expectedStatus) {
     }],
     environments: [],
     history: []
+  };
+}
+
+function collectionDocument(id, name, baseUrl) {
+  return {
+    id,
+    name,
+    description: '',
+    variables: [{ enabled: true, key: 'baseUrl', value: baseUrl }],
+    requests: [{
+      id: `${id}-request`,
+      name: 'Request',
+      method: 'GET',
+      url: '{{baseUrl}}/ok',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: { type: 'none' },
+      scripts: { preRequest: '', tests: '' }
+    }],
+    folders: []
   };
 }
 

@@ -8,6 +8,13 @@
   } = resolveUiSmokeCommon(global);
 
   async function runUiSnapshotSmoke() {
+    const { UI_SNAPSHOT_LABELS } = resolveUiSnapshotManifest(global);
+    const captured = new Set();
+    const capture = async (label, setup) => {
+      await captureUiSnapshotState(label, setup, global);
+      captured.add(label);
+    };
+
     workspace.collections = [];
     workspace.environments = [];
     workspace.history = [];
@@ -15,10 +22,10 @@
     activeEnvironmentId = 'none';
     clearActiveWorkspaceItem();
     renderAll();
-    await captureUiSnapshotState('empty-state', () => {
+    await capture('empty-state', () => {
       selectSidebarPanel('collections');
       renderAll();
-    }, global);
+    });
 
     newCollection();
     newRequest();
@@ -34,6 +41,13 @@
     request.headers.push({ enabled: true, key: 'Accept', value: 'application/json' });
     request.bodyType = 'RAW_JSON';
     request.body = '{\n  "name": "hammer"\n}';
+    const environment = newEnvironment();
+    environment.name = 'Snapshot Environment';
+    environment.variables = [
+      { enabled: true, key: 'baseUrl', value: 'https://api.snapshot.test' },
+      { enabled: false, key: 'disabledToken', value: 'hidden' }
+    ];
+    activeEnvironmentId = environment.id;
     workspace.history.push({
       timestamp: new Date(0).toISOString(),
       method: 'POST',
@@ -42,16 +56,34 @@
       durationMillis: 42
     });
     renderAll();
-    await captureUiSnapshotState('request', () => {
+    await capture('request', () => {
       activateTab('request', 'body');
-    }, global);
+    });
 
-    await captureUiSnapshotState('context-menu', () => {
+    await capture('environment-editor', () => {
+      selectSidebarPanel('environments');
+      activeEnvironmentEditorId = environment.id;
+      ensureOpenEnvironmentTabForActive();
+      renderAll();
+    });
+
+    await capture('workspace-panel', () => {
+      selectSidebarPanel('workspaces');
+      selectWorkspaceItem(activeWorkspaceId || workspaceListItems()[0]?.id);
+      renderWorkspacePanel();
+    });
+
+    selectSidebarPanel('collections');
+    activeCollectionId = collection.id;
+    activeRequestId = request.id;
+    renderAll();
+
+    await capture('context-menu', () => {
       assertContextMenuSmoke({ keepOpen: true }, global);
-    }, global);
+    });
     closeContextMenu();
 
-    await captureUiSnapshotState('cookies', () => {
+    await capture('cookies', () => {
       activateTab('request', 'requestSettings');
       $('openRequestCookiesButton').click();
       $('cookiesDomainInput').value = 'api.snapshot.test';
@@ -64,9 +96,9 @@
       assertUiSmoke(editor, 'Snapshot cookie text editor was not rendered.');
       editor.value = 'snapshotSession=secret; Path=/; Secure; HttpOnly; SameSite=Lax;';
       dispatchInput(editor);
-    }, global);
+    });
 
-    await captureUiSnapshotState('auth-oauth', () => {
+    await capture('auth-oauth', () => {
       activateTab('request', 'auth');
       $('authTypeSelect').value = 'oauth2';
       dispatchChange($('authTypeSelect'));
@@ -80,9 +112,48 @@
         message: 'Waiting for authorization callback.',
         redirectUri: 'http://127.0.0.1:42123/oauth/callback'
       });
-    }, global);
+    });
 
-    await captureUiSnapshotState('response', () => {
+    await capture('auth-basic-bearer', () => {
+      activateTab('request', 'auth');
+      $('authTypeSelect').value = 'basic';
+      dispatchChange($('authTypeSelect'));
+      $('authBasicUsernameInput').value = 'snapshot-user';
+      dispatchInput($('authBasicUsernameInput'));
+      $('authBasicPasswordInput').value = 'snapshot-password';
+      dispatchInput($('authBasicPasswordInput'));
+    });
+
+    await capture('body-formdata', () => {
+      activateTab('request', 'body');
+      $('bodyTypeSelect').value = 'FORM_DATA';
+      dispatchChange($('bodyTypeSelect'));
+      $('addFormDataBodyRowButton').click();
+      const rows = $('formDataBodyTable').querySelectorAll('[data-body-form-data-row]');
+      if (rows.length) {
+        const controls = rows[0].querySelectorAll('select, input');
+        controls[1].value = 'file';
+        dispatchChange(controls[1]);
+        controls[2].value = 'avatar';
+        dispatchInput(controls[2]);
+        controls[3].value = 'snapshot.png';
+        dispatchInput(controls[3]);
+      }
+    });
+
+    await capture('body-graphql', () => {
+      activateTab('request', 'body');
+      $('bodyTypeSelect').value = 'GRAPHQL';
+      dispatchChange($('bodyTypeSelect'));
+      $('graphqlQueryInput').value = 'query SnapshotWidget($id: ID!) { widget(id: $id) { id name owner { id } } }';
+      dispatchInput($('graphqlQueryInput'));
+      $('graphqlVariablesInput').value = '{\n  "id": "{{widgetId}}"\n}';
+      dispatchInput($('graphqlVariablesInput'));
+      $('graphqlOperationNameInput').value = 'SnapshotWidget';
+      dispatchInput($('graphqlOperationNameInput'));
+    });
+
+    await capture('response', () => {
       activateTab('results', 'response');
       displayResponse({
         statusCode: 200,
@@ -92,9 +163,25 @@
         headers: { 'content-type': ['application/json'], 'x-trace': ['snapshot'] },
         body: '{"data":{"id":"w1","name":"hammer"}}'
       });
-    }, global);
+    });
 
-    await captureUiSnapshotState('test-results', () => {
+    await capture('response-headers-cookies', () => {
+      activateTab('results', 'responseHeaders');
+      displayResponse({
+        statusCode: 201,
+        durationMillis: 51,
+        responseBytes: 54,
+        finalUrl: 'https://api.snapshot.test/widgets',
+        headers: {
+          'content-type': ['application/json'],
+          'set-cookie': ['snapshotSession=secret; Path=/; Secure; HttpOnly; SameSite=Lax'],
+          'x-trace': ['snapshot-response']
+        },
+        body: '{"created":true}'
+      });
+    });
+
+    await capture('test-results', () => {
       activateTab('results', 'testResults');
       displayResponse({
         statusCode: 200,
@@ -120,9 +207,9 @@
           logs: ['post-request console output']
         }
       });
-    }, global);
+    });
 
-    await captureUiSnapshotState('runner', () => {
+    await capture('runner-editor', () => {
       selectSidebarPanel('runners');
       const runner = newRunner();
       runner.name = 'Snapshot Runner';
@@ -131,6 +218,11 @@
         { ...newRequestObject('Snapshot Create'), method: 'POST', url: 'https://api.snapshot.test/widgets' }
       ];
       renderAll();
+    });
+
+    await capture('runner', () => {
+      selectSidebarPanel('runners');
+      const runner = activeRunner();
       lastRunnerResult = {
         collectionName: 'Snapshot Runner',
         totalRequests: 2,
@@ -168,20 +260,95 @@
       $('exportRunnerHtmlButton').disabled = false;
       $('exportRunnerJsonButton').disabled = false;
       $('exportRunnerCsvButton').disabled = false;
-    }, global);
+    });
 
-    await captureUiSnapshotState('performance-calibration', () => {
+    await capture('performance-editor', () => {
+      selectSidebarPanel('performance');
+      const performance = newPerformanceTest();
+      performance.name = 'Snapshot Endpoint Diagnosis';
+      performance.type = 'diagnosis';
+      performance.request = {
+        ...newRequestObject('Snapshot Diagnosis'),
+        method: 'GET',
+        url: 'https://api.snapshot.test/diagnostic'
+      };
+      renderAll();
+    });
+
+    await capture('performance-calibration', () => {
       selectSidebarPanel('performance');
       renderAll();
       $('modalBackdrop').hidden = false;
       for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
         modal.hidden = modal.id !== 'performanceCalibrationModal';
       }
-    }, global);
+    });
     $('modalBackdrop').hidden = true;
     $('performanceCalibrationModal').hidden = true;
 
-    await captureUiSnapshotState('workspace-sandbox', () => {
+    await capture('settings-general', () => {
+      $('modalBackdrop').hidden = false;
+      for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+        modal.hidden = modal.id !== 'settingsModal';
+      }
+      selectSettingsSection('appearance');
+      renderSettingsControls();
+    });
+
+    await capture('settings-certificates', () => {
+      selectSettingsSection('certificates');
+      renderSettingsControls();
+    });
+
+    await capture('diagnostics-settings', () => {
+      selectSettingsSection('diagnostics');
+      renderSettingsControls();
+    });
+
+    await capture('package-cache', () => {
+      selectSettingsSection('packages');
+      refreshSandboxPackageStatus();
+    });
+
+    await capture('file-bindings', () => {
+      selectSettingsSection('files');
+      refreshSandboxFileBindings();
+    });
+
+    $('modalBackdrop').hidden = true;
+    $('settingsModal').hidden = true;
+
+    await capture('vault-prompt', () => {
+      $('vaultPromptRequestName').textContent = 'Snapshot Request';
+      $('vaultPromptCollectionName').textContent = 'Snapshot Collection';
+      $('vaultPromptWorkspaceName').textContent = workspace.name || 'Workspace';
+      $('vaultPromptSecretKey').textContent = 'snapshotSecret';
+      $('vaultPromptOperation').textContent = 'get';
+      $('vaultPromptMessage').textContent = 'A script is asking to get a local vault secret.';
+      $('modalBackdrop').hidden = false;
+      for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+        modal.hidden = modal.id !== 'vaultPromptModal';
+      }
+    });
+    $('modalBackdrop').hidden = true;
+    $('vaultPromptModal').hidden = true;
+
+    await capture('tutorial-overlay', () => {
+      openTutorialsModal();
+      const firstTutorial = $('tutorialList')?.querySelector?.('button');
+      if (firstTutorial) {
+        firstTutorial.click();
+      }
+      $('startTutorialButton')?.click();
+    });
+    if (typeof endTutorial === 'function') {
+      endTutorial();
+    }
+    $('modalBackdrop').hidden = true;
+    $('tutorialsModal').hidden = true;
+    $('tutorialOverlay').hidden = true;
+
+    await capture('workspace-sandbox', () => {
       selectWorkspaceItem(activeWorkspaceId || workspaceListItems()[0]?.id);
       refreshSandboxPackageStatus();
       refreshSandboxFileBindings();
@@ -192,11 +359,11 @@
       for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
         modal.hidden = modal.id !== 'settingsModal';
       }
-    }, global);
+    });
     $('modalBackdrop').hidden = true;
     $('settingsModal').hidden = true;
 
-    await captureUiSnapshotState('long-labels', () => {
+    await capture('long-labels', () => {
       selectSidebarPanel('collections');
       activeCollectionId = collection.id;
       activeRequestId = request.id;
@@ -204,14 +371,17 @@
       collection.name = 'Collection with a very long production label that should remain scannable in the tree';
       ensureOpenRequestTabForActive();
       renderAll();
-    }, global);
+    });
 
-    await captureUiSnapshotState('export-menu', () => {
+    await capture('export-menu', () => {
       closeContextMenu();
       activateTab('request', 'headers');
       $('exportMenuButton').click();
-    }, global);
+    });
     closeToolbarMenus();
+
+    const missing = UI_SNAPSHOT_LABELS.filter((label) => !captured.has(label));
+    assertUiSmoke(missing.length === 0, `Snapshot smoke did not capture expected labels: ${missing.join(', ')}.`);
   }
 
   function resolveUiSmokeCommon(runtimeGlobal) {
@@ -222,6 +392,16 @@
       return require('./uiSmokeCommon');
     }
     throw new Error('PostMeter UI smoke common helpers must load before uiSnapshotSmoke.js.');
+  }
+
+  function resolveUiSnapshotManifest(runtimeGlobal) {
+    if (runtimeGlobal.PostMeterUiSnapshotManifest) {
+      return runtimeGlobal.PostMeterUiSnapshotManifest;
+    }
+    if (typeof module !== 'undefined' && module.exports) {
+      return require('./uiSnapshotManifest');
+    }
+    throw new Error('PostMeter UI snapshot manifest must load before uiSnapshotSmoke.js.');
   }
 
   const exported = {
