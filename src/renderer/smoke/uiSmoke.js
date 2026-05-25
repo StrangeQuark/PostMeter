@@ -11,6 +11,8 @@
   const { runUiOauthSmoke } = resolveUiSmokeOauth(global);
   const { runUiHawkSmoke } = resolveUiSmokeHawk(global);
   const { runUiAwsSmoke } = resolveUiSmokeAws(global);
+  const { runUiA11ySmoke } = resolveUiSmokeA11y(global);
+  const { runUiAuthMatrixSmoke } = resolveUiSmokeAuthMatrix(global);
 
   function queueUiWorkflowSmoke() {
     queueUiSmokeRun({
@@ -72,6 +74,24 @@
       run: runUiAwsSmoke,
       runtimeGlobal: global,
       titlePrefix: 'PostMeter UI AWS'
+    });
+  }
+
+  function queueUiA11ySmoke() {
+    queueUiSmokeRun({
+      flag: 'uiA11ySmoke',
+      run: runUiA11ySmoke,
+      runtimeGlobal: global,
+      titlePrefix: 'PostMeter UI Accessibility'
+    });
+  }
+
+  function queueUiAuthMatrixSmoke() {
+    queueUiSmokeRun({
+      flag: 'uiAuthMatrixSmoke',
+      run: runUiAuthMatrixSmoke,
+      runtimeGlobal: global,
+      titlePrefix: 'PostMeter UI Auth Matrix'
     });
   }
 
@@ -155,6 +175,26 @@
     throw new Error('PostMeter UI AWS smoke helpers must load before uiSmoke.js.');
   }
 
+  function resolveUiSmokeA11y(runtimeGlobal) {
+    if (runtimeGlobal.PostMeterUiA11ySmoke) {
+      return runtimeGlobal.PostMeterUiA11ySmoke;
+    }
+    if (typeof module !== 'undefined' && module.exports) {
+      return require('./uiA11ySmoke');
+    }
+    throw new Error('PostMeter UI accessibility smoke helpers must load before uiSmoke.js.');
+  }
+
+  function resolveUiSmokeAuthMatrix(runtimeGlobal) {
+    if (runtimeGlobal.PostMeterUiAuthMatrixSmoke) {
+      return runtimeGlobal.PostMeterUiAuthMatrixSmoke;
+    }
+    if (typeof module !== 'undefined' && module.exports) {
+      return require('./uiAuthMatrixSmoke');
+    }
+    throw new Error('PostMeter UI auth matrix smoke helpers must load before uiSmoke.js.');
+  }
+
   const exported = {
     queueUiAwsSmoke,
     queueUiHawkSmoke,
@@ -162,7 +202,9 @@
     queueUiRegressionSmoke,
     queueUiSnapshotSmoke,
     queueUiTypographySmoke,
-    queueUiWorkflowSmoke
+    queueUiWorkflowSmoke,
+    queueUiA11ySmoke,
+    queueUiAuthMatrixSmoke
   };
 
   if (typeof module !== 'undefined' && module.exports) {
@@ -176,4 +218,6 @@
   global.queueUiOauthSmoke = queueUiOauthSmoke;
   global.queueUiHawkSmoke = queueUiHawkSmoke;
   global.queueUiAwsSmoke = queueUiAwsSmoke;
+  global.queueUiA11ySmoke = queueUiA11ySmoke;
+  global.queueUiAuthMatrixSmoke = queueUiAuthMatrixSmoke;
 })(typeof window === 'undefined' ? globalThis : window);

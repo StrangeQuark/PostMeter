@@ -4,21 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
 const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
-
-const EXPECTED_SNAPSHOTS = [
-  'empty-state',
-  'request',
-  'context-menu',
-  'cookies',
-  'auth-oauth',
-  'response',
-  'test-results',
-  'runner',
-  'performance-calibration',
-  'workspace-sandbox',
-  'long-labels',
-  'export-menu'
-];
+const { UI_SNAPSHOT_LABELS: EXPECTED_SNAPSHOTS } = require('../../src/renderer/smoke/uiSnapshotManifest');
 
 async function main() {
   const electronPath = require('electron');

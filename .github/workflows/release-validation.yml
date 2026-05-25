@@ -35,11 +35,17 @@ jobs:
             source_smoke_command: |
               xvfb-run -a npm run test:smoke
               xvfb-run -a npm run test:ui:oauth
+              xvfb-run -a npm run test:ui:hawk
+              xvfb-run -a npm run test:ui:aws
+              xvfb-run -a npm run test:ui:auth
               xvfb-run -a npm run test:ui
               xvfb-run -a npm run test:ui:regression
               xvfb-run -a npm run test:ui:typography
+              xvfb-run -a npm run test:ui:a11y
               xvfb-run -a npm run test:ui:snapshot
             packaged_smoke_command: xvfb-run -a npm run release:validate:packaged-smoke
+            packaged_workflow_command: xvfb-run -a npm run release:validate:packaged-workflow
+            packaged_auth_command: xvfb-run -a npm run release:validate:packaged-auth
             packaged_sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
             protocol_command: echo "No protocol registration validation required for linux."
             ci_no_sandbox: "1"
@@ -48,8 +54,20 @@ jobs:
             command: npm run dist:win
             install_dependencies_command: echo "No Linux sandbox backend required for windows."
             prepare_native_helpers_command: npm run native:windows-sandbox:build
-            source_smoke_command: echo "Source UI smoke suite is not run on Windows validation runners."
+            source_smoke_command: |
+              npm run test:smoke
+              npm run test:ui:oauth
+              npm run test:ui:hawk
+              npm run test:ui:aws
+              npm run test:ui:auth
+              npm run test:ui
+              npm run test:ui:regression
+              npm run test:ui:typography
+              npm run test:ui:a11y
+              npm run test:ui:snapshot
             packaged_smoke_command: npm run release:validate:packaged-smoke
+            packaged_workflow_command: npm run release:validate:packaged-workflow
+            packaged_auth_command: npm run release:validate:packaged-auth
             packaged_sandbox_command: npm run sandbox:validate:packaged
             protocol_command: npm run release:validate:win-protocol
           - platform: macos
@@ -60,11 +78,17 @@ jobs:
             source_smoke_command: |
               npm run test:smoke
               npm run test:ui:oauth
+              npm run test:ui:hawk
+              npm run test:ui:aws
+              npm run test:ui:auth
               npm run test:ui
               npm run test:ui:regression
               npm run test:ui:typography
+              npm run test:ui:a11y
               npm run test:ui:snapshot
             packaged_smoke_command: npm run release:validate:packaged-smoke
+            packaged_workflow_command: npm run release:validate:packaged-workflow
+            packaged_auth_command: npm run release:validate:packaged-auth
             packaged_sandbox_command: npm run sandbox:validate:packaged
             protocol_command: npm run release:validate:mac-protocol
 
@@ -83,6 +107,12 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Renderer HTML check
+        run: npm run renderer:html:check
+
+      - name: Refactor structure validation
+        run: npm run refactor:structure:validate
 
       - name: Prepare native helpers
         run: ${{ matrix.prepare_native_helpers_command }}
@@ -150,6 +180,18 @@ jobs:
 
       - name: Packaged app startup smoke
         run: ${{ matrix.packaged_smoke_command }}
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
+
+      - name: Packaged UI workflow smoke
+        run: ${{ matrix.packaged_workflow_command }}
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
+
+      - name: Packaged UI auth matrix smoke
+        run: ${{ matrix.packaged_auth_command }}
         env:
           POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}

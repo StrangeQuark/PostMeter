@@ -10,7 +10,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
 const zlib = require('node:zlib');
-const { buildUrl, loadClientCertificateOptions, sendRequest, validateRequest } = require('../../src/core/http/httpClient');
+const { buildUrl, loadClientCertificateOptions, sendNodeRequest, sendRequest, validateRequest } = require('../../src/core/http/httpClient');
 
 const execFileAsync = promisify(execFile);
 
@@ -391,6 +391,43 @@ test('stores redirect-hop cookies on node transport redirects', async () => {
     assert.equal(result.updatedCookies.find((cookie) => cookie.name === 'nodeFinal')?.value, 'two');
   } finally {
     await server.close();
+  }
+});
+
+test('node transport redirects from http to https without reusing the http agent', async (t) => {
+  const opensslPath = await findOpenSsl();
+  if (!opensslPath) {
+    t.skip('OpenSSL is required to generate TLS test certificates.');
+    return;
+  }
+
+  const fixtures = await createMtlsFixtures(opensslPath);
+  const target = await createTlsServer(fixtures);
+  const source = await createServer(async (_request, response) => {
+    response.statusCode = 302;
+    response.setHeader('Location', `${target.baseUrl}/final`);
+    response.end('redirect');
+  });
+  const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 1 });
+
+  try {
+    const response = await sendNodeRequest(
+      new URL(`${source.baseUrl}/start`),
+      { method: 'GET', headers: {}, redirect: 'follow' },
+      { rejectUnauthorized: false },
+      0,
+      new URL(source.baseUrl).origin,
+      { agent: httpAgent, collectTimings: true }
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.url, `${target.baseUrl}/final`);
+    assert.equal(JSON.parse(response.body).ok, true);
+    assert.equal(response.timings.redirectCount, 1);
+  } finally {
+    httpAgent.destroy();
+    await source.close();
+    await target.close();
   }
 });
 

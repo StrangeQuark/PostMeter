@@ -516,8 +516,8 @@ function buildNonPostmanCompatibilityMatrix() {
 function buildUxAccessibilityMatrix() {
   return matrix('ux-accessibility', 'src/core/diagnostics-release/productionSupportMatrices.js', [
     row('workflow.first-launch-empty-state', 'First launch', 'First launch and empty workspace states give visible next actions without requiring existing collections, requests, environments, runners, or history, and sidebar environment/workspace/runner selections restore the correct empty or most-recent-tab pane.', 'implemented', {
-      evidenceRefs: ['src/renderer/index.html', 'src/renderer/smoke/uiRegressionSmoke.js', 'src/renderer/smoke/uiSnapshotSmoke.js'],
-      tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot']
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/smoke/uiA11ySmoke.js', 'src/renderer/smoke/uiRegressionSmoke.js', 'src/renderer/smoke/uiSnapshotSmoke.js'],
+      tests: ['npm run test:ui:regression', 'npm run test:ui:a11y', 'npm run test:ui:snapshot']
     }),
     row('workflow.workspace-management', 'Workspaces', 'Workspace create, open, switch, inline rename, export, delete, and sidebar reorder flows expose success/failure states and in-app destructive confirmation through main-process validated operations without saving unrelated dirty drafts.', 'implemented', {
       evidenceRefs: ['src/renderer/app/rendererWorkflows.js', 'electron/ipc/workspaceIpc.js', 'docs/TROUBLESHOOTING.md'],
@@ -565,7 +565,7 @@ function buildUxAccessibilityMatrix() {
     }),
     row('workflow.update-check', 'Update check', 'Update-check success, no-update, and failure states use validated main-process update metadata and user-visible non-secret notifications.', 'implemented', {
       evidenceRefs: ['src/core/diagnostics-release/updateChecker.js', 'electron/ipc/appIpc.js', 'src/renderer/app/rendererWorkflows.js'],
-      tests: ['npm run test:ui:regression', 'test/electron/appIpc.test.js']
+      tests: ['npm run test:ui:regression', 'test/electron/appIpc.test.js', 'test/electron/updateChecker.test.js', 'test/electron/autoUpdateService.test.js']
     }),
     row('workflow.diagnostics-export', 'Diagnostics export', 'Workspace-local diagnostics controls and Help menu export produce a user-selected local diagnostic bundle with visible review-before-sharing messaging and off-by-default request/response logging categories.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/app/rendererBootstrap.js', 'electron/app-shell/appMenu.js', 'electron/ipc/diagnosticsIpc.js', 'docs/TROUBLESHOOTING.md'],
@@ -574,27 +574,27 @@ function buildUxAccessibilityMatrix() {
     }),
     row('a11y.tabs-and-panels', 'Accessibility', 'Request/result tabs, sidebar tabs, opened request/environment/workspace/runner tabs, and tab panels expose roles, selected state, labels, relationships, hover/active close controls, and capped/scrollable tab behavior without nesting controls inside tab roles.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/ui/requestTabs.js', 'src/renderer/app/requestTabState.js'],
-      tests: ['npm run test:ui:regression', 'test/electron/requestTabs.test.js']
+      tests: ['npm run test:ui:regression', 'npm run test:ui:a11y', 'test/electron/requestTabs.test.js']
     }),
     row('a11y.modal-focus-management', 'Accessibility', 'High-frequency text-input, secret-input, confirmation, notification, export, save-draft, and vault-access modals move focus on open, trap keyboard focus while open, restore focus to a visible opener on close, and support Escape/backdrop cancellation where safe.', 'implemented', {
       evidenceRefs: ['src/renderer/renderer.js', 'src/renderer/app/rendererBootstrap.js', 'src/renderer/index.html'],
-      tests: ['npm run test:ui:regression', 'test/electron/rendererBootstrap.test.js']
+      tests: ['npm run test:ui:regression', 'npm run test:ui:a11y', 'test/electron/rendererBootstrap.test.js']
     }),
     row('a11y.live-regions', 'Accessibility', 'App status, validation, OAuth progress, response metrics, runner results, package status, vault status, and file-binding status are announced through appropriate live regions.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js'],
-      tests: ['npm run test:ui:regression']
+      tests: ['npm run test:ui:regression', 'npm run test:ui:a11y']
     }),
     row('a11y.dynamic-controls', 'Accessibility', 'Dynamic workspace, package, file-binding, splitter, autocomplete combobox/listbox, toolbar/tree/tab/history context-menu, sidebar drag/drop insertion-bar, cookie, request-variable, response, runner import, history-clear, and modal controls expose accessible names, keyboard focus behavior, and stable labels; production renderer workflows avoid raw native prompt, confirm, and alert dialogs.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/ui/layoutControls.js', 'src/renderer/ui/variableAutocomplete.js', 'src/renderer/ui/contextMenu.js', 'src/renderer/ui/requestEditorPanels.js', 'src/renderer/renderer.js'],
-      tests: ['npm run test:ui:regression', 'test/electron/rendererBootstrap.test.js']
+      tests: ['npm run test:ui:regression', 'npm run test:ui:a11y', 'test/electron/rendererBootstrap.test.js']
     }),
     row('coverage.constrained-themes-long-labels', 'UI coverage', 'Linux headless UI smoke covers constrained desktop size, system/light/dark theme switching, active forced-colors focus visibility, long labels, empty workspaces, and large workspaces.', 'implemented', {
-      evidenceRefs: ['src/renderer/smoke/uiRegressionSmoke.js', 'src/renderer/smoke/uiSnapshotSmoke.js', 'test/electron/uiRegressionSmoke.js', 'test/electron/uiSnapshotSmoke.js'],
-      tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot']
+      evidenceRefs: ['src/renderer/smoke/uiA11ySmoke.js', 'src/renderer/smoke/uiRegressionSmoke.js', 'src/renderer/smoke/uiSnapshotSmoke.js', 'test/electron/uiA11ySmoke.js', 'test/electron/uiRegressionSmoke.js', 'test/electron/uiSnapshotSmoke.js'],
+      tests: ['npm run test:ui:regression', 'npm run test:ui:a11y', 'npm run test:ui:snapshot']
     }),
     row('coverage.failure-artifacts', 'UI coverage', 'Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state including active-element ARIA metadata, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, and packaged sandbox-validation stdout/stderr/stacks use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.', 'implemented', {
       evidenceRefs: ['electron/main.js', 'electron/app-shell/mainWindow.js', 'scripts/smokeProcess.js', 'test/electron/startupSmoke.js', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml'],
-      tests: ['npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:snapshot', 'test/electron/mainWindowSmoke.test.js', 'test/electron/smokeProcess.test.js']
+      tests: ['npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:hawk', 'npm run test:ui:aws', 'npm run test:ui:a11y', 'npm run test:ui:snapshot', 'test/electron/mainWindowSmoke.test.js', 'test/electron/smokeProcess.test.js']
     })
   ]);
 }

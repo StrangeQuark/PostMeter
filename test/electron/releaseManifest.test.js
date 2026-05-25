@@ -265,6 +265,86 @@ test('release validation requires and verifies electron-updater metadata for req
   }
 });
 
+test('release validation rejects unsafe or unmanifested updater artifact references', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-updater-reference-'));
+  try {
+    const artifactPath = path.join(tempDir, 'PostMeter-Setup-9.9.9.exe');
+    await fs.writeFile(artifactPath, 'installer');
+    const artifactBytes = await fs.readFile(artifactPath);
+    const hash = crypto.createHash('sha256').update(artifactBytes).digest('hex');
+    const stat = await fs.stat(artifactPath);
+    const manifestPath = path.join(tempDir, 'release-manifest.json');
+    const checksumPath = path.join(tempDir, 'SHA256SUMS');
+    await fs.writeFile(manifestPath, JSON.stringify({
+      schemaVersion: 1,
+      productName: 'PostMeter',
+      appId: 'com.strangequark.postmeter',
+      version: '9.9.9',
+      artifacts: [{
+        file: 'PostMeter-Setup-9.9.9.exe',
+        sizeBytes: stat.size,
+        sha256: hash,
+        platform: 'windows',
+        type: 'exe'
+      }]
+    }));
+    await fs.writeFile(checksumPath, `${hash}  PostMeter-Setup-9.9.9.exe\n`);
+
+    await fs.writeFile(path.join(tempDir, 'latest.yml'), [
+      'version: 9.9.9',
+      'files:',
+      '  - url: https://downloads.example.test/PostMeter-Setup-9.9.9.exe',
+      'path: https://downloads.example.test/PostMeter-Setup-9.9.9.exe',
+      ''
+    ].join('\n'));
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      requiredTypes: new Set(['exe']),
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /updater artifact URLs must be top-level release filenames/);
+
+    await fs.writeFile(path.join(tempDir, 'latest.yml'), [
+      'version: 9.9.9',
+      'files:',
+      '  - url: nested/PostMeter-Setup-9.9.9.exe',
+      'path: nested/PostMeter-Setup-9.9.9.exe',
+      ''
+    ].join('\n'));
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      requiredTypes: new Set(['exe']),
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /updater artifact URLs must be top-level release filenames/);
+
+    await fs.writeFile(path.join(tempDir, 'latest.yml'), [
+      'version: 9.9.9',
+      'files:',
+      '  - url: PostMeter-Setup-9.9.9-copy.exe',
+      'path: PostMeter-Setup-9.9.9-copy.exe',
+      ''
+    ].join('\n'));
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      requiredTypes: new Set(['exe']),
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /release-manifest\.json does not list/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('release manifest validation rejects stale checksums and unmanifested top-level artifacts', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-checksum-'));
   try {

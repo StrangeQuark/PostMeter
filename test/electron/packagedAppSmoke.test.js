@@ -7,7 +7,9 @@ const {
   expectedDefaultUserDataPath,
   expectedDefaultUserDataRoot,
   isolatedDefaultPathEnv,
+  isAppImageExecutable,
   loadPersistedSmokeWorkspace,
+  linuxAppImageCandidates,
   minimalEnv,
   packagedAppResourcePath,
   packagedSmokeCliErrorText,
@@ -67,6 +69,22 @@ test('packaged smoke validates default platform persistence paths in an isolated
     assert.equal(expectedDefaultUserDataRoot(env, 'linux'), env.XDG_CONFIG_HOME);
     assert.equal(expectedDefaultUserDataRoot(env, 'win32'), env.APPDATA);
     assert.equal(expectedDefaultUserDataRoot(env, 'darwin'), path.join(env.HOME, 'Library', 'Application Support'));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('packaged smoke discovers Linux AppImage artifacts before unpacked build directories', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-appimage-candidates-'));
+  try {
+    const older = path.join(directory, 'PostMeter-0.1.0.AppImage');
+    const newer = path.join(directory, 'PostMeter-0.2.0.AppImage');
+    await fs.writeFile(older, '');
+    await fs.writeFile(newer, '');
+
+    assert.deepEqual(await linuxAppImageCandidates(directory), [newer, older]);
+    assert.equal(isAppImageExecutable(newer), true);
+    assert.equal(isAppImageExecutable(path.join(directory, 'linux-unpacked', 'postmeter')), false);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

@@ -339,8 +339,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerAuthRefreshTypeSelect"[\s\S]*Bearer \/ JWT[\s\S]*AWS Temporary Credentials/);
   assert.match(indexSource, /id="performanceAuthRefreshTypeSelect"[\s\S]*API Key[\s\S]*Custom Header/);
   assert.doesNotMatch(indexSource, /OAuth 2\.0 Request Auth/);
-  assert.equal(selectOptionValues(indexSource, 'authTypeSelect').includes('cookie'), false);
-  assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('cookie'), false);
+  assert.equal(selectOptionValues(indexSource, 'authTypeSelect').includes('cookie'), true);
+  assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('cookie'), true);
+  assert.equal(selectOptionValues(indexSource, 'authTypeSelect').includes('clientCertificate'), true);
+  assert.equal(selectOptionValues(indexSource, 'performanceAuthTypeSelect').includes('clientCertificate'), true);
   const postmanAuthOrder = [
     'none',
     'basic',
@@ -353,7 +355,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     'aws',
     'ntlm',
     'apiKey',
+    'cookie',
     'akamaiEdgeGrid',
+    'clientCertificate',
     'asap'
   ];
   assert.deepEqual(selectOptionValues(indexSource, 'authTypeSelect'), postmanAuthOrder);

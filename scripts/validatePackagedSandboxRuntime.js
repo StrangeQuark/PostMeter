@@ -33,6 +33,7 @@ async function main() {
   const timeoutMillis = validationTimeoutMillis(process.env.POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS);
   const result = await spawnWithTimeout(appPath, withCiNoSandboxArgs(launchArgs, env), {
     env,
+    killProcessTree: true,
     stdio: packagedSandboxStdioMode(process.platform, launchMode),
     timeoutMillis,
     timeoutMessage: `Packaged sandbox runtime validation timed out after ${timeoutMillis} ms.`

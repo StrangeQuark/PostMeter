@@ -13,10 +13,13 @@ const APP_RENDERER_QUERY_KEYS = Object.freeze([
   'uiOauthSmoke',
   'uiHawkSmoke',
   'uiAwsSmoke',
+  'uiA11ySmoke',
+  'uiAuthMatrixSmoke',
   'uiWorkflowBaseUrl',
   'uiOauthBaseUrl',
   'uiHawkBaseUrl',
-  'uiAwsBaseUrl'
+  'uiAwsBaseUrl',
+  'uiAuthBaseUrl'
 ]);
 const APP_RENDERER_CORE_ASSET_PATHS = Object.freeze([
   '/src/core/http/authModel.js',
