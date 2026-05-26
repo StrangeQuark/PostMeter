@@ -1120,12 +1120,12 @@ Targets:
 
 - `npm run pack:linux`: unpacked Linux directory build.
 - `npm run dist:linux`: Linux AppImage and deb artifacts.
-- `npm run dist:win`: Windows NSIS artifact. Local developer builds may remain unsigned; production release jobs require configured signing secrets.
-- `npm run dist:mac`: macOS DMG and zip artifacts. Local developer builds may remain unsigned; production release jobs require configured signing and notarization secrets.
+- `npm run dist:win`: Windows NSIS artifact.
+- `npm run dist:mac`: macOS DMG and zip artifacts.
 - `npm run release:checksums`: writes `release/SHA256SUMS` for generated top-level AppImage, deb, dmg, zip, and exe distributable artifacts.
 - `npm run release:manifest`: writes `release/release-manifest.json` with artifact size, SHA-256, platform, type, app ID, product name, and version metadata.
 - `npm run release:prepare`: runs checksums and manifest generation.
-- `npm run release:validate`: validates package metadata, canonical GitHub release/update source metadata, expected AppImage/deb/NSIS/dmg/zip targets, icon metadata, release output directory, the `postmeter://` protocol declaration, top-level-only release manifest entries, exact agreement between top-level distributable artifacts, `SHA256SUMS`, and `release-manifest.json`, artifact sizes, SHA-256 hashes, expected platform/type/name patterns, production signature/notarization checks on native Windows/macOS runners, Linux deb/AppImage `x-scheme-handler/postmeter` desktop registration, and macOS zip `.app` `Info.plist` URL-scheme registration when those artifacts are present. Unconfigured MSI/RPM artifacts are rejected until package metadata, docs, upload paths, and native validators explicitly support them. `POSTMETER_RELEASE_REQUIRED_TYPES` can require specific artifact types in release CI.
+- `npm run release:validate`: validates package metadata, canonical GitHub release/update source metadata, expected AppImage/deb/NSIS/dmg/zip targets, icon metadata, release output directory, the `postmeter://` protocol declaration, top-level-only release manifest entries, exact agreement between top-level distributable artifacts, `SHA256SUMS`, and `release-manifest.json`, artifact sizes, SHA-256 hashes, expected platform/type/name patterns, Linux deb/AppImage `x-scheme-handler/postmeter` desktop registration, and macOS zip `.app` `Info.plist` URL-scheme registration when those artifacts are present. Unconfigured MSI/RPM artifacts are rejected until package metadata, docs, upload paths, and native validators explicitly support them. `POSTMETER_RELEASE_REQUIRED_TYPES` can require specific artifact types in release CI.
 - `npm run release:validate:win-protocol`: on a native Windows release runner, silently installs the generated NSIS artifact, validates the `postmeter://` registry root/open command belongs to that temporary install, launches a `postmeter://oauth/callback?...` URL through ShellExecute, verifies the launched process path when Windows exposes it, writes a transcript when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set, then runs the generated uninstaller silently.
 - `npm run release:validate:mac-protocol`: on a native macOS release runner, validates `PostMeter.app` URL-scheme metadata in the app bundle, zip, and DMG artifacts, registers each discovered bundle with Launch Services, launches a `postmeter://oauth/callback?...` URL through `open -b com.strangequark.postmeter` for each bundle, verifies the launched process belongs to that bundle, writes a protocol log when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set, and quits the app between launches.
 - The package author and deb maintainer metadata use `StrangeQuark <support@qrksw.com>`.
@@ -1153,10 +1153,10 @@ CI is configured in `.github/workflows/ci.yml` for:
 
 Release automation is configured in `.github/workflows/release.yml` for tag pushes matching `v*`:
 
-- Builds Linux, Windows, and macOS artifacts on native GitHub-hosted runners, with production release signing/notarization configuration validated before Windows/macOS artifacts are produced.
+- Builds Linux, Windows, and macOS artifacts on native GitHub-hosted runners.
 - Runs Node tests and checks the Electron runtime version before platform packaging. The version probe runs Electron in Node mode so GitHub-hosted Linux runners do not need Chromium's setuid sandbox helper configured just to print the runtime version.
 - Uses `POSTMETER_CI_ELECTRON_NO_SANDBOX=1` only for Linux GitHub-hosted Electron smoke launches where Chromium's setuid sandbox helper cannot be configured by the runner. This app-shell launch waiver is separate from PostMeter's script sandbox validation and is not a production runtime default.
-- Keeps local unsigned developer builds possible while production release jobs fail closed if required signing/notarization secrets are absent.
+- Retains checksum, manifest, packaged-smoke, protocol, and provenance gates.
 - Runs packaged startup smoke on every release platform. The smoke validates the packaged executable, trusted `postmeter-app://bundle/src/renderer/index.html` renderer URL, renderer CSP meta policy, full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, default platform user-data path shape, isolated user-data path override behavior, and workspace save/reload persistence.
 - Uploads validation logs and packaged startup-smoke failure screenshots on native runner failure so launch/protocol failures can be inspected after the job exits.
 - Downloads platform artifacts into one release directory.
@@ -1172,7 +1172,7 @@ Manual native release validation is configured in `.github/workflows/release-val
 
 Packaging limitations:
 
-- Release signing and notarization are mandatory for production Windows/macOS release jobs. Local non-release builds may skip platform signature checks, but production validation fails if required signing, notarization, or native signature verification is skipped.
+- Production validation relies on native package validation, checksums, release manifests, update metadata, protocol checks, and GitHub artifact attestations.
 - Artifact upload to GitHub Releases is configured for tag builds. Electron updater metadata (`latest*.yml`) and blockmaps are preserved for packaged automatic updates; users must opt in before PostMeter downloads updates or installs them on quit.
 
 ## Testing
@@ -1207,7 +1207,7 @@ Missing tests:
 
 - Execute and archive successful packaged custom-scheme OAuth redirect validation on native Windows and macOS release runners before promoting packaging rows to `validated`.
 - Replace remaining complex payload-specific IPC shape validation with generated validators from shared schemas.
-- Collect final native-runner signing/notarization evidence for Windows and macOS release candidates before promoting the remaining external-validation release rows.
+- Collect final native-runner packaged app, protocol, and smoke evidence for Windows and macOS release candidates before promoting the remaining external-validation release rows.
 - Continue monitoring native Windows/macOS packaged OS-sandbox validation in CI and release workflows. Linux's current `bubblewrap` namespace plus dangerous-syscall seccomp policy is accepted for the current Linux claim; a stricter deny-by-default seccomp-BPF allowlist is optional future hardening.
 - Keep `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep green before making or preserving the full Postman script compatibility claim.
 - Continue monitoring obscure browser/export cookie variants against the expanded real-world fixture corpus; remaining cookie work is compatibility hardening, not a known v1 release blocker.

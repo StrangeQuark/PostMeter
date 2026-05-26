@@ -275,10 +275,8 @@ jobs:
       - name: Validate production support matrices
         run: npm run oauth:certify:validate && npm run oauth:certify:mock && npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate && npm run ux:accessibility:validate && npm run diagnostics:privacy:validate
 
-      - name: Build unsigned packaged app
+      - name: Build packaged app
         run: ${{ matrix.command }}
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Packaged app startup smoke
         run: ${{ matrix.smoke_command }}

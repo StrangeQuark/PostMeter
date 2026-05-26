@@ -183,8 +183,6 @@ jobs:
 
       - name: Build validation artifacts
         run: ${{ matrix.command }}
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Prepare platform release metadata
         run: npm run release:prepare

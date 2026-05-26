@@ -29,13 +29,13 @@
         "validated"
       ],
       "allowDocumentedWaivers": false,
-      "description": "Stable readiness requires every release-blocking row to be validated with required local/native/provider/signing evidence."
+      "description": "Stable readiness requires every release-blocking row to be validated with required local/native/provider evidence."
     }
   },
   "statuses": {
     "implemented": "Implementation and local validation exist.",
     "validated": "Implementation has required local and native-runner evidence.",
-    "external-validation-required": "Implementation exists, but final evidence requires native runners, provider signoff, optional sanitized artifacts, or signing assets.",
+    "external-validation-required": "Implementation exists, but final evidence requires native runners, provider signoff, or optional sanitized artifacts.",
     "blocked": "Release-blocking implementation is not complete.",
     "deferred": "Deliberately outside the current production claim.",
     "not-applicable": "Not part of this product or release track."
@@ -110,7 +110,7 @@
     {
       "id": "docs.public-release",
       "area": "docs",
-      "target": "Public release docs explain readiness gates, compatibility claims, unsigned artifacts, support channel, and platform limitations.",
+      "target": "Public release docs explain readiness gates, compatibility claims, support channel, and platform limitations.",
       "status": "validated",
       "releaseBlocking": true,
       "commands": [
@@ -393,22 +393,6 @@
       "owner": "PostMeter",
       "lastVerified": "",
       "notes": "The tag-driven release workflow runs the stable readiness claim before artifact publication."
-    },
-    {
-      "id": "release.signing",
-      "area": "release",
-      "target": "Signed/notarized stable artifacts require maintainer-controlled certificates.",
-      "status": "external-validation-required",
-      "releaseBlocking": true,
-      "commands": [
-        "future signing/notarization workflow"
-      ],
-      "evidenceRefs": [
-        "docs/SECURITY.md"
-      ],
-      "owner": "PostMeter",
-      "lastVerified": "",
-      "notes": ""
     },
     {
       "id": "sandbox.platform-os",

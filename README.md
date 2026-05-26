@@ -109,4 +109,4 @@ Generated validation matrices live in `docs/*.json`, including Postman parity, d
 
 ## Notes
 
-Production release builds require the signing, notarization, checksum, manifest, and provenance gates documented in [docs/RELEASE_SECURITY.md](docs/RELEASE_SECURITY.md). Run `npm run check` before publishing release artifacts.
+Production release builds require the checksum, manifest, and provenance gates documented in [docs/RELEASE_SECURITY.md](docs/RELEASE_SECURITY.md). Run `npm run check` before publishing release artifacts.
