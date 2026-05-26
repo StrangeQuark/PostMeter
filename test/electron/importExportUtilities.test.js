@@ -94,6 +94,8 @@ test('markup utilities read XML XPath and HTML selector values safely', () => {
   assert.equal(readXmlPath(xml, '/root/item/@id'), 'a\nb');
   assert.equal(xmlPathExists(xml, 'count(/root/item) = 2'), true);
   assert.equal(xmlPathExists(xml, '/root/missing'), false);
+  assert.throws(() => readXmlPath('<!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>', '/root'), /DTD or entity declarations/);
+  assert.throws(() => readXmlPath('<!DOCTYPE lolz [<!ENTITY lol "lol">]><root>&lol;</root>', '/root'), /DTD or entity declarations/);
   assert.throws(() => readXmlPath('<root>', '/root'), /unclosed xml tag|not valid XML/);
   assert.throws(() => readXmlPath(xml, ''), /requires a path/);
 

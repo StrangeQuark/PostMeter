@@ -67,7 +67,7 @@ test('picker-first export cancels prepared payloads when the user cancels path s
 test('picker-first export reports preparation failures and never writes stale prepared data', async () => {
   const { sandbox, state } = loadImportExportWorkspaceController({
     fileExport: {
-      choosePath: async () => ({ path: '/tmp/request.json' }),
+      choosePath: async () => ({ capabilityToken: 'export-token' }),
       prepare: async () => {
         throw new Error('payload too large');
       },

@@ -870,14 +870,14 @@ function buildPostmanParityMatrix() {
     security: 'reviewed-cache',
     desktopEvidence: 'row-specific-behavior'
   }));
-  rows.push(row('require.pm.latest-package', 'packages', 'desktop-workflow', "pm.require('npm:package') and pm.require('jsr:@scope/package') latest-version imports resolve through the reviewed package workflow.", 'implemented', {
+  rows.push(row('require.pm.latest-package', 'packages', 'desktop-workflow', "Postman latest-version external imports such as pm.require('npm:package') and pm.require('jsr:@scope/package') are intentionally rejected; PostMeter requires exact npm/JSR versions before review.", 'intentional-strict-gap', {
     sources: ['require'],
     fixtures: ['focused-script-runtime-tests', 'real-world-import-corpus', 'postman-desktop-row-specific-behavior-audit-v1'],
     newman: 'unsupported',
     desktop: 'required',
-    security: 'reviewed-cache',
+    security: 'exact-version-required',
     desktopEvidence: 'row-specific-behavior',
-    notes: 'Postman supports omitting @version-number to use the app-selected latest package version. PostMeter resolves the current latest version parent-side during fetch/review, records the resolved packageVersion in the cache entry, and then executes only the reviewed cached package with no script-time registry access.'
+    notes: 'Postman supports omitting @version-number to use the app-selected latest package version. PostMeter rejects unversioned npm/JSR specifiers in production because mutable latest resolution would break reviewed-code reproducibility. Users must review exact npm:package@version, npm:@scope/package@version, or jsr:@scope/package@version specifiers.'
   }));
   rows.push(row('require.pm.jsr-package', 'packages', 'desktop-workflow', "Reviewed fetch/cache workflow for exact pm.require('jsr:@scope/package@version') references", 'implemented', {
     sources: ['require'],
@@ -895,7 +895,7 @@ function buildPostmanParityMatrix() {
     desktop: 'required',
     security: 'reviewed-cache',
     desktopEvidence: 'row-specific-behavior',
-    notes: 'Parent-side package fetch workflow resolves exact and latest-form npm/JSR package references plus reviewed HTTPS team-package source URLs into the same SHA-256 reviewed cache used by the script runtime. Scripts still cannot fetch, install, update, or resolve packages at runtime.'
+    notes: 'Parent-side package fetch workflow resolves exact npm/JSR package references plus reviewed HTTPS team-package source URLs into the same SHA-256 reviewed cache used by the script runtime. Scripts still cannot fetch, install, update, resolve latest versions, or resolve packages at runtime.'
   }));
   rows.push(row('require.builtin.full-library-parity', 'packages', 'module', 'Version-pinned full behavior for Postman bundled libraries and Postman-listed NodeJS module facades, replacing hand-rolled subset facades or proving subset differences are outside the current Postman surface.', 'implemented', {
     sources: ['require'],

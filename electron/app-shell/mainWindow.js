@@ -8,7 +8,9 @@ const {
   APP_RENDERER_CSP,
   APP_RENDERER_PATHNAME,
   createAppRendererUrl,
-  isTrustedAppRendererUrl
+  isTrustedAppRendererUrl,
+  packagedRendererSmokeRequested,
+  rendererSmokeRequested
 } = require('./appProtocol');
 const { safeFilename } = require('./fileDialogs');
 const {
@@ -48,7 +50,8 @@ const EDIT_SHORTCUT_METHODS = Object.freeze({
 
 function createMainWindow(app, options = {}) {
   const env = options.env || process.env;
-  const constrainedUiSmoke = env.POSTMETER_UI_CONSTRAINED_WINDOW === '1';
+  const allowRendererSmoke = shouldAllowRendererSmoke(app, env, options);
+  const constrainedUiSmoke = allowRendererSmoke && env.POSTMETER_UI_CONSTRAINED_WINDOW === '1';
   const mainWindow = new BrowserWindow({
     width: constrainedUiSmoke ? 1040 : 1320,
     height: constrainedUiSmoke ? 700 : 860,
@@ -65,9 +68,11 @@ function createMainWindow(app, options = {}) {
     }
   });
 
-  const rendererUrl = options.rendererUrl || createAppRendererUrl(loadQuery(env));
+  const rendererUrl = options.rendererUrl || createAppRendererUrl(loadQuery(env, { allowRendererSmoke }), {
+    allowSmokeQuery: allowRendererSmoke
+  });
 
-  bindNavigationGuards(mainWindow, rendererUrl);
+  bindNavigationGuards(mainWindow, rendererUrl, { allowSmokeQuery: allowRendererSmoke });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.session.setPermissionCheckHandler(() => false);
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
@@ -77,7 +82,7 @@ function createMainWindow(app, options = {}) {
     getShortcuts: options.getKeyboardShortcuts,
     sendAction: options.sendShortcutAction
   });
-  bindSmokeHooks(app, mainWindow, env, options);
+  bindSmokeHooks(app, mainWindow, env, { ...options, allowRendererSmoke });
   const handleLoadFailure = bindStartupLoadFailureHooks(app, mainWindow, env);
   const loadPromise = mainWindow.loadURL(rendererUrl);
   if (loadPromise && typeof loadPromise.catch === 'function') {
@@ -86,9 +91,9 @@ function createMainWindow(app, options = {}) {
   return mainWindow;
 }
 
-function bindNavigationGuards(mainWindow, trustedRendererUrl) {
+function bindNavigationGuards(mainWindow, trustedRendererUrl, options = {}) {
   mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
-    if (!isAllowedRendererNavigation(targetUrl, trustedRendererUrl)) {
+    if (!isAllowedRendererNavigation(targetUrl, trustedRendererUrl, options)) {
       event.preventDefault();
     }
   });
@@ -232,16 +237,16 @@ function nextNumpadZoomLevel(currentLevel, shortcut) {
   return nextZoomLevel(currentLevel, shortcut);
 }
 
-function isAllowedRendererNavigation(targetUrl, trustedRendererUrl = createAppRendererUrl()) {
-  const trusted = normalizedRendererNavigationUrl(trustedRendererUrl);
+function isAllowedRendererNavigation(targetUrl, trustedRendererUrl = createAppRendererUrl(), options = {}) {
+  const trusted = normalizedRendererNavigationUrl(trustedRendererUrl, options);
   if (!trusted) {
     return false;
   }
-  return normalizedRendererNavigationUrl(targetUrl) === trusted;
+  return normalizedRendererNavigationUrl(targetUrl, options) === trusted;
 }
 
-function normalizedRendererNavigationUrl(value) {
-  if (!isTrustedAppRendererUrl(value)) {
+function normalizedRendererNavigationUrl(value, options = {}) {
+  if (!isTrustedAppRendererUrl(value, options)) {
     return '';
   }
   try {
@@ -254,15 +259,16 @@ function normalizedRendererNavigationUrl(value) {
 }
 
 function bindSmokeHooks(app, mainWindow, env, options = {}) {
-  const isUiWorkflowSmoke = env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
-  const isUiRegressionSmoke = env.POSTMETER_UI_REGRESSION_SMOKE === '1';
-  const isUiSnapshotSmoke = env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
-  const isUiTypographySmoke = env.POSTMETER_UI_TYPOGRAPHY_SMOKE === '1';
-  const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
-  const isUiHawkSmoke = env.POSTMETER_UI_HAWK_SMOKE === '1';
-  const isUiAwsSmoke = env.POSTMETER_UI_AWS_SMOKE === '1';
-  const isUiA11ySmoke = env.POSTMETER_UI_A11Y_SMOKE === '1';
-  const isUiAuthMatrixSmoke = env.POSTMETER_UI_AUTH_MATRIX_SMOKE === '1';
+  const allowRendererSmoke = options.allowRendererSmoke === true;
+  const isUiWorkflowSmoke = allowRendererSmoke && env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
+  const isUiRegressionSmoke = allowRendererSmoke && env.POSTMETER_UI_REGRESSION_SMOKE === '1';
+  const isUiSnapshotSmoke = allowRendererSmoke && env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
+  const isUiTypographySmoke = allowRendererSmoke && env.POSTMETER_UI_TYPOGRAPHY_SMOKE === '1';
+  const isUiOauthSmoke = allowRendererSmoke && env.POSTMETER_UI_OAUTH_SMOKE === '1';
+  const isUiHawkSmoke = allowRendererSmoke && env.POSTMETER_UI_HAWK_SMOKE === '1';
+  const isUiAwsSmoke = allowRendererSmoke && env.POSTMETER_UI_AWS_SMOKE === '1';
+  const isUiA11ySmoke = allowRendererSmoke && env.POSTMETER_UI_A11Y_SMOKE === '1';
+  const isUiAuthMatrixSmoke = allowRendererSmoke && env.POSTMETER_UI_AUTH_MATRIX_SMOKE === '1';
   if (env.POSTMETER_STARTUP_SMOKE === '1') {
     mainWindow.webContents.once('did-finish-load', () => {
       runStartupSmokeProbe(app, mainWindow, env, options)
@@ -408,6 +414,7 @@ function bindStartupLoadFailureHooks(app, mainWindow, env) {
 
 async function runStartupSmokeProbe(app, mainWindow, env, options = {}) {
   await validateSmokeUserDataPath(app, env);
+  await assertRendererChromeStyled(mainWindow);
   const markerKey = '__postmeter_packaged_smoke';
   const markerValue = env.POSTMETER_PACKAGED_SMOKE_MARKER || 'startup-smoke';
   const expectReload = env.POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD === '1';
@@ -552,11 +559,13 @@ async function writeStartupSmokeFailureArtifacts(mainWindow, env, error) {
     }
     try {
       const image = await withSmokeArtifactTimeout(
-        () => mainWindow.webContents.capturePage(),
+        () => captureUiSmokeScreenshot(mainWindow, env),
         timeoutMillis,
         'packaged startup screenshot capture'
       );
-      await fs.writeFile(path.join(artifactDir, `${baseName}.png`), image.toPNG());
+      if (image) {
+        await fs.writeFile(path.join(artifactDir, `${baseName}.png`), image.toPNG());
+      }
     } catch (captureError) {
       console.error(`Unable to capture packaged startup smoke screenshot: ${redactUiSmokeText(captureError.message || String(captureError))}`);
     }
@@ -617,6 +626,9 @@ function requiredPreloadApiSurface() {
     ['fileExport', 'prepare'],
     ['fileExport', 'writePrepared'],
     ['fileExport', 'cancelPrepared'],
+    ['fileBindings', 'choose'],
+    ['fileBindings', 'storeContent'],
+    ['localFiles', 'storeContent'],
     ['runner', 'start'],
     ['runner', 'cancel'],
     ['runner', 'export'],
@@ -700,11 +712,13 @@ async function writeUiSmokeFailureArtifacts(mainWindow, env, label, failure) {
     if (typeof mainWindow.webContents.capturePage === 'function') {
       try {
         const image = await withSmokeArtifactTimeout(
-          () => mainWindow.webContents.capturePage(),
+          () => captureUiSmokeScreenshot(mainWindow, env),
           timeoutMillis,
           'UI smoke screenshot capture'
         );
-        await fs.writeFile(path.join(artifactDir, `${baseName}.png`), image.toPNG());
+        if (image) {
+          await fs.writeFile(path.join(artifactDir, `${baseName}.png`), image.toPNG());
+        }
       } catch (captureError) {
         console.error(`Unable to capture UI smoke screenshot: ${redactUiSmokeText(captureError.message || String(captureError))}`);
       }
@@ -814,6 +828,101 @@ async function captureUiSmokeDomState(mainWindow) {
       captureError: redactUiSmokeText(error.message || String(error))
     };
   }
+}
+
+async function captureUiSmokeScreenshot(mainWindow, env = process.env) {
+  if (!mainWindow?.webContents || typeof mainWindow.webContents.capturePage !== 'function') {
+    return null;
+  }
+  let masked = null;
+  try {
+    masked = await maskUiSmokeSensitiveFields(mainWindow);
+  } catch (error) {
+    const allowUnmasked = env.POSTMETER_ALLOW_UNMASKED_SMOKE_SCREENSHOT === '1'
+      && env.POSTMETER_PACKAGED_PRODUCTION !== '1';
+    if (!allowUnmasked) {
+      console.error(`Skipping UI smoke screenshot because sensitive-field masking failed: ${redactUiSmokeText(error.message || String(error))}`);
+      return null;
+    }
+  }
+  try {
+    return await mainWindow.webContents.capturePage();
+  } finally {
+    if (masked?.restoreToken) {
+      await restoreUiSmokeSensitiveFields(mainWindow, masked.restoreToken).catch((error) => {
+        console.error(`Unable to restore UI smoke screenshot masks: ${redactUiSmokeText(error.message || String(error))}`);
+      });
+    }
+  }
+}
+
+async function maskUiSmokeSensitiveFields(mainWindow) {
+  return mainWindow.webContents.executeJavaScript(`
+    (function () {
+      if (window.__postmeterSmokeScreenshotMaskError) {
+        throw new Error('Smoke screenshot mask failure requested.');
+      }
+      var sensitivePattern = /password|passwd|passphrase|token|secret|authorization|bearer|api\\s*key|client\\s*secret|access\\s*token|refresh\\s*token|id\\s*token|device\\s*code|user\\s*code|cookie\\s*value|certificate\\s*passphrase/i;
+      var token = 'smoke-mask-' + Math.random().toString(36).slice(2);
+      var records = [];
+      function labelFor(element) {
+        return [
+          element.id,
+          element.name,
+          element.className,
+          element.getAttribute && element.getAttribute('aria-label'),
+          element.getAttribute && element.getAttribute('placeholder'),
+          element.getAttribute && element.getAttribute('autocomplete')
+        ].join(' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+      }
+      function isSensitive(element) {
+        var type = String(element.type || '').toLowerCase();
+        return type === 'password' || type === 'hidden' || sensitivePattern.test(labelFor(element));
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('input, textarea, [contenteditable="true"]'), function (element) {
+        if (!isSensitive(element)) {
+          return;
+        }
+        var record = { element: element };
+        if ('value' in element) {
+          record.value = element.value;
+          element.value = element.value ? '[redacted]' : '';
+        } else {
+          record.textContent = element.textContent;
+          element.textContent = element.textContent ? '[redacted]' : '';
+        }
+        records.push(record);
+      });
+      window.__postmeterSmokeScreenshotMasks = window.__postmeterSmokeScreenshotMasks || {};
+      window.__postmeterSmokeScreenshotMasks[token] = records;
+      return { restoreToken: token, maskedCount: records.length };
+    })();
+  `, true);
+}
+
+async function restoreUiSmokeSensitiveFields(mainWindow, restoreToken) {
+  const safeToken = String(restoreToken || '').replace(/[^A-Za-z0-9_-]/g, '');
+  if (!safeToken) {
+    return;
+  }
+  await mainWindow.webContents.executeJavaScript(`
+    (function () {
+      var token = ${JSON.stringify(safeToken)};
+      var store = window.__postmeterSmokeScreenshotMasks || {};
+      var records = store[token] || [];
+      records.forEach(function (record) {
+        if (!record || !record.element) {
+          return;
+        }
+        if ('value' in record) {
+          record.element.value = record.value;
+        } else {
+          record.element.textContent = record.textContent;
+        }
+      });
+      delete store[token];
+    })();
+  `, true);
 }
 
 function redactUiSmokeDomState(domState) {
@@ -993,16 +1102,17 @@ async function withSmokeArtifactTimeout(operation, timeoutMillis, label) {
   }
 }
 
-function loadQuery(env) {
-  const isUiWorkflowSmoke = env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
-  const isUiRegressionSmoke = env.POSTMETER_UI_REGRESSION_SMOKE === '1';
-  const isUiSnapshotSmoke = env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
-  const isUiTypographySmoke = env.POSTMETER_UI_TYPOGRAPHY_SMOKE === '1';
-  const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
-  const isUiHawkSmoke = env.POSTMETER_UI_HAWK_SMOKE === '1';
-  const isUiAwsSmoke = env.POSTMETER_UI_AWS_SMOKE === '1';
-  const isUiA11ySmoke = env.POSTMETER_UI_A11Y_SMOKE === '1';
-  const isUiAuthMatrixSmoke = env.POSTMETER_UI_AUTH_MATRIX_SMOKE === '1';
+function loadQuery(env, options = {}) {
+  const allowRendererSmoke = options.allowRendererSmoke === true;
+  const isUiWorkflowSmoke = allowRendererSmoke && env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
+  const isUiRegressionSmoke = allowRendererSmoke && env.POSTMETER_UI_REGRESSION_SMOKE === '1';
+  const isUiSnapshotSmoke = allowRendererSmoke && env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
+  const isUiTypographySmoke = allowRendererSmoke && env.POSTMETER_UI_TYPOGRAPHY_SMOKE === '1';
+  const isUiOauthSmoke = allowRendererSmoke && env.POSTMETER_UI_OAUTH_SMOKE === '1';
+  const isUiHawkSmoke = allowRendererSmoke && env.POSTMETER_UI_HAWK_SMOKE === '1';
+  const isUiAwsSmoke = allowRendererSmoke && env.POSTMETER_UI_AWS_SMOKE === '1';
+  const isUiA11ySmoke = allowRendererSmoke && env.POSTMETER_UI_A11Y_SMOKE === '1';
+  const isUiAuthMatrixSmoke = allowRendererSmoke && env.POSTMETER_UI_AUTH_MATRIX_SMOKE === '1';
   return isUiWorkflowSmoke || isUiRegressionSmoke || isUiSnapshotSmoke || isUiTypographySmoke || isUiOauthSmoke || isUiHawkSmoke || isUiAwsSmoke || isUiA11ySmoke || isUiAuthMatrixSmoke
     ? {
         uiWorkflowSmoke: isUiWorkflowSmoke ? '1' : '',
@@ -1021,6 +1131,13 @@ function loadQuery(env) {
         uiAuthBaseUrl: env.POSTMETER_UI_AUTH_MATRIX_BASE_URL || ''
       }
     : undefined;
+}
+
+function shouldAllowRendererSmoke(app, env = process.env, options = {}) {
+  if (app?.isPackaged === true) {
+    return packagedRendererSmokeRequested(env);
+  }
+  return options.allowRendererSmoke === true || rendererSmokeRequested(env);
 }
 
 function bindUiSnapshotSmoke(app, mainWindow, env) {
@@ -1082,6 +1199,7 @@ function bindUiSnapshotSmoke(app, mainWindow, env) {
 
 async function captureUiSnapshot(mainWindow, label, env) {
   await waitForRendererSnapshotPaint(mainWindow);
+  await assertRendererChromeStyled(mainWindow);
   const image = await mainWindow.webContents.capturePage();
   const size = image.getSize();
   if (size.width < 800 || size.height < 600) {
@@ -1094,6 +1212,34 @@ async function captureUiSnapshot(mainWindow, label, env) {
   if (snapshotDir) {
     await fs.mkdir(snapshotDir, { recursive: true });
     await fs.writeFile(path.join(snapshotDir, `${label}.png`), image.toPNG());
+  }
+}
+
+async function assertRendererChromeStyled(mainWindow) {
+  const styles = await mainWindow.webContents.executeJavaScript(`
+    (function () {
+      var appGrid = document.getElementById('appGrid');
+      var sidebar = document.querySelector('.sidebar');
+      var topbar = document.querySelector('.topbar');
+      var appGridStyle = appGrid ? getComputedStyle(appGrid) : null;
+      var sidebarStyle = sidebar ? getComputedStyle(sidebar) : null;
+      var topbarStyle = topbar ? getComputedStyle(topbar) : null;
+      return {
+        appGridDisplay: appGridStyle ? appGridStyle.display : '',
+        appGridColumns: appGridStyle ? appGridStyle.gridTemplateColumns : '',
+        sidebarDisplay: sidebarStyle ? sidebarStyle.display : '',
+        topbarDisplay: topbarStyle ? topbarStyle.display : '',
+        topbarHeight: topbar ? topbar.getBoundingClientRect().height : 0
+      };
+    })();
+  `, true);
+  if (styles.appGridDisplay !== 'grid'
+    || styles.sidebarDisplay !== 'grid'
+    || styles.topbarDisplay !== 'flex'
+    || !styles.appGridColumns
+    || styles.appGridColumns === 'none'
+    || Number(styles.topbarHeight) < 40) {
+    throw new Error(`PostMeter renderer chrome styles did not load: ${JSON.stringify(styles)}`);
   }
 }
 
@@ -1139,6 +1285,7 @@ module.exports = {
   nextZoomLevel,
   nextNumpadZoomLevel,
   captureUiSmokeDomState,
+  captureUiSmokeScreenshot,
   isAllowedRendererNavigation,
   isPathInside,
   loadQuery,
@@ -1147,6 +1294,7 @@ module.exports = {
   redactUiSmokeText,
   requiredPreloadApiSurface,
   runStartupSmokeProbe,
+  shouldAllowRendererSmoke,
   UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS,
   UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS,
   validateSmokeUserDataPath,

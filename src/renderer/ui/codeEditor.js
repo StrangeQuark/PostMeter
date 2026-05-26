@@ -194,6 +194,7 @@
     const showLineNumbers = shouldShowLineNumbers(textarea);
     state.wrapper.classList.toggle('has-line-numbers', showLineNumbers);
     state.wrapper.hidden = textarea.hidden === true;
+    // postmeter-security-allow-html: code highlighter emits escaped text plus fixed span markup from local textarea content.
     state.code.innerHTML = highlightCode(textarea.value || '', textarea.dataset.codeLanguage || 'text', { target: textarea });
     state.lineNumberCode.textContent = lineNumbersForText(textarea.value || '');
     state.wrapper.style.setProperty('--code-editor-line-number-width', `${lineNumberWidth(textarea.value || '')}ch`);

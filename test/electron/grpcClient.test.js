@@ -39,6 +39,10 @@ service UserService {
   rpc Fails(UserRequest) returns (UserEvent);
 }
 `;
+const LOCAL_GRPC_TLS_OPTIONS = Object.freeze({
+  'grpc.ssl_target_name_override': 'localhost',
+  'grpc.default_authority': 'localhost'
+});
 
 test('executes live unary gRPC requests through the default parent transport', async (t) => {
   const fixture = await startGrpcFixture(t);
@@ -244,6 +248,7 @@ test('uses PEM and PFX/P12 client certificates for live gRPC mTLS across unary a
   });
   const baseRequest = grpcRequest(fixture.port, 'GetUser', 'unary');
   baseRequest.url = `grpcs://127.0.0.1:${fixture.port}`;
+  baseRequest.grpc.options = { ...LOCAL_GRPC_TLS_OPTIONS };
   baseRequest.messages = [{ name: 'direct', data: { id: 'user-42', name: 'Ada' } }];
   baseRequest.auth = {
     type: 'clientCertificate',
@@ -500,6 +505,7 @@ test('uses PEM and PFX/P12 client certificates for live gRPC mTLS across unary a
   for (const [method, methodType, messages, expectedMessages] of streamingCases) {
     const request = grpcRequest(fixture.port, method, methodType, messages);
     request.url = `grpcs://127.0.0.1:${fixture.port}`;
+    request.grpc.options = { ...LOCAL_GRPC_TLS_OPTIONS };
     request.auth = { ...pfxRequest.auth };
     const result = await invokeGrpcRequest(request, grpcEnvironment());
     assert.equal(result.response.code, 0, `${method} should succeed with PFX/P12 mTLS`);

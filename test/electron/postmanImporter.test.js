@@ -192,8 +192,13 @@ test('imports and exports Postman request settings protocol profile controls', (
     }]
   });
   assert.equal(autoCollection.requests[0].settings.httpVersion, 'auto');
+  assert.equal(autoCollection.requests[0].settings.sslCertificateVerification, 'inherit');
   assert.equal(autoCollection.requests[1].settings.httpVersion, 'auto');
-  assert.deepEqual(exportPostmanCollection(autoCollection).item[0].request.protocolProfileBehavior, { strictHttpParser: true });
+  assert.equal(autoCollection.requests[1].settings.sslCertificateVerification, 'inherit');
+  assert.deepEqual(exportPostmanCollection(autoCollection).item[0].request.protocolProfileBehavior, {
+    strictSSL: true,
+    strictHttpParser: true
+  });
 
   const collection = importPostmanCollection({
     info: {
@@ -283,7 +288,7 @@ test('imports and exports Postman request settings protocol profile controls', (
   profile = exported.item[0].item[0].request.protocolProfileBehavior;
   assert.equal(profile.disableBodyPruning, true);
   assert.equal(profile.disableCookieJar, undefined);
-  assert.equal(profile.strictSSL, undefined);
+  assert.equal(profile.strictSSL, true);
   assert.equal(profile.httpVersion, undefined);
   assert.equal(profile.followRedirects, undefined);
   assert.equal(profile.strictHttpParser, true);

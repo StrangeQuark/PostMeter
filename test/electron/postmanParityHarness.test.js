@@ -26,12 +26,12 @@ test('validates the committed Postman sandbox parity matrix', async () => {
   assert.ok(result.summary.byArea.packages > 0);
 });
 
-test('passes the full Postman compatibility claim when default-import blockers are zero', async () => {
+test('blocks the full Postman compatibility claim while latest package imports are intentionally rejected', async () => {
   const result = await validateCommittedProductionClaim();
   const blockerIds = new Set(result.blockers.map((row) => row.id));
 
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.errors, []);
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join('\n'), /blocked by 1 default-import parity row/);
   assert.equal(blockerIds.has('cookies.httponly-parity'), false);
   assert.equal(blockerIds.has('global.dynamic-code-and-host-like-globals-audit'), false);
   assert.equal(blockerIds.has('sendRequest.advanced-auth-proxy'), false);
@@ -39,14 +39,15 @@ test('passes the full Postman compatibility claim when default-import blockers a
   assert.equal(blockerIds.has('require.builtin.full-library-parity'), false);
   assert.equal(blockerIds.has('require.pm.commonjs-bundle-semantics'), false);
   assert.equal(blockerIds.has('require.pm.online-fetch-review'), false);
+  assert.equal(blockerIds.has('require.pm.latest-package'), true);
   assert.equal(blockerIds.has('grpc.live-desktop-transport'), false);
   assert.equal(blockerIds.has('runtime.resource-limit-parity'), false);
   assert.equal(blockerIds.has('visualizer.handlebars-full-parity'), false);
   assert.equal(blockerIds.has('harness.broad-differential-corpus'), false);
   assert.equal(blockerIds.has('harness.completed-desktop-observations'), false);
-  assert.equal(result.blockers.length, 0);
+  assert.equal(result.blockers.length, 1);
   assert.equal(blockerIds.has('run-order.load-tests.skip'), false);
-  assert.equal(result.summary.claim.ready, true);
+  assert.equal(result.summary.claim.ready, false);
 });
 
 test('blocks the full Postman compatibility claim if a default-import blocker is reopened', () => {
@@ -57,8 +58,9 @@ test('blocks the full Postman compatibility claim if a default-import blocker is
   const result = validateProductionClaim(matrix);
 
   assert.equal(result.ok, false);
-  assert.equal(result.blockers.length, 1);
+  assert.equal(result.blockers.length, 2);
   assert.equal(result.blockers[0].id, 'assertion.pm.response.to.have.responseTime');
+  assert.equal(result.blockers[1].id, 'require.pm.latest-package');
   assert.equal(result.summary.ready, false);
 });
 

@@ -796,6 +796,7 @@ test('redaction covers auth schemes oauth fields JWTs paths private keys and URL
     'graphqlVariables=graphql-secret',
     'Cookie: sid=cookie-secret',
     'eyJaaaaaaaa.eyJbbbbbbbb.eyJcccccccc',
+    // postmeter-secret-allow: synthetic private-key marker verifies diagnostics redaction.
     '-----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
     '/home/alice/customer.json',
     '/data/customer.json',
@@ -1640,6 +1641,7 @@ function sensitiveDiagnosticEvent() {
         credentials: 'generic-credentials-secret',
         passwd: 'legacy-passwd-secret',
         note: 'Bearer request-secret eyJsecret12.eyJsecret34.eyJsecret56',
+        // postmeter-secret-allow: synthetic private-key marker verifies nested diagnostics redaction.
         privateKey: '-----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
         localPath: '/home/alice/customer.json',
         windowsPath: 'C:\\Users\\Alice\\customer.json',

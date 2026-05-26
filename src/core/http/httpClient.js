@@ -33,6 +33,14 @@ const {
   normalizeRequestSettings,
   requestSettingsRequireNodeTransport
 } = require('./requestSettings');
+const {
+  assertContentLengthWithinLimit,
+  normalizeResponseLimits,
+  responseTooLargeError
+} = require('../security/responseLimits');
+const {
+  classifyNetworkDestination
+} = require('../security/networkPolicy');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
@@ -119,6 +127,7 @@ async function sendRequest(request, environment, options = {}) {
   }
 
   const requestSettings = normalizeRequestSettings(requestForSend.settings || {});
+  const responseLimits = normalizeResponseLimits(options.responseLimits || {});
   const url = buildUrl(requestForSend, environment);
   const headers = {};
   let hasContentType = false;
@@ -175,6 +184,7 @@ async function sendRequest(request, environment, options = {}) {
   const started = performance.now();
   const tlsPolicy = await resolveHttpTlsPolicy(requestForSend, environment, url, {
     clientCertificates: options.clientCertificates || [],
+    fileBindings: Object.hasOwn(options, 'fileBindings') ? options.fileBindings : null,
     tlsSettings: options.tlsSettings || {}
   });
   const proxyOptions = normalizeProxyConfig(requestForSend.proxy, environment);
@@ -186,11 +196,15 @@ async function sendRequest(request, environment, options = {}) {
     now: options.now,
     proxyOptions,
     requestSettings,
+    responseLimits,
+    networkPolicy: options.networkPolicy,
     tlsOptions: tlsPolicy.tlsOptions,
     tlsPolicy,
     cookieJarState
   });
-  const responseBody = typeof response.text === 'function' ? await response.text() : response.body;
+  const responseBody = typeof response.text === 'function'
+    ? await fetchResponseText(response, responseLimits)
+    : response.body;
   const durationMillis = Math.max(0, Math.round(performance.now() - started));
   const responseHeaders = headersToObject(response.headers);
   const result = {
@@ -287,6 +301,7 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
 
 async function sendWithTransport(url, fetchOptions, options = {}) {
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
+  await enforceRequestNetworkPolicy(url, options.networkPolicy);
   if (requestSettings.httpVersion === 'http2') {
     if (options.proxyOptions) {
       throw new Error('HTTP/2 requests through proxies are not supported yet.');
@@ -295,29 +310,45 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
       collectTimings: options.collectTimings,
       cookieJarState: options.cookieJarState,
       hasClientCertificate: options.tlsPolicy?.hasClientCertificate === true,
-      requestSettings
+      requestSettings,
+      networkPolicy: options.networkPolicy,
+      responseLimits: options.responseLimits
     });
   }
-  if (options.forceNode || options.collectTimings || options.tlsOptions || options.proxyOptions || requestSettingsRequireNodeTransport(requestSettings)) {
+  if (options.forceNode
+    || options.collectTimings
+    || options.tlsOptions
+    || options.proxyOptions
+    || requestSettingsRequireNodeTransport(requestSettings)
+    || requiresBoundedNodeTransport(options.responseLimits)) {
     return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
       agent: options.agent,
       collectTimings: options.collectTimings,
       cookieJarState: options.cookieJarState,
       hasClientCertificate: options.tlsPolicy?.hasClientCertificate === true,
       proxyOptions: options.proxyOptions,
-      requestSettings
+      requestSettings,
+      networkPolicy: options.networkPolicy,
+      responseLimits: options.responseLimits
     });
   }
   if (options.cookieJarState?.storeResponses === true && fetchOptions.redirect === 'follow') {
     return sendFetchRequestWithCookieRedirects(url, fetchOptions, options);
   }
   const response = await fetch(url, fetchOptions);
+  assertContentLengthWithinLimit(response.headers, normalizeResponseLimits(options.responseLimits || {}).maxCompressedBytes);
   recordResponseCookies(response, response.url || url.toString(), options.cookieJarState);
   return response;
 }
 
+function requiresBoundedNodeTransport(responseLimits = {}) {
+  const limits = normalizeResponseLimits(responseLimits || {});
+  return Number.isFinite(limits.maxCompressedBytes) && limits.maxCompressedBytes > 0;
+}
+
 async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = {}) {
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
+  const responseLimits = normalizeResponseLimits(options.responseLimits || {});
   const maxRedirects = requestSettings.maxRedirects;
   let currentUrl = url;
   let currentOptions = {
@@ -331,6 +362,7 @@ async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = 
     });
     const { includeExplicitCookies, ...requestOptions } = currentOptions;
     const response = await fetch(currentUrl, requestOptions);
+    assertContentLengthWithinLimit(response.headers, responseLimits.maxCompressedBytes);
     recordResponseCookies(response, currentUrl.toString(), options.cookieJarState);
     const responseHeaders = headersToObject(response.headers);
     const location = responseHeaders.location?.[0];
@@ -338,14 +370,15 @@ async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = 
       return response;
     }
     if (redirectCount >= maxRedirects) {
-      await response.arrayBuffer().catch(() => {});
+      await discardFetchResponse(response, responseLimits).catch(() => {});
       throw new Error(`Request exceeded ${maxRedirects} redirects.`);
     }
-    await response.arrayBuffer().catch(() => {});
+    await discardFetchResponse(response, responseLimits).catch(() => {});
     const redirectUrl = new URL(location, currentUrl);
     if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
       throw new Error('Redirect target must use http or https.');
     }
+    await enforceRequestNetworkPolicy(redirectUrl, options.networkPolicy);
     const nextOptions = {
       ...currentOptions,
       headers: { ...currentOptions.headers }
@@ -517,7 +550,8 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent, {
     collectTimings: options.collectTimings,
-    requestSettings
+    requestSettings,
+    responseLimits: options.responseLimits
   });
   recordResponseCookies(response, url.toString(), options.cookieJarState);
   const location = response.headers.location?.[0];
@@ -538,6 +572,7 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
     throw new Error('Redirect target must use http or https.');
   }
+  await enforceRequestNetworkPolicy(redirectUrl, options.networkPolicy);
 
   const nextOptions = {
     ...requestOptions,
@@ -568,7 +603,9 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
     ...options,
     agent: agentForRedirect(options.agent, url, redirectUrl),
     includeExplicitCookies,
-    requestSettings
+    requestSettings,
+    networkPolicy: options.networkPolicy,
+    responseLimits: options.responseLimits
   });
   redirected.timings = combineRedirectTimings(response, redirected, {
     from: url.toString(),
@@ -581,7 +618,8 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
 async function sendHttp2Request(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   const response = await sendSingleHttp2Request(url, requestOptions, tlsOptions, {
-    collectTimings: options.collectTimings
+    collectTimings: options.collectTimings,
+    responseLimits: options.responseLimits
   });
   recordResponseCookies(response, url.toString(), options.cookieJarState);
   const location = response.headers.location?.[0];
@@ -602,6 +640,7 @@ async function sendHttp2Request(url, requestOptions, tlsOptions, redirectCount =
   if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
     throw new Error('Redirect target must use http or https.');
   }
+  await enforceRequestNetworkPolicy(redirectUrl, options.networkPolicy);
 
   const nextOptions = {
     ...requestOptions,
@@ -631,7 +670,9 @@ async function sendHttp2Request(url, requestOptions, tlsOptions, redirectCount =
   const redirected = await sendHttp2Request(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, {
     ...options,
     includeExplicitCookies,
-    requestSettings
+    requestSettings,
+    networkPolicy: options.networkPolicy,
+    responseLimits: options.responseLimits
   });
   redirected.timings = combineRedirectTimings(response, redirected, {
     from: url.toString(),
@@ -641,9 +682,78 @@ async function sendHttp2Request(url, requestOptions, tlsOptions, redirectCount =
   return redirected;
 }
 
+async function enforceRequestNetworkPolicy(url, policy = {}) {
+  if (!policy || policy.enabled !== true) {
+    return { allowed: true, category: 'unrestricted' };
+  }
+  const classification = await classifyNetworkDestination(url, {
+    resolveHost: policy.resolveHost
+  });
+  if (classification.category === 'public') {
+    await recordNetworkPolicyEvent(policy, 'request.network.public.allowed', classification);
+    return { allowed: true, ...classification };
+  }
+  if (classification.category === 'metadata') {
+    await recordNetworkPolicyEvent(policy, 'request.network.metadata.blocked', classification, 'metadata_endpoint_blocked');
+    throw networkPolicyRequestError('Metadata-service requests are blocked by PostMeter network safe mode.', classification);
+  }
+  if (policy.allowPrivateNetworkRequests === true) {
+    await recordNetworkPolicyEvent(policy, 'request.network.private.allowed', classification);
+    return { allowed: true, ...classification };
+  }
+  if (typeof policy.confirmPrivateNetworkRequest === 'function') {
+    await recordNetworkPolicyEvent(policy, 'request.network.private.prompted', classification);
+    const accepted = await policy.confirmPrivateNetworkRequest(safeNetworkPolicyPrompt(classification));
+    if (accepted === true) {
+      await recordNetworkPolicyEvent(policy, 'request.network.private.allowed', classification);
+      return { allowed: true, ...classification };
+    }
+    await recordNetworkPolicyEvent(policy, 'request.network.private.denied', classification, 'private_network_request_denied');
+    throw networkPolicyRequestError('Private-network request denied by PostMeter network safe mode.', classification);
+  }
+  await recordNetworkPolicyEvent(policy, 'request.network.private.blocked', classification, 'private_network_request_blocked');
+  throw networkPolicyRequestError('Private-network requests are blocked by PostMeter network safe mode.', classification);
+}
+
+async function recordNetworkPolicyEvent(policy, type, classification, failureCode = '') {
+  const record = policy?.recordDiagnosticEvent;
+  if (typeof record !== 'function') {
+    return;
+  }
+  await Promise.resolve(record({
+    type,
+    level: failureCode ? 'warn' : 'info',
+    outcome: failureCode ? 'blocked' : 'completed',
+    failureCode: failureCode || undefined,
+    fields: {
+      category: classification?.category || 'unknown',
+      hostname: classification?.hostname || '',
+      reason: classification?.reason || ''
+    }
+  })).catch(() => {});
+}
+
+function safeNetworkPolicyPrompt(classification = {}) {
+  return {
+    category: classification.category || 'unknown',
+    hostname: classification.hostname || '',
+    reason: classification.reason || ''
+  };
+}
+
+function networkPolicyRequestError(message, classification = {}) {
+  const error = new Error(message);
+  error.code = classification.category === 'metadata'
+    ? 'POSTMETER_METADATA_REQUEST_BLOCKED'
+    : 'POSTMETER_PRIVATE_NETWORK_REQUEST_BLOCKED';
+  error.networkCategory = classification.category || 'unknown';
+  return error;
+}
+
 function sendSingleHttp2Request(url, requestOptions, tlsOptions, options = {}) {
   return new Promise((resolve, reject) => {
     const timings = options.collectTimings ? createNodeRequestTimings(url) : null;
+    const responseLimits = normalizeResponseLimits(options.responseLimits || {});
     if (timings) {
       timings.httpVersion = '2';
     }
@@ -662,7 +772,7 @@ function sendSingleHttp2Request(url, requestOptions, tlsOptions, options = {}) {
     session.once('connect', () => {
       const started = performance.now();
       const stream = session.request(http2RequestHeaders(url, requestOptions));
-      const chunks = [];
+      let bodyPromise = null;
       let responseHeaders = {};
       if (requestOptions.signal) {
         if (requestOptions.signal.aborted) {
@@ -677,13 +787,21 @@ function sendSingleHttp2Request(url, requestOptions, tlsOptions, options = {}) {
       }
       stream.once('response', (headers) => {
         responseHeaders = headersToObject(headers);
+        try {
+          assertContentLengthWithinLimit(responseHeaders, responseLimits.maxCompressedBytes);
+        } catch (error) {
+          stream.close();
+          fail(error);
+          return;
+        }
+        bodyPromise = decodedNodeResponseStream(stream, responseHeaders, responseLimits);
+        bodyPromise.catch(fail);
         if (timings) {
           timings.timeToFirstByteMillis = elapsedSince(timings.transportStartedAt);
         }
       });
-      stream.on('data', (chunk) => chunks.push(chunk));
       stream.once('error', fail);
-      stream.once('end', () => {
+      stream.once('end', async () => {
         if (settled) {
           return;
         }
@@ -697,13 +815,17 @@ function sendSingleHttp2Request(url, requestOptions, tlsOptions, options = {}) {
         const statusCode = Number(responseHeaders[':status']?.[0] || responseHeaders.status?.[0] || 0);
         delete responseHeaders[':status'];
         session.close();
-        resolve({
-          statusCode,
-          headers: responseHeaders,
-          body: decodedNodeResponseBody(responseHeaders, Buffer.concat(chunks)),
-          url: url.toString(),
-          timings: publicNodeTimings(timings)
-        });
+        try {
+          resolve({
+            statusCode,
+            headers: responseHeaders,
+            body: await (bodyPromise || decodedNodeResponseStream(stream, responseHeaders, responseLimits)),
+            url: url.toString(),
+            timings: publicNodeTimings(timings)
+          });
+        } catch (error) {
+          reject(error);
+        }
       });
       if (requestOptions.body != null) {
         stream.write(requestOptions.body);
@@ -762,7 +884,7 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = n
       signal: requestOptions.signal,
       ...(url.protocol === 'https:' ? tlsOptions : {})
     };
-    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings));
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings, options.responseLimits));
 
     attachNodeRequestTimingListeners(request, timings);
     request.on('error', reject);
@@ -802,7 +924,7 @@ function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOpt
       insecureHTTPParser: requestSettings.strictHttpParser !== true,
       signal: requestOptions.signal
     };
-    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings));
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings, options.responseLimits));
     attachNodeRequestTimingListeners(request, timings);
     request.on('error', reject);
     const uploadStartedAt = performance.now();
@@ -844,7 +966,7 @@ async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptio
         return tunnelSocket;
       }
     };
-    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings));
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings, options.responseLimits));
     attachNodeRequestTimingListeners(request, timings);
     request.on('error', reject);
     request.on('close', () => {
@@ -896,17 +1018,41 @@ function openProxyTunnel(url, signal, proxyOptions) {
   });
 }
 
-function collectNodeResponse(response, finalUrl, resolve, reject, timings = null) {
-  const chunks = [];
+function collectNodeResponse(response, finalUrl, resolve, reject, timings = null, limits = {}) {
+  const responseLimits = normalizeResponseLimits(limits || {});
+  let failed = false;
   const responseStarted = performance.now();
   if (timings) {
     timings.timeToFirstByteMillis = elapsedSince(timings.transportStartedAt);
     timings.httpVersion = response.httpVersion || '';
   }
-  response.on('data', (chunk) => chunks.push(chunk));
-  response.on('end', () => {
+  try {
+    assertContentLengthWithinLimit(response.headers, responseLimits.maxCompressedBytes);
+  } catch (error) {
+    failed = true;
+    response.destroy(error);
+    reject(error);
+    return;
+  }
+  const bodyPromise = decodedNodeResponseStream(response, response.headers, responseLimits);
+  bodyPromise.catch((error) => {
+    if (!failed) {
+      failed = true;
+      response.destroy(error);
+      reject(error);
+    }
+  });
+  response.on('error', (error) => {
+    if (!failed) {
+      failed = true;
+      reject(error);
+    }
+  });
+  response.on('end', async () => {
+    if (failed) {
+      return;
+    }
     try {
-      const bodyBuffer = Buffer.concat(chunks);
       if (timings) {
         timings.downloadMillis = elapsedSince(responseStarted);
         timings.totalTransportMillis = elapsedSince(timings.transportStartedAt);
@@ -914,7 +1060,7 @@ function collectNodeResponse(response, finalUrl, resolve, reject, timings = null
       resolve({
         statusCode: response.statusCode || 0,
         headers: headersToObject(response.headers),
-        body: decodedNodeResponseBody(response.headers, bodyBuffer),
+        body: await bodyPromise,
         url: finalUrl,
         timings: publicNodeTimings(timings)
       });
@@ -1051,33 +1197,193 @@ function elapsedSince(startedAt) {
   return Math.max(0, Math.round(performance.now() - startedAt));
 }
 
-function decodedNodeResponseBody(headers, bodyBuffer) {
+async function decodedNodeResponseBody(headers, bodyBuffer, limits = {}) {
+  const responseLimits = normalizeResponseLimits(limits || {});
+  if (bodyBuffer.length > responseLimits.maxCompressedBytes) {
+    throw responseTooLargeError('Response body exceeds the compressed size limit.');
+  }
   const encoding = String(headerValue(headers, 'content-encoding') || '')
     .split(',')
     .map((part) => part.trim().toLowerCase())
     .filter(Boolean);
   let decoded = bodyBuffer;
   for (const current of encoding.reverse()) {
-    decoded = decodeNodeResponseBuffer(current, decoded);
+    decoded = await decodeNodeResponseBuffer(current, decoded, responseLimits.maxDecompressedBytes);
+    if (decoded.length > responseLimits.maxDecompressedBytes) {
+      throw responseTooLargeError('Response body exceeds the decompressed size limit.');
+    }
+  }
+  if (decoded.length > responseLimits.maxTextDecodeBytes) {
+    throw responseTooLargeError('Response body exceeds the text decode size limit.');
   }
   return decoded.toString('utf8');
 }
 
-function decodeNodeResponseBuffer(encoding, bodyBuffer) {
+function decodedNodeResponseStream(source, headers, limits = {}) {
+  const responseLimits = normalizeResponseLimits(limits || {});
+  const encoding = String(headerValue(headers, 'content-encoding') || '')
+    .split(',')
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+  const streams = [source];
+  let decoded = source;
+  for (const current of encoding.reverse()) {
+    const decoder = nodeDecodeStreamForEncoding(current);
+    if (!decoder) {
+      continue;
+    }
+    streams.push(decoder);
+    decoded = decoded.pipe(decoder);
+  }
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let compressedBytes = 0;
+    let decodedBytes = 0;
+    let settled = false;
+    const fail = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      for (const stream of streams) {
+        if (stream && typeof stream.destroy === 'function') {
+          stream.destroy(error);
+        }
+      }
+      reject(error);
+    };
+    source.on('data', (chunk) => {
+      compressedBytes += chunk.length;
+      if (compressedBytes > responseLimits.maxCompressedBytes) {
+        fail(responseTooLargeError('Response body exceeds the compressed size limit.'));
+      }
+    });
+    decoded.on('data', (chunk) => {
+      decodedBytes += chunk.length;
+      if (decodedBytes > responseLimits.maxDecompressedBytes) {
+        fail(responseTooLargeError('Response body exceeds the decompressed size limit.'));
+        return;
+      }
+      if (decodedBytes > responseLimits.maxTextDecodeBytes) {
+        fail(responseTooLargeError('Response body exceeds the text decode size limit.'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    decoded.once('error', fail);
+    decoded.once('end', () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(Buffer.concat(chunks, decodedBytes).toString('utf8'));
+    });
+  });
+}
+
+function nodeDecodeStreamForEncoding(encoding) {
   if (encoding === 'gzip' || encoding === 'x-gzip') {
-    return zlib.gunzipSync(bodyBuffer);
+    return zlib.createGunzip();
   }
   if (encoding === 'br') {
-    return zlib.brotliDecompressSync(bodyBuffer);
+    return zlib.createBrotliDecompress();
+  }
+  if (encoding === 'deflate') {
+    return zlib.createInflate();
+  }
+  return null;
+}
+
+async function decodeNodeResponseBuffer(encoding, bodyBuffer, maxBytes) {
+  if (encoding === 'gzip' || encoding === 'x-gzip') {
+    return decompressBounded(() => zlib.createGunzip(), bodyBuffer, maxBytes);
+  }
+  if (encoding === 'br') {
+    return decompressBounded(() => zlib.createBrotliDecompress(), bodyBuffer, maxBytes);
   }
   if (encoding === 'deflate') {
     try {
-      return zlib.inflateSync(bodyBuffer);
-    } catch {
-      return zlib.inflateRawSync(bodyBuffer);
+      return await decompressBounded(() => zlib.createInflate(), bodyBuffer, maxBytes);
+    } catch (error) {
+      if (error?.code === 'POSTMETER_RESPONSE_TOO_LARGE') {
+        throw error;
+      }
+      return decompressBounded(() => zlib.createInflateRaw(), bodyBuffer, maxBytes);
     }
   }
   return bodyBuffer;
+}
+
+function decompressBounded(createStream, bodyBuffer, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const stream = createStream();
+    const chunks = [];
+    let totalBytes = 0;
+    let settled = false;
+    const fail = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      stream.destroy();
+      reject(error);
+    };
+    stream.on('data', (chunk) => {
+      totalBytes += chunk.length;
+      if (totalBytes > maxBytes) {
+        fail(responseTooLargeError('Response body exceeds the decompressed size limit.'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    stream.once('error', fail);
+    stream.once('end', () => {
+      if (!settled) {
+        settled = true;
+        resolve(Buffer.concat(chunks, totalBytes));
+      }
+    });
+    stream.end(bodyBuffer);
+  });
+}
+
+async function fetchResponseText(response, limits = {}) {
+  const responseLimits = normalizeResponseLimits(limits || {});
+  assertContentLengthWithinLimit(response.headers, responseLimits.maxCompressedBytes);
+  const body = await readFetchResponseBytes(response, responseLimits.maxTextDecodeBytes);
+  return body.toString('utf8');
+}
+
+async function discardFetchResponse(response, limits = {}) {
+  const responseLimits = normalizeResponseLimits(limits || {});
+  await readFetchResponseBytes(response, responseLimits.maxCompressedBytes);
+}
+
+async function readFetchResponseBytes(response, maxBytes) {
+  if (response.body && typeof response.body.getReader === 'function') {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      const chunk = Buffer.from(value);
+      totalBytes += chunk.length;
+      if (totalBytes > maxBytes) {
+        throw responseTooLargeError('Response body exceeds the configured size limit.');
+      }
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, totalBytes);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  if (buffer.length > maxBytes) {
+    throw responseTooLargeError('Response body exceeds the configured size limit.');
+  }
+  return buffer;
 }
 
 function headerValue(headers, name) {

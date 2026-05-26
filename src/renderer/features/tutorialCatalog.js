@@ -10,6 +10,7 @@
     tutorialEnsureClientCertificateModal,
     tutorialEnsureClientCertificateModalFormat,
     tutorialEnsureCollectionRequestContext,
+    tutorialEnsureCoachOnlyStep,
     tutorialEnsureCookieDomainInput,
     tutorialEnsureCookiesClearMenu,
     tutorialEnsureCookiesModal,
@@ -870,10 +871,9 @@
       summary: 'Review local-only vault secrets, reviewed script packages, and imported file bindings.',
       steps: Object.freeze([
         {
-          selector: '#settingsModal',
           title: 'Navigate to Settings',
           body: 'Open the desktop File menu from the app menu bar, and click the Settings button.',
-          beforeStep: tutorialEnsureSettingsModal,
+          beforeStep: tutorialEnsureCoachOnlyStep,
           coachPlacement: 'top-left'
         },
         {
@@ -970,10 +970,9 @@
       summary: 'Configure SSL verification, trusted CA files, client certificates, request-level TLS settings, and TLS response evidence.',
       steps: Object.freeze([
         {
-          selector: '#settingsModal',
           title: 'Navigate to Settings',
           body: 'Open the desktop File menu from the app menu bar, and click the Settings button.',
-          beforeStep: tutorialEnsureSettingsModal,
+          beforeStep: tutorialEnsureCoachOnlyStep,
           coachPlacement: 'top-left'
         },
         {
@@ -989,15 +988,15 @@
           beforeStep: () => tutorialEnsureSettingsSection('certificates')
         },
         {
-          selector: '#caCertificatePathInput',
+          selector: '#caCertificatePathLabel',
           title: 'Trust a custom CA',
-          body: 'CA PEM file points PostMeter at a local certificate authority bundle for private PKI, internal gateways, or development certificates.',
+          body: 'CA PEM file shows the selected local certificate authority bundle for private PKI, internal gateways, or development certificates.',
           beforeStep: () => tutorialEnsureSettingsSection('certificates')
         },
         {
           selector: '#chooseCaCertificateButton',
-          title: 'Choose or clear the CA file',
-          body: 'Choose opens a local file picker for the CA PEM path. Clear removes the custom CA path and returns to the default trust store.',
+          title: 'Import or clear the CA file',
+          body: 'Import opens a local file picker for the CA PEM file. Clear removes the custom CA file and returns to the default trust store.',
           beforeStep: () => tutorialEnsureSettingsSection('certificates')
         },
         {
@@ -1025,21 +1024,21 @@
           beforeStep: tutorialEnsureClientCertificateModal
         },
         {
-          selector: '#clientCertificateCertPathInput',
+          selector: '#clientCertificateCertPathLabel',
           title: 'Use the PEM CRT file',
-          body: 'For PEM format, the CRT file contains the client certificate PostMeter presents to matching HTTPS hosts.',
+          body: 'For PEM format, the CRT file label shows the client certificate PostMeter presents to matching HTTPS hosts.',
           beforeStep: () => tutorialEnsureClientCertificateModalFormat('pem')
         },
         {
-          selector: '#clientCertificateKeyPathInput',
+          selector: '#clientCertificateKeyPathLabel',
           title: 'Use the PEM KEY file',
-          body: 'The KEY file contains the private key for the PEM client certificate. The path stays local to this machine and is not written into shared exports.',
+          body: 'The KEY file contains the private key for the PEM client certificate. The selected file stays local to this machine and is not written into shared exports.',
           beforeStep: () => tutorialEnsureClientCertificateModalFormat('pem')
         },
         {
-          selector: '#clientCertificatePfxPathInput',
+          selector: '#clientCertificatePfxPathLabel',
           title: 'Use a PFX or P12 bundle',
-          body: 'For PFX/P12 format, provide the bundle file instead of separate CRT and KEY files.',
+          body: 'For PFX/P12 format, import the bundle file instead of separate CRT and KEY files.',
           beforeStep: () => tutorialEnsureClientCertificateModalFormat('pfx')
         },
         {

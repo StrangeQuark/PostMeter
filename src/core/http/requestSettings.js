@@ -218,9 +218,7 @@ function syncPostmanRequestSettingsProtocolProfile(protocolProfile, settings = {
     ? protocolProfile
     : {};
   const normalized = normalizeRequestSettings(settings);
-  syncProfileValue(target, 'strictSSL', normalized.sslCertificateVerification === 'inherit'
-    ? undefined
-    : normalized.sslCertificateVerification === 'enabled');
+  syncProfileValue(target, 'strictSSL', normalized.sslCertificateVerification !== 'disabled');
   syncProfileValue(target, 'httpVersion', normalized.httpVersion === 'auto' ? undefined : normalized.httpVersion);
   syncProfileValue(target, 'followRedirects', normalized.followRedirects === true ? undefined : false);
   syncProfileValue(target, 'followOriginalHttpMethod', normalized.followOriginalHttpMethod ? true : undefined);

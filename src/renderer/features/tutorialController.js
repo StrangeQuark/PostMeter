@@ -127,6 +127,7 @@ function endTutorial(options = {}) {
   const overlay = $('tutorialOverlay');
   if (overlay) {
     overlay.hidden = true;
+    overlay.classList.remove('is-coach-only');
   }
   const frame = $('tutorialTargetFrame');
   if (frame) {
@@ -341,9 +342,11 @@ function positionTutorialOverlay() {
   const target = tutorialTargetElement(step);
   const targetRect = visibleTutorialTargetRect(target);
   if (targetRect) {
+    overlay.classList.remove('is-coach-only');
     positionTutorialFrame(frame, targetRect);
     positionTutorialCoach(coach, targetRect, step);
   } else {
+    overlay.classList.add('is-coach-only');
     frame.hidden = true;
     positionTutorialCoach(coach, null, step);
   }
@@ -1039,6 +1042,17 @@ function tutorialEnsureSettingsModal() {
     return;
   }
   trackTutorialOwnedModal('settingsModal', openSettingsModal('appearance'));
+}
+
+function tutorialEnsureCoachOnlyStep() {
+  closeToolbarMenus();
+  closeCaptureSettingsPanels();
+  if (state.activeModalId) {
+    closeTutorialOwnedModal();
+  }
+  if (state.activeModalId) {
+    resolveActiveModal(state.activeModalCancelValue, { flushNotifications: false });
+  }
 }
 
 function tutorialEnsureSettingsSection(section) {

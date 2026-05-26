@@ -5,7 +5,7 @@ function createTrustedIpcMain(ipcMain, options = {}) {
   return {
     handle(channel, listener) {
       ipcMain.handle(channel, async (event, ...args) => {
-        assertTrustedIpcSender(event, rendererPathForOptions(options));
+        assertTrustedIpcSender(event, trustedRendererOptions(options));
         try {
           return await listener(event, ...args);
         } catch (error) {
@@ -15,7 +15,7 @@ function createTrustedIpcMain(ipcMain, options = {}) {
     },
     on(channel, listener) {
       ipcMain.on(channel, (event, ...args) => {
-        assertTrustedIpcSender(event, rendererPathForOptions(options));
+        assertTrustedIpcSender(event, trustedRendererOptions(options));
         try {
           return listener(event, ...args);
         } catch (error) {
@@ -26,18 +26,18 @@ function createTrustedIpcMain(ipcMain, options = {}) {
   };
 }
 
-function assertTrustedIpcSender(event, rendererPath) {
-  if (!isTrustedIpcSender(event, rendererPath)) {
+function assertTrustedIpcSender(event, options) {
+  if (!isTrustedIpcSender(event, options)) {
     throw new Error('IPC sender is not the trusted PostMeter renderer.');
   }
 }
 
-function isTrustedIpcSender(event, rendererPath) {
+function isTrustedIpcSender(event, options) {
   if (!isMainFrameSender(event)) {
     return false;
   }
   const senderUrl = event.senderFrame.url;
-  return isTrustedRendererUrl(senderUrl, rendererPath);
+  return isTrustedRendererUrl(senderUrl, options);
 }
 
 function isMainFrameSender(event) {
@@ -57,15 +57,14 @@ function isMainFrameSender(event) {
   return true;
 }
 
-function isTrustedRendererUrl(senderUrl, rendererPath) {
-  return isTrustedAppRendererUrl(senderUrl, rendererPath);
+function isTrustedRendererUrl(senderUrl, options = {}) {
+  return isTrustedAppRendererUrl(senderUrl, typeof options === 'object' && options ? options : {});
 }
 
-function rendererPathForOptions(options = {}) {
-  if (typeof options.getRendererPath === 'function') {
-    return options.getRendererPath();
-  }
-  return options.rendererPath;
+function trustedRendererOptions(options = {}) {
+  return {
+    allowSmokeQuery: options.allowSmokeQuery === true
+  };
 }
 
 function sanitizeIpcError(error) {

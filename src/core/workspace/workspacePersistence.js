@@ -54,8 +54,9 @@ function defaultPostMeterWorkspaceDirectory() {
 
 function parseStructuredCollectionContent(content) {
   const text = String(content || '');
+  assertImportContentSize(text);
   try {
-    return JSON.parse(text);
+    return sanitizeStructuredValue(JSON.parse(text));
   } catch (jsonError) {
     if (looksLikeJsonDocument(text)) {
       const error = new Error(`Failed to parse JSON collection file: ${jsonError.message}`);
@@ -65,14 +66,53 @@ function parseStructuredCollectionContent(content) {
     if (!looksLikeYamlOpenApi(text)) {
       return null;
     }
+    assertSafeYamlContent(text);
     try {
-      return YAML.parse(text);
+      return sanitizeStructuredValue(YAML.parse(text, {
+        maxAliasCount: 50,
+        prettyErrors: false
+      }));
     } catch (yamlError) {
       const error = new Error(`Failed to parse OpenAPI YAML file: ${yamlError.message}`);
       error.cause = yamlError;
       throw error;
     }
   }
+}
+
+function assertImportContentSize(text) {
+  if (Buffer.byteLength(String(text || ''), 'utf8') > 10 * 1024 * 1024) {
+    throw new Error('Import file exceeds the 10 MB parse limit.');
+  }
+}
+
+function assertSafeYamlContent(text) {
+  const aliases = String(text || '').match(/(^|[\s\[{,])\*[A-Za-z0-9_-]+/gu) || [];
+  const anchors = String(text || '').match(/&[A-Za-z0-9_-]+/gu) || [];
+  if (aliases.length > 50 || anchors.length > 100) {
+    throw new Error('OpenAPI YAML file contains too many aliases or anchors.');
+  }
+}
+
+function sanitizeStructuredValue(value, seen = new WeakSet()) {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (seen.has(value)) {
+    throw new Error('Import file contains circular structured data.');
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeStructuredValue(item, seen));
+  }
+  const output = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
+    output[key] = sanitizeStructuredValue(item, seen);
+  }
+  return output;
 }
 
 function looksLikeJsonDocument(content) {

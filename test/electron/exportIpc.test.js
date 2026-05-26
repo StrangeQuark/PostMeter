@@ -6,12 +6,21 @@ const test = require('node:test');
 const { registerExportIpc } = require('../../electron/ipc/exportIpc');
 const { performanceTestModel } = require('../../src/core/workspace/models');
 
+const TEST_WORKSPACE_ID = 'workspace-export-test';
+
+function registerTestExportIpc(options) {
+  return registerExportIpc({
+    getWorkspaceId: () => TEST_WORKSPACE_ID,
+    ...options
+  });
+}
+
 test('picker-first export opens save dialogs from lightweight metadata', async () => {
   const handlers = new Map();
   let saveDialogOptions = null;
   let saveDialogCalled = false;
   let resolveSaveDialog;
-  registerExportIpc({
+  registerTestExportIpc({
     dialog: {
       showSaveDialog: async (_window, options) => {
         saveDialogCalled = true;
@@ -55,7 +64,7 @@ test('picker-first export prepares in a worker and writes only after a path is s
     await fs.rm(tempDir, { recursive: true, force: true });
   });
   const handlers = new Map();
-  registerExportIpc({
+  registerTestExportIpc({
     dialog: {
       showSaveDialog: async (_window, options) => ({ canceled: false, filePath: path.join(tempDir, options.defaultPath) })
     },
@@ -89,6 +98,9 @@ test('picker-first export prepares in a worker and writes only after a path is s
     name: collection.name
   });
   assert.equal(pathResult.cancelled, false);
+  assert.equal(typeof pathResult.capabilityToken, 'string');
+  assert.equal(pathResult.path, undefined);
+  assert.equal(pathResult.displayPath, 'Exported-Collection.json');
 
   await handlers.get('file-export:prepare')({}, {
     exportId: 'export-collection-1',
@@ -96,17 +108,121 @@ test('picker-first export prepares in a worker and writes only after a path is s
     format: 'postmeter',
     payload: collection
   });
-  const writeResult = await handlers.get('file-export:writePrepared')({}, 'export-collection-1', pathResult.path);
+  const writeResult = await handlers.get('file-export:writePrepared')({}, 'export-collection-1', pathResult.capabilityToken);
 
-  assert.deepEqual(writeResult, { cancelled: false, path: pathResult.path });
-  const exported = JSON.parse(await fs.readFile(writeResult.path, 'utf8'));
+  assert.deepEqual(writeResult, { cancelled: false, path: 'Exported-Collection.json', displayPath: 'Exported-Collection.json' });
+  const exported = JSON.parse(await fs.readFile(path.join(tempDir, 'Exported-Collection.json'), 'utf8'));
   assert.equal(exported.collections[0].name, 'Exported Collection');
   assert.equal(exported.collections[0].requests[0].name, 'Request');
 });
 
+test('picker-first export rejects forged and reused capability tokens', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-picker-export-token-'));
+  t.after(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+  const handlers = new Map();
+  registerTestExportIpc({
+    dialog: {
+      showSaveDialog: async (_window, options) => ({ canceled: false, filePath: path.join(tempDir, options.defaultPath) })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    }
+  });
+
+  const pathResult = await handlers.get('file-export:choosePath')({}, {
+    kind: 'environment',
+    format: 'postmeter',
+    name: 'Local'
+  });
+  await handlers.get('file-export:prepare')({}, {
+    exportId: 'export-env-token-1',
+    kind: 'environment',
+    format: 'postmeter',
+    payload: {
+      id: 'env-1',
+      name: 'Local',
+      variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }]
+    }
+  });
+  await assert.rejects(
+    () => handlers.get('file-export:writePrepared')({}, 'export-env-token-1', 'forged-token'),
+    /file capability token/
+  );
+  const first = await handlers.get('file-export:writePrepared')({}, 'export-env-token-1', {
+    capabilityToken: pathResult.capabilityToken
+  });
+  assert.equal(first.cancelled, false);
+  await handlers.get('file-export:prepare')({}, {
+    exportId: 'export-env-token-2',
+    kind: 'environment',
+    format: 'postmeter',
+    payload: {
+      id: 'env-1',
+      name: 'Local',
+      variables: []
+    }
+  });
+  await assert.rejects(
+    () => handlers.get('file-export:writePrepared')({}, 'export-env-token-2', pathResult.capabilityToken),
+    /invalid or has already been used/
+  );
+});
+
+test('picker-first export rejects capability tokens issued for a different workspace', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-picker-export-workspace-token-'));
+  t.after(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+  const handlers = new Map();
+  let activeWorkspaceId = 'workspace-a';
+  registerTestExportIpc({
+    dialog: {
+      showSaveDialog: async (_window, options) => ({ canceled: false, filePath: path.join(tempDir, options.defaultPath) })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspaceId: () => activeWorkspaceId,
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    }
+  });
+
+  const pathResult = await handlers.get('file-export:choosePath')({}, {
+    kind: 'collection',
+    format: 'postmeter',
+    name: 'Workspace Scoped'
+  });
+  await handlers.get('file-export:prepare')({}, {
+    exportId: 'export-workspace-scoped',
+    kind: 'collection',
+    format: 'postmeter',
+    payload: {
+      id: 'collection-1',
+      name: 'Workspace Scoped',
+      requests: [],
+      folders: []
+    }
+  });
+
+  activeWorkspaceId = 'workspace-b';
+  await assert.rejects(
+    () => handlers.get('file-export:writePrepared')({}, 'export-workspace-scoped', pathResult.capabilityToken),
+    /not valid for this workspace/
+  );
+});
+
 test('picker-first export cancellation clears prepared content before writing', async () => {
   const handlers = new Map();
-  registerExportIpc({
+  registerTestExportIpc({
     dialog: {
       showSaveDialog: async () => ({ canceled: true })
     },
@@ -133,13 +249,13 @@ test('picker-first export cancellation clears prepared content before writing', 
   assert.equal(await handlers.get('file-export:cancelPrepared')({}, 'export-env-1'), true);
   await assert.rejects(
     () => handlers.get('file-export:writePrepared')({}, 'export-env-1', '/tmp/environment.json'),
-    /Prepared export was not found/
+    /Export destination must be a file capability token/
   );
 });
 
 test('picker-first export rejects invalid export kinds and worker payloads', async () => {
   const handlers = new Map();
-  registerExportIpc({
+  registerTestExportIpc({
     dialog: {
       showSaveDialog: async () => ({ canceled: true })
     },
@@ -195,7 +311,7 @@ test('picker-first export supports single request curl files', async (t) => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
   const handlers = new Map();
-  registerExportIpc({
+  registerTestExportIpc({
     dialog: {
       showSaveDialog: async (_window, options) => ({ canceled: false, filePath: path.join(tempDir, options.defaultPath) })
     },
@@ -223,7 +339,8 @@ test('picker-first export supports single request curl files', async (t) => {
     format: 'curl',
     name: request.name
   });
-  assert.equal(path.basename(pathResult.path), 'Get-Widget.sh');
+  assert.equal(pathResult.path, undefined);
+  assert.equal(pathResult.displayPath, 'Get-Widget.sh');
 
   await handlers.get('file-export:prepare')({}, {
     exportId: 'export-request-1',
@@ -231,8 +348,8 @@ test('picker-first export supports single request curl files', async (t) => {
     format: 'curl',
     payload: request
   });
-  const writeResult = await handlers.get('file-export:writePrepared')({}, 'export-request-1', pathResult.path);
-  const exported = await fs.readFile(writeResult.path, 'utf8');
+  const writeResult = await handlers.get('file-export:writePrepared')({}, 'export-request-1', pathResult.capabilityToken);
+  const exported = await fs.readFile(path.join(tempDir, writeResult.path), 'utf8');
 
   assert.match(exported, /^# Request: Get Widget/m);
   assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets\/1\?trace=yes'/);

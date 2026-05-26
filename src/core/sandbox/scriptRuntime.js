@@ -55,7 +55,8 @@ const MAX_SCRIPT_PACKAGE_SOURCE_BYTES = 128 * 1024;
 const MAX_SCRIPT_PACKAGE_EXPORT_KEYS = 64;
 const MAX_SCRIPT_PACKAGE_DEPENDENCIES = 32;
 const MAX_SCRIPT_PACKAGE_LOAD_DEPTH = 16;
-const SCRIPT_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@\d[\w.+-]*)?|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+(?:@\d[\w.+-]*)?|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const EXACT_SCRIPT_PACKAGE_VERSION_SOURCE = String.raw`(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
+const SCRIPT_PACKAGE_SPECIFIER_PATTERN = new RegExp(String.raw`^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)@${EXACT_SCRIPT_PACKAGE_VERSION_SOURCE}|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+@${EXACT_SCRIPT_PACKAGE_VERSION_SOURCE}|@[a-z0-9._-]+\/[a-z0-9._-]+)$`, 'i');
 const POSTMAN_BUILTIN_EXPORT_KEY_LIMITS = Object.freeze({
   ajv: 16,
   assert: 32,
@@ -1938,7 +1939,7 @@ function normalizeScriptPackageBundle(item) {
   }
   const specifier = String(item.specifier || item.name || '').trim();
   if (!specifier || !SCRIPT_PACKAGE_SPECIFIER_PATTERN.test(specifier)) {
-    throw sandboxError(`Sandbox package specifier "${specifier}" is invalid. Use @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].`);
+    throw sandboxError(`Sandbox package specifier "${specifier}" is invalid. Use @team/package, npm:package@version, npm:@scope/package@version, or jsr:@scope/package@version. npm and JSR versions must be exact.`);
   }
   const packageJson = normalizeScriptPackageManifest(item.packageJson || item.package || item.manifest);
   const entrypoint = normalizeScriptPackageEntrypoint(item.entrypoint, packageJson);

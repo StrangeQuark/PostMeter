@@ -243,6 +243,195 @@ test('decompresses generated Accept-Encoding responses when using the Node trans
   }
 });
 
+test('rejects oversized plain responses before unbounded buffering', async () => {
+  const server = await createServer(async (_request, response) => {
+    response.setHeader('Content-Length', String(1024));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    response.end('x'.repeat(1024));
+  });
+
+  try {
+    await assert.rejects(
+      () => sendRequest(simpleGetRequest(`${server.baseUrl}/too-large`), null, {
+        forceNode: true,
+        responseLimits: { maxCompressedBytes: 16, maxDecompressedBytes: 32, maxTextDecodeBytes: 32 }
+      }),
+      (error) => error?.code === 'POSTMETER_RESPONSE_TOO_LARGE'
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('aborts oversized chunked responses without Content-Length', async () => {
+  const server = await createServer(async (_request, response) => {
+    response.write('x'.repeat(24));
+    response.write('y'.repeat(24));
+    response.end();
+  });
+
+  try {
+    await assert.rejects(
+      () => sendRequest(simpleGetRequest(`${server.baseUrl}/chunked-too-large`), null, {
+        forceNode: true,
+        responseLimits: { maxCompressedBytes: 32, maxDecompressedBytes: 64, maxTextDecodeBytes: 64 }
+      }),
+      (error) => error?.code === 'POSTMETER_RESPONSE_TOO_LARGE'
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('rejects gzip brotli and deflate decompression bombs by decompressed size', async () => {
+  const payload = Buffer.from('x'.repeat(2048));
+  const encodings = [
+    ['gzip', zlib.gzipSync(payload)],
+    ['br', zlib.brotliCompressSync(payload)],
+    ['deflate', zlib.deflateSync(payload)]
+  ];
+  for (const [encoding, body] of encodings) {
+    const server = await createServer(async (_request, response) => {
+      response.setHeader('Content-Encoding', encoding);
+      response.end(body);
+    });
+    try {
+      await assert.rejects(
+        () => sendRequest(simpleGetRequest(`${server.baseUrl}/${encoding}-bomb`), null, {
+          forceNode: true,
+          responseLimits: { maxCompressedBytes: 4096, maxDecompressedBytes: 128, maxTextDecodeBytes: 128 }
+        }),
+        (error) => error?.code === 'POSTMETER_RESPONSE_TOO_LARGE'
+      );
+    } finally {
+      await server.close();
+    }
+  }
+});
+
+test('default transport enforces compressed-byte limits before auto-decompression', async () => {
+  const payload = Buffer.alloc(2048, 0x61);
+  const compressed = zlib.gzipSync(payload, { level: 0 });
+  const server = await createServer(async (_request, response) => {
+    response.setHeader('Content-Encoding', 'gzip');
+    response.write(compressed.slice(0, 128));
+    response.end(compressed.slice(128));
+  });
+
+  try {
+    await assert.rejects(
+      () => sendRequest(simpleGetRequest(`${server.baseUrl}/compressed-too-large`), null, {
+        responseLimits: { maxCompressedBytes: 64, maxDecompressedBytes: 4096, maxTextDecodeBytes: 4096 }
+      }),
+      (error) => error?.code === 'POSTMETER_RESPONSE_TOO_LARGE'
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('rejects oversized HTTP/2 responses', async () => {
+  const server = http2.createServer();
+  server.on('stream', (stream) => {
+    stream.respond({ ':status': 200, 'content-type': 'text/plain' });
+    stream.end('x'.repeat(128));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+
+  try {
+    await assert.rejects(
+      () => sendRequest({
+        ...simpleGetRequest(`http://127.0.0.1:${address.port}/h2-too-large`),
+        settings: { httpVersion: 'http2' }
+      }, null, {
+        responseLimits: { maxCompressedBytes: 32, maxDecompressedBytes: 64, maxTextDecodeBytes: 64 }
+      }),
+      (error) => error?.code === 'POSTMETER_RESPONSE_TOO_LARGE'
+    );
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test('network safe mode blocks private and metadata destinations before request dispatch', async () => {
+  await assert.rejects(
+    () => sendRequest(simpleGetRequest('http://127.0.0.1:9/private'), null, {
+      networkPolicy: { enabled: true }
+    }),
+    (error) => error?.code === 'POSTMETER_PRIVATE_NETWORK_REQUEST_BLOCKED'
+  );
+  await assert.rejects(
+    () => sendRequest(simpleGetRequest('http://169.254.169.254/latest/meta-data'), null, {
+      networkPolicy: { enabled: true, allowPrivateNetworkRequests: true }
+    }),
+    (error) => error?.code === 'POSTMETER_METADATA_REQUEST_BLOCKED'
+  );
+  await assert.rejects(
+    () => sendRequest(simpleGetRequest('https://api.example.test/private-dns'), null, {
+      networkPolicy: {
+        enabled: true,
+        resolveHost: async () => [{ address: '10.0.0.8' }]
+      }
+    }),
+    (error) => error?.code === 'POSTMETER_PRIVATE_NETWORK_REQUEST_BLOCKED'
+  );
+});
+
+test('network safe mode native confirmation can allow private destinations without changing normal request behavior', async () => {
+  const server = await createServer(async (_request, response) => {
+    response.end('ok');
+  });
+  const prompts = [];
+  try {
+    const result = await sendRequest(simpleGetRequest(`${server.baseUrl}/confirmed-private`), null, {
+      networkPolicy: {
+        enabled: true,
+        confirmPrivateNetworkRequest: async (summary) => {
+          prompts.push(summary);
+          return true;
+        }
+      }
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.body, 'ok');
+    assert.equal(prompts.length, 1);
+    assert.equal(prompts[0].category, 'loopback');
+  } finally {
+    await server.close();
+  }
+});
+
+test('network safe mode re-checks redirects and denies a later private destination', async () => {
+  const target = await createServer(async (_request, response) => {
+    response.end('private');
+  });
+  const source = await createServer(async (_request, response) => {
+    response.statusCode = 302;
+    response.setHeader('Location', `${target.baseUrl}/after-redirect`);
+    response.end();
+  });
+  let promptCount = 0;
+  try {
+    await assert.rejects(
+      () => sendRequest(simpleGetRequest(`${source.baseUrl}/redirect`), null, {
+        networkPolicy: {
+          enabled: true,
+          confirmPrivateNetworkRequest: async () => {
+            promptCount += 1;
+            return promptCount === 1;
+          }
+        }
+      }),
+      (error) => error?.code === 'POSTMETER_PRIVATE_NETWORK_REQUEST_BLOCKED'
+    );
+    assert.equal(promptCount, 2);
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});
+
 test('sends matching cookie jar cookies and stores response cookies', async () => {
   const server = await createServer(async (request, response) => {
     response.setHeader('Set-Cookie', [
@@ -1669,7 +1858,12 @@ test('matches managed client certificates by HTTPS host and port', async (t) => 
   }
 });
 
-test('runs live TLS smoke coverage against public badssl endpoints', async () => {
+test('runs opt-in live TLS smoke coverage against public badssl endpoints', async (t) => {
+  if (process.env.POSTMETER_LIVE_TLS_SMOKE !== '1') {
+    t.skip('Set POSTMETER_LIVE_TLS_SMOKE=1 to exercise public badssl endpoints.');
+    return;
+  }
+
   const trusted = await sendRequest(liveTlsRequest('https://sha256.badssl.com/'), null, {
     collectTimings: true,
     tlsSettings: {
@@ -1737,6 +1931,17 @@ function liveTlsRequest(url, settings = undefined) {
     request.settings = settings;
   }
   return request;
+}
+
+function simpleGetRequest(url) {
+  return {
+    method: 'GET',
+    url,
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    body: ''
+  };
 }
 
 async function assertLiveTlsFailure(request, options, pattern) {

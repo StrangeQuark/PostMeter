@@ -2,20 +2,31 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
+if (app.isPackaged === true) {
+  process.env.POSTMETER_PACKAGED_PRODUCTION = '1';
+}
 const { WorkspaceRecoveryError } = require('../src/core/workspace/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspace/workspaceManager');
 const {
   WorkspaceEncryptionKeyRequiredError
 } = require('../src/core/workspace/workspaceEncryption');
 const { AppSettingsStore } = require('../src/core/workspace/appSettingsStore');
-const { normalizeWorkspaceLocalSettings } = require('../src/core/workspace/models');
+const {
+  mergeWorkspaceLocalSettingsForSave,
+  normalizeWorkspaceLocalSettings
+} = require('../src/core/workspace/models');
 const { EncryptedVaultStore } = require('../src/core/sandbox/vaultStore');
 const {
   LocalDiagnosticsLogger,
   redactText
 } = require('../src/core/diagnostics-release/diagnostics');
 const { fsyncDirectory, moveFileNoOverwrite } = require('../src/core/workspace/workspacePersistence');
-const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./app-shell/appProtocol');
+const {
+  registerAppProtocolHandler,
+  registerAppProtocolScheme,
+  packagedRendererSmokeRequested,
+  rendererSmokeRequested
+} = require('./app-shell/appProtocol');
 const { installApplicationMenu } = require('./app-shell/appMenu');
 const { handleSecondInstance } = require('./app-shell/secondInstance');
 const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('./ipc/appIpc');
@@ -64,7 +75,11 @@ let workspaceStore;
 let appSettingsStore;
 let workspace;
 const vaultStores = new Map();
-const trustedIpcMain = createTrustedIpcMain(ipcMain);
+const trustedIpcMain = createTrustedIpcMain(ipcMain, {
+  allowSmokeQuery: app.isPackaged === true
+    ? packagedRendererSmokeRequested(process.env)
+    : rendererSmokeRequested(process.env)
+});
 const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAuthProgress });
 let diagnosticsLogger;
 let runtimeIpcController;
@@ -176,7 +191,7 @@ if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
 
 async function startApplication() {
   try {
-    registerAppProtocolHandler(protocol);
+    registerAppProtocolHandler(protocol, { app, env: process.env });
     oauthFlows.registerProtocol();
     sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
     sessionState = await sessionStore.load();
@@ -326,7 +341,7 @@ async function saveLocalSettings(settings, workspaceId = workspaceStore?.getWork
     return workspace?.settings || {};
   }
   const settingsToSave = settings && typeof settings === 'object' ? settings : null;
-  const localSettings = normalizeWorkspaceLocalSettings(settingsToSave || fallbackLocalSettings);
+  const localSettings = mergeWorkspaceLocalSettingsForSave(settingsToSave, fallbackLocalSettings);
   if (settingsToSave) {
     await appSettingsStore.mergeWorkspaceSettings(workspaceId, settingsToSave);
   }
@@ -338,7 +353,7 @@ function saveLocalSettingsSync(settings, workspaceId = workspaceStore?.getWorksp
     return workspace?.settings || {};
   }
   const settingsToSave = settings && typeof settings === 'object' ? settings : null;
-  const localSettings = normalizeWorkspaceLocalSettings(settingsToSave || fallbackLocalSettings);
+  const localSettings = mergeWorkspaceLocalSettingsForSave(settingsToSave, fallbackLocalSettings);
   if (settingsToSave) {
     appSettingsStore.mergeWorkspaceSettingsSync(workspaceId, settingsToSave);
   }
@@ -629,6 +644,7 @@ registerExportIpc({
   dialog,
   fileOperationResult,
   getMainWindow: () => mainWindow,
+  getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   ipcMain: trustedIpcMain
 });
 
@@ -659,6 +675,8 @@ registerWorkspaceIpc({
 });
 
 registerRequestIpc({
+  dialog,
+  getMainWindow: () => mainWindow,
   getWorkspace: () => workspace,
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),

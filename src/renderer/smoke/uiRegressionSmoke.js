@@ -90,12 +90,14 @@
       variableTooltipText.startsWith('https://hover.example.test\n\n')
         && variableTooltipText.includes('Ctrl+click: open variable source')
         && variableTooltipText.includes('Ctrl+Shift+click: replace token with value'),
+      // postmeter-security-allow-html: smoke diagnostics serialize a local tooltip only for assertion failure text, not DOM insertion.
       `Variable hover tooltip should contain the value and shortcut hints. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
     );
     await setVariableTooltipHintsFromSettingsPanel(false);
     dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
     await waitForUiSmoke(
       () => document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
+      // postmeter-security-allow-html: smoke diagnostics serialize a local tooltip only for assertion failure text, not DOM insertion.
       `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`,
       2500,
       global
@@ -565,6 +567,7 @@
       offenders.length === 0,
       `Delete/Remove buttons should use danger styling. Offenders: ${offenders.map((button) => {
         const id = button.id ? `#${button.id}` : '';
+        // postmeter-security-allow-html: smoke diagnostics serialize a button only for assertion failure text, not DOM insertion.
         const text = button.textContent.trim() || button.getAttribute('aria-label') || button.outerHTML;
         return `${id}${text}`;
       }).join(', ')}`
@@ -769,54 +772,42 @@
         'SSL certificate verification should enable from the Settings Certificates panel.'
       );
 
-      $('caCertificatePathInput').value = '/tmp/ui-ca.pem';
-      dispatchChange($('caCertificatePathInput'));
-      await waitForUiSmoke(
-        () => workspace.settings.request.caCertificatePath === '/tmp/ui-ca.pem',
-        'Settings Certificates CA path should save from the inline field.',
-        3000,
-        global
-      );
-      await waitForStatusIncludes('Certificate settings updated.', 'Settings Certificates CA path should surface a save status.');
-      $('clearCaCertificateButton').click();
-      await waitForUiSmoke(
-        () => workspace.settings.request.caCertificatePath === '' && $('caCertificatePathInput').value === '',
-        'Settings Certificates Clear CA should save an empty CA path.',
-        3000,
-        global
-      );
+      assertUiSmoke($('caCertificatePathInput')?.type === 'hidden', 'Settings Certificates CA file path should not be editable.');
+      assertUiSmoke($('caCertificatePathLabel')?.textContent.includes('No file selected'), 'Settings Certificates CA file label should show the empty state.');
       $('chooseCaCertificateButton').click();
       await waitForUiSmoke(
         () => !$('filePickerModal').hidden,
-        'Settings Certificates Choose CA should open the local file picker.',
+        'Settings Certificates Import CA should open the local file picker.',
         3000,
         global
       );
-      assertUiSmoke($('filePickerManualPathInput') && !$('filePickerManualPathField').hidden, 'Certificate file picker should include a manual path field.');
-      $('filePickerManualPathInput').value = '/tmp/ui-ca-manual.pem';
-      dispatchInput($('filePickerManualPathInput'));
-      $('filePickerUsePathButton').click();
+      assertUiSmoke(!$('filePickerManualPathInput'), 'Certificate file picker should not expose a manual path field.');
+      resolveActiveModal(selectedLocalFileSmokeSelection('ui-ca-picker.pem'));
       await waitForUiSmoke(
         () => !$('settingsModal').hidden
           && !$('settingsCertificatesSection').hidden
           && $('filePickerModal').hidden
-          && workspace.settings.request.caCertificatePath === '/tmp/ui-ca-manual.pem'
-          && $('caCertificatePathInput').value === '/tmp/ui-ca-manual.pem',
-        'Settings Certificates Choose CA should accept a manual path from the file picker modal.',
+          && isPostMeterLocalFileSmokeSource(workspace.settings.request.caCertificatePath, 'certificate', 'ui-ca-picker.pem')
+          && isPostMeterLocalFileSmokeSource($('caCertificatePathInput').value, 'certificate', 'ui-ca-picker.pem')
+          && $('caCertificatePathLabel').textContent.includes('ui-ca-picker.pem'),
+        'Settings Certificates Import CA should save and display the selected file.',
         3000,
         global
       );
+      await waitForStatusIncludes('Certificate settings updated.', 'Settings Certificates CA import should surface a save status.');
       $('clearCaCertificateButton').click();
       await waitForUiSmoke(
-        () => workspace.settings.request.caCertificatePath === '' && $('caCertificatePathInput').value === '',
-        'Settings Certificates Clear CA should clear a manually chosen CA path.',
+        () => workspace.settings.request.caCertificatePath === ''
+          && $('caCertificatePathInput').value === ''
+          && $('caCertificatePathLabel').textContent.includes('No file selected'),
+        'Settings Certificates Clear CA should clear the selected CA file.',
         3000,
         global
       );
       $('chooseCaCertificateButton').click();
       await waitForUiSmoke(
         () => !$('filePickerModal').hidden,
-        'Settings Certificates Choose CA should reopen the local file picker after manual path selection.',
+        'Settings Certificates Import CA should reopen the local file picker after clearing.',
         3000,
         global
       );
@@ -826,11 +817,11 @@
           && !$('settingsCertificatesSection').hidden
           && $('filePickerModal').hidden
           && $('textInputModal').hidden,
-        'Canceling Settings Certificates Choose CA should return without opening a manual path prompt.',
+        'Canceling Settings Certificates Import CA should return without opening another prompt.',
         3000,
         global
       );
-      assertUiSmoke(workspace.settings.request.caCertificatePath === '', 'Canceling Settings Certificates Choose CA should not change the CA path.');
+      assertUiSmoke(workspace.settings.request.caCertificatePath === '', 'Canceling Settings Certificates Import CA should not change the CA file.');
 
       $('addClientCertificateButton').click();
       await nextPaint();
@@ -860,33 +851,37 @@
         'clientCertificateHostInput',
         'clientCertificatePortInput',
         'clientCertificateFormatSelect',
-        'clientCertificateCertPathInput',
+        'clientCertificateCertPathLabel',
         'chooseClientCertificateCertPathButton',
-        'clientCertificateKeyPathInput',
+        'clearClientCertificateCertPathButton',
+        'clientCertificateKeyPathLabel',
         'chooseClientCertificateKeyPathButton',
+        'clearClientCertificateKeyPathButton',
         'clientCertificatePassphraseInput',
         'toggleClientCertificatePassphraseButton',
         'clientCertificateEnabledInput'
       ]) {
         assertUiSmoke($(id) && !$(id).hidden, `Client certificate modal should show ${id} in the same panel.`);
       }
+      assertUiSmoke($('clientCertificateCertPathInput')?.type === 'hidden', 'Client certificate CRT path should not be editable.');
+      assertUiSmoke($('clientCertificateKeyPathInput')?.type === 'hidden', 'Client certificate KEY path should not be editable.');
       $('chooseClientCertificateCertPathButton').click();
       await waitForUiSmoke(
         () => !$('filePickerModal').hidden
           && !$('clientCertificateModal').hidden
           && $('clientCertificateModal').classList.contains('is-stack-parent')
           && $('filePickerModal').classList.contains('is-stack-top'),
-        'Client certificate CRT Choose should open the local file picker over the certificate form.',
+        'Client certificate CRT Import should open the local file picker over the certificate form.',
         3000,
         global
       );
-      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.crt';
-      $('filePickerUsePathButton').click();
+      resolveActiveModal(selectedLocalFileSmokeSelection('ui-client-picker.crt'));
       await waitForUiSmoke(
         () => !$('clientCertificateModal').hidden
           && $('filePickerModal').hidden
-          && $('clientCertificateCertPathInput').value === '/tmp/ui-client-picker.crt',
-        'Client certificate CRT picker should return to the form with the selected path.',
+          && isPostMeterLocalFileSmokeSource($('clientCertificateCertPathInput').value, 'certificate', 'ui-client-picker.crt')
+          && $('clientCertificateCertPathLabel').textContent.includes('ui-client-picker.crt'),
+        'Client certificate CRT picker should return to the form with the selected file label.',
         3000,
         global
       );
@@ -896,7 +891,7 @@
           && !$('clientCertificateModal').hidden
           && $('clientCertificateModal').classList.contains('is-stack-parent')
           && $('filePickerModal').classList.contains('is-stack-top'),
-        'Client certificate KEY Choose should open the local file picker over the certificate form.',
+        'Client certificate KEY Import should open the local file picker over the certificate form.',
         3000,
         global
       );
@@ -905,7 +900,7 @@
         () => !$('clientCertificateModal').hidden
           && $('filePickerModal').hidden
           && $('clientCertificateKeyPathInput').value === '',
-        'Canceling the client certificate KEY picker should return to the form without changing the path.',
+        'Canceling the client certificate KEY picker should return to the form without changing the selected file.',
         3000,
         global
       );
@@ -915,17 +910,17 @@
           && !$('clientCertificateModal').hidden
           && $('clientCertificateModal').classList.contains('is-stack-parent')
           && $('filePickerModal').classList.contains('is-stack-top'),
-        'Client certificate KEY Choose should reopen the local file picker.',
+        'Client certificate KEY Import should reopen the local file picker.',
         3000,
         global
       );
-      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.key';
-      $('filePickerUsePathButton').click();
+      resolveActiveModal(selectedLocalFileSmokeSelection('ui-client-picker.key'));
       await waitForUiSmoke(
         () => !$('clientCertificateModal').hidden
           && $('filePickerModal').hidden
-          && $('clientCertificateKeyPathInput').value === '/tmp/ui-client-picker.key',
-        'Client certificate KEY picker should return to the form with the selected path.',
+          && isPostMeterLocalFileSmokeSource($('clientCertificateKeyPathInput').value, 'certificate', 'ui-client-picker.key')
+          && $('clientCertificateKeyPathLabel').textContent.includes('ui-client-picker.key'),
+        'Client certificate KEY picker should return to the form with the selected file label.',
         3000,
         global
       );
@@ -947,26 +942,26 @@
       $('clientCertificateFormatSelect').value = 'pfx';
       dispatchChange($('clientCertificateFormatSelect'));
       await nextPaint();
-      assertUiSmoke(!$('clientCertificatePfxPathInput').closest('.client-certificate-pfx-field').hidden, 'PFX/P12 path should show when PFX format is selected.');
-      assertUiSmoke(!$('chooseClientCertificatePfxPathButton').hidden, 'PFX/P12 path should expose a Choose button when PFX format is selected.');
-      assertUiSmoke($('clientCertificateCertPathInput').closest('.client-certificate-pem-field').hidden, 'PEM certificate path should hide when PFX format is selected.');
+      assertUiSmoke(!$('clientCertificatePfxPathLabel').closest('.client-certificate-pfx-field').hidden, 'PFX/P12 file label should show when PFX format is selected.');
+      assertUiSmoke(!$('chooseClientCertificatePfxPathButton').hidden, 'PFX/P12 file should expose an Import button when PFX format is selected.');
+      assertUiSmoke($('clientCertificateCertPathLabel').closest('.client-certificate-pem-field').hidden, 'PEM certificate file label should hide when PFX format is selected.');
       $('chooseClientCertificatePfxPathButton').click();
       await waitForUiSmoke(
         () => !$('filePickerModal').hidden
           && !$('clientCertificateModal').hidden
           && $('clientCertificateModal').classList.contains('is-stack-parent')
           && $('filePickerModal').classList.contains('is-stack-top'),
-        'Client certificate PFX/P12 Choose should open the local file picker over the certificate form.',
+        'Client certificate PFX/P12 Import should open the local file picker over the certificate form.',
         3000,
         global
       );
-      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.p12';
-      $('filePickerUsePathButton').click();
+      resolveActiveModal(selectedLocalFileSmokeSelection('ui-client-picker.p12'));
       await waitForUiSmoke(
         () => !$('clientCertificateModal').hidden
           && $('filePickerModal').hidden
-          && $('clientCertificatePfxPathInput').value === '/tmp/ui-client-picker.p12',
-        'Client certificate PFX/P12 picker should return to the form with the selected path.',
+          && isPostMeterLocalFileSmokeSource($('clientCertificatePfxPathInput').value, 'certificate', 'ui-client-picker.p12')
+          && $('clientCertificatePfxPathLabel').textContent.includes('ui-client-picker.p12'),
+        'Client certificate PFX/P12 picker should return to the form with the selected file label.',
         3000,
         global
       );
@@ -989,8 +984,8 @@
           certificate.name === 'UI Client Certificate'
           && certificate.host === 'api.example.test'
           && certificate.port === '8443'
-          && certificate.certPath === '/tmp/ui-client-picker.crt'
-          && certificate.keyPath === '/tmp/ui-client-picker.key'
+          && isPostMeterLocalFileSmokeSource(certificate.certPath, 'certificate', 'ui-client-picker.crt')
+          && isPostMeterLocalFileSmokeSource(certificate.keyPath, 'certificate', 'ui-client-picker.key')
           && certificate.caPath === ''
         )),
         'Client certificate modal should save all fields from one panel.',
@@ -1607,25 +1602,27 @@
     assertUiSmoke($('requestSettingsTab').getAttribute('aria-hidden') === 'false', 'Request Settings tab panel should update aria-hidden.');
     const verification = $('requestSslCertificateVerificationInput');
     const rect = verification?.getBoundingClientRect?.() || { width: 0, height: 0 };
-    assertUiSmoke(verification && rect.width > 0 && rect.height > 0, 'Request Settings SSL verification checkbox should be visible.');
+    assertUiSmoke(verification && rect.width > 0 && rect.height > 0, 'Request Settings SSL verification selector should be visible.');
     assertUiSmoke(!$('requestCaCertificatePathInput'), 'Request Settings should not expose a request-local CA PEM override.');
     assertUiSmoke(!$('chooseRequestCaCertificateButton'), 'Request Settings should not expose a request-local CA picker.');
     assertUiSmoke(!$('clearRequestCaCertificateButton'), 'Request Settings should not expose request-local CA clearing.');
-    assertUiSmoke(verification.dataset.verificationValue === 'inherit', 'New requests should inherit workspace SSL verification until the request toggle changes.');
+    assertUiSmoke(verification.value === 'inherit', 'New requests should inherit workspace SSL verification until the request setting changes.');
+    assertUiSmoke($('requestSslCertificateVerificationInheritActions')?.hidden === false, 'Inherited request SSL verification should expose the workspace certificate settings shortcut.');
 
-    verification.checked = true;
+    verification.value = 'enabled';
     dispatchChange(verification);
     await waitForUiSmoke(
       () => activeRequest()?.settings?.sslCertificateVerification === 'enabled',
-      'Request Settings SSL checkbox should enable verification on the active request.',
+      'Request Settings SSL selector should enable verification on the active request.',
       3000,
       global
     );
-    verification.checked = false;
+    assertUiSmoke($('requestSslCertificateVerificationInheritActions')?.hidden === true, 'Explicit request SSL verification should hide the workspace certificate settings shortcut.');
+    verification.value = 'disabled';
     dispatchChange(verification);
     await waitForUiSmoke(
       () => activeRequest()?.settings?.sslCertificateVerification === 'disabled',
-      'Request Settings SSL checkbox should disable verification on the active request.',
+      'Request Settings SSL selector should disable verification on the active request.',
       3000,
       global
     );
@@ -2377,6 +2374,7 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSaveSettings = window.__postmeterSaveWorkspaceSettings;
     const originalFetchSandboxPackage = window.__postmeterFetchSandboxPackage;
+    const originalChooseFileBinding = window.__postmeterChooseFileBinding;
     const originalVault = window.__postmeterVault;
     try {
       workspace.collections = [{
@@ -2491,10 +2489,21 @@
       await waitForStatusIncludes('Reviewed package removal failed: settings persistence failed', 'Failed package removal should surface a visible recovery status.');
       assertUiSmoke(workspace.settings.sandbox.packageCache.some((item) => item.specifier === 'npm:sample-package@1.0.0'), 'Failed package removal should roll back the reviewed package cache.');
       window.__postmeterSaveWorkspaceSettings = async (settings) => ({ settings: structuredClone(settings) });
+      window.__postmeterChooseFileBinding = async (payload) => ({
+        cancelled: false,
+        binding: {
+          bound: true,
+          contentType: payload.contentType || '',
+          fileName: String(payload.source || '').split(/[\\/]/).filter(Boolean).pop() || 'fixture-data.csv',
+          key: payload.key || '',
+          mode: payload.mode || 'file',
+          reviewedAt: '2026-05-25T00:00:00.000Z',
+          source: payload.source
+        }
+      });
 
       const bindPromise = bindSandboxFileFromPrompt('fixture-data.csv');
       await resolveTextInputModal('fixture-data.csv', 'File binding should prompt for the imported file reference.');
-      await resolveTextInputModal('/tmp/fixture-data.csv', 'File binding should prompt for the reviewed local file path.');
       await bindPromise;
       assertUiSmoke(workspace.settings.sandbox.fileBindings.some((item) => item.source === 'fixture-data.csv'), 'Reviewed file binding should be added after settings save succeeds.');
       $('refreshSandboxFilesButton').click();
@@ -2505,7 +2514,6 @@
       };
       const failedBindPromise = bindSandboxFileFromPrompt('failed-bind.csv');
       await resolveTextInputModal('failed-bind.csv', 'Failed file binding should prompt for the imported file reference.');
-      await resolveTextInputModal('/tmp/failed-bind.csv', 'Failed file binding should prompt for the local file path.');
       await failedBindPromise;
       assertStatusIncludes('Imported file binding save failed: settings persistence failed', 'Failed file binding save should surface a visible recovery status.');
       assertUiSmoke(!workspace.settings.sandbox.fileBindings.some((item) => item.source === 'failed-bind.csv'), 'Failed file binding save should roll back the binding settings.');
@@ -2612,6 +2620,7 @@
     } finally {
       window.__postmeterSaveWorkspaceSettings = originalSaveSettings;
       window.__postmeterFetchSandboxPackage = originalFetchSandboxPackage;
+      window.__postmeterChooseFileBinding = originalChooseFileBinding;
       window.__postmeterVault = originalVault;
       lastVaultMetadata = null;
       lastVaultMetadataWorkspaceId = null;
@@ -4244,14 +4253,48 @@
       dispatchChange($('performanceBodyTypeSelect'));
       $('addPerformanceFormDataBodyRowButton').click();
       let performanceBodyRow = $('performanceFormDataBodyTable').querySelector('[data-body-form-data-row]');
-      assertUiSmoke(performanceBodyRow.querySelector('button')?.classList.contains('danger-button'), 'Performance form-data row remove button should use danger styling.');
+      assertUiSmoke(performanceBodyRow.querySelector('.danger-button'), 'Performance form-data row remove button should use danger styling.');
       let performanceBodyControls = performanceBodyRow.querySelectorAll('select, input');
       performanceBodyControls[1].value = 'file';
       dispatchChange(performanceBodyControls[1]);
       performanceBodyControls[2].value = 'artifact';
       dispatchInput(performanceBodyControls[2]);
-      performanceBodyControls[3].value = 'fixtures/performance.bin';
-      dispatchInput(performanceBodyControls[3]);
+      const performanceFileSourceInput = performanceBodyRow.querySelector('[data-body-form-data-field="value"]');
+      const performanceFileSourceLabel = performanceBodyRow.querySelector('.file-import-row .selected-file-label');
+      const performanceFileImportButton = performanceBodyRow.querySelector('.file-import-row button');
+      performanceFileImportButton.click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden,
+        'Performance form-data file Import should open the local file picker.',
+        3000,
+        global
+      );
+      resolveActiveModal({
+        contentBase64: 'ZGF0YQ==',
+        fileName: 'performance.bin',
+        source: 'fixtures/performance.bin'
+      });
+      await waitForUiSmoke(
+        () => performanceFileSourceInput.value === 'fixtures/performance.bin'
+          && performanceFileSourceLabel.textContent.includes('performance.bin'),
+        'Performance form-data file Import should store the selected file source.',
+        3000,
+        global
+      );
+      performanceFileSourceLabel.click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden,
+        'Performance form-data selected file label should open the local file picker.',
+        3000,
+        global
+      );
+      resolveActiveModal(null);
+      await waitForUiSmoke(
+        () => $('filePickerModal').hidden,
+        'Performance form-data selected file label picker can be cancelled without changing the file.',
+        3000,
+        global
+      );
       collectPerformanceTestFromEditor();
       assertUiSmoke(
         performanceTest.request.bodyType === 'FORM_DATA'
@@ -4275,14 +4318,26 @@
       );
       $('performanceBodyTypeSelect').value = 'BINARY';
       dispatchChange($('performanceBodyTypeSelect'));
-      $('performanceBinaryBodySourceInput').value = '{{perfHost}}';
-      dispatchInput($('performanceBinaryBodySourceInput'));
-      await nextPaint();
-      assertVariableHighlight($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source fields should highlight environment variable tokens.');
-      assertVariableHighlightUsesInputMetrics($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source highlighting should not alter input text metrics.');
-      await assertSingleLineVariableTooltipEdges($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source field');
-      $('performanceBinaryBodySourceInput').value = 'fixtures/performance-upload.dat';
-      dispatchInput($('performanceBinaryBodySourceInput'));
+      assertUiSmoke($('performanceBinaryBodySourceInput')?.type === 'hidden', 'Performance binary file source should not be editable.');
+      $('performanceBinaryBodySourceImportButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden,
+        'Performance binary file Import should open the local file picker.',
+        3000,
+        global
+      );
+      resolveActiveModal({
+        contentBase64: 'ZGF0YQ==',
+        fileName: 'performance-upload.dat',
+        source: 'fixtures/performance-upload.dat'
+      });
+      await waitForUiSmoke(
+        () => $('performanceBinaryBodySourceInput').value === 'fixtures/performance-upload.dat'
+          && $('performanceBinaryBodySourceLabel').textContent.includes('performance-upload.dat'),
+        'Performance binary file Import should store and display the selected file source.',
+        3000,
+        global
+      );
       collectPerformanceTestFromEditor();
       assertUiSmoke(
         performanceTest.request.bodyType === 'BINARY'
@@ -4554,10 +4609,12 @@
       assertUiSmoke($('performanceCertificatesSettingsTitle')?.textContent === 'Certificates', 'Performance request Settings should include a Certificates section.');
       const performanceVerification = $('performanceRequestSslCertificateVerificationInput');
       assertUiSmoke(performanceVerification && performanceVerification.getBoundingClientRect().height > 0, 'Performance request Settings should expose SSL certificate verification.');
-      performanceVerification.checked = false;
+      assertUiSmoke(performanceVerification.value === 'inherit', 'Performance request Settings should default SSL verification to inherit.');
+      assertUiSmoke($('performanceRequestSslCertificateVerificationInheritActions')?.hidden === false, 'Inherited performance SSL verification should expose the workspace certificate settings shortcut.');
+      performanceVerification.value = 'disabled';
       dispatchChange(performanceVerification);
       assertUiSmoke(performanceTest.request.settings?.sslCertificateVerification === 'disabled', 'Performance request Settings should disable SSL verification on the performance request copy.');
-      performanceVerification.checked = true;
+      performanceVerification.value = 'enabled';
       dispatchChange(performanceVerification);
       assertUiSmoke(performanceTest.request.settings?.sslCertificateVerification === 'enabled', 'Performance request Settings should enable SSL verification on the performance request copy.');
       $('openPerformanceCookiesButton').click();
@@ -5765,7 +5822,7 @@
       dispatchChange($('bodyTypeSelect'));
       $('addFormDataBodyRowButton').click();
       const runnerBodyRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
-      assertUiSmoke(runnerBodyRow.querySelector('button')?.classList.contains('danger-button'), 'Runner request form-data row remove button should use danger styling.');
+      assertUiSmoke(runnerBodyRow.querySelector('.danger-button'), 'Runner request form-data row remove button should use danger styling.');
       const runnerBodyControls = runnerBodyRow.querySelectorAll('select, input');
       runnerBodyControls[1].value = 'text';
       dispatchChange(runnerBodyControls[1]);
@@ -6633,7 +6690,7 @@
     dispatchChange($('bodyTypeSelect'));
     $('addFormDataBodyRowButton').click();
     let formDataRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
-    assertUiSmoke(formDataRow.querySelector('button')?.classList.contains('danger-button'), 'Request form-data row remove button should use danger styling.');
+    assertUiSmoke(formDataRow.querySelector('.danger-button'), 'Request form-data row remove button should use danger styling.');
     let formDataControls = formDataRow.querySelectorAll('select, input');
     formDataControls[1].value = 'text';
     dispatchChange(formDataControls[1]);
@@ -6644,16 +6701,47 @@
     $('addFormDataBodyRowButton').click();
     formDataRow = $('formDataBodyTable').querySelectorAll('[data-body-form-data-row]')[1];
     formDataControls = formDataRow.querySelectorAll('select, input');
-	    formDataControls[1].value = 'file';
-	    dispatchChange(formDataControls[1]);
-	    formDataControls[2].value = 'upload';
-	    dispatchInput(formDataControls[2]);
-	    formDataControls[3].click();
-	    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a form-data file source field should open the local file source menu.');
-	    assertUiSmoke($('fileSourceChooseButton')?.textContent.includes('Choose File'), 'The file source menu should offer the shared local file picker.');
-	    document.body.click();
-	    formDataControls[3].value = 'fixtures/upload.txt';
-	    dispatchInput(formDataControls[3]);
+    formDataControls[1].value = 'file';
+    dispatchChange(formDataControls[1]);
+    formDataControls[2].value = 'upload';
+    dispatchInput(formDataControls[2]);
+    const requestFormDataFileSource = formDataRow.querySelector('[data-body-form-data-field="value"]');
+    const requestFormDataFileSourceLabel = formDataRow.querySelector('.file-import-row .selected-file-label');
+    const requestFormDataImportButton = formDataRow.querySelector('.file-import-row button');
+    assertUiSmoke(requestFormDataFileSource?.type === 'hidden', 'Request form-data file source should not be editable.');
+    requestFormDataImportButton.click();
+    await waitForUiSmoke(
+      () => !$('filePickerModal').hidden,
+      'Request form-data file Import should open the local file picker.',
+      3000,
+      global
+    );
+    resolveActiveModal({
+      contentBase64: 'ZGF0YQ==',
+      fileName: 'upload.txt',
+      source: 'fixtures/upload.txt'
+    });
+    await waitForUiSmoke(
+      () => requestFormDataFileSource.value === 'fixtures/upload.txt'
+        && requestFormDataFileSourceLabel.textContent.includes('upload.txt'),
+      'Request form-data file Import should store the selected file source.',
+      3000,
+      global
+    );
+    requestFormDataFileSourceLabel.click();
+    await waitForUiSmoke(
+      () => !$('filePickerModal').hidden,
+      'Request form-data selected file label should open the local file picker.',
+      3000,
+      global
+    );
+    resolveActiveModal(null);
+    await waitForUiSmoke(
+      () => $('filePickerModal').hidden,
+      'Request form-data selected file label picker can be cancelled without changing the file.',
+      3000,
+      global
+    );
     collectRequestFromEditor();
     assertUiSmoke(draft.bodyType === 'FORM_DATA', 'Request Body dropdown should collect form-data mode.');
     assertUiSmoke(
@@ -6682,16 +6770,26 @@
     );
     $('bodyTypeSelect').value = 'BINARY';
     dispatchChange($('bodyTypeSelect'));
-    $('binaryBodySourceInput').click();
-    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
-    document.body.click();
-    $('binaryBodySourceInput').value = '{{baseUrl}}';
-    dispatchInput($('binaryBodySourceInput'));
-    assertVariableHighlight($('binaryBodySourceInput'), 'baseUrl', 'Binary file source fields should highlight environment variable tokens.');
-    assertVariableHighlightUsesInputMetrics($('binaryBodySourceInput'), 'baseUrl', 'Binary file source highlighting should not alter input text metrics.');
-    await assertSingleLineVariableTooltipEdges($('binaryBodySourceInput'), 'baseUrl', 'Binary file source field');
-    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
-    dispatchInput($('binaryBodySourceInput'));
+    assertUiSmoke($('binaryBodySourceInput')?.type === 'hidden', 'Request binary file source should not be editable.');
+    $('binaryBodySourceImportButton').click();
+    await waitForUiSmoke(
+      () => !$('filePickerModal').hidden,
+      'Request binary file Import should open the local file picker.',
+      3000,
+      global
+    );
+    resolveActiveModal({
+      contentBase64: 'ZGF0YQ==',
+      fileName: 'binary.dat',
+      source: 'fixtures/binary.dat'
+    });
+    await waitForUiSmoke(
+      () => $('binaryBodySourceInput').value === 'fixtures/binary.dat'
+        && $('binaryBodySourceLabel').textContent.includes('binary.dat'),
+      'Request binary file Import should store and display the selected file source.',
+      3000,
+      global
+    );
     collectRequestFromEditor();
     assertUiSmoke(
       draft.bodyType === 'BINARY'
@@ -7217,6 +7315,19 @@
       return require('./uiSmokeCommon');
     }
     throw new Error('PostMeter UI smoke common helpers must load before uiRegressionSmoke.js.');
+  }
+
+  function selectedLocalFileSmokeSelection(fileName, contentBase64 = 'ZGF0YQ==') {
+    return {
+      contentBase64,
+      fileName,
+      name: fileName
+    };
+  }
+
+  function isPostMeterLocalFileSmokeSource(value, purpose, fileName) {
+    const text = String(value || '');
+    return text.startsWith(`postmeter-local-file/${purpose}/`) && text.endsWith(`/${fileName}`);
   }
 
   function openTabStateCount() {

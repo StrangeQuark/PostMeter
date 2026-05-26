@@ -2512,6 +2512,7 @@ test('redacts OAuth provider error URLs credentials file URLs and local paths', 
     'provider failed at C:\\Users\\Alice\\oauth.json and /home/alice/oauth.json',
     'provider said access_token%3Dsingle-token-secret code%3Dsingle-code-secret state%253Ddouble-state-secret access_token%3Dprovider-token%26code%3Dprovider-code%26state%3Dprovider-state',
     'provider failed at C:\\Users\\Alice\\oauth.json Digest realm="digest-private-realm", nonce="digest-secret-nonce", response="digest-secret-response"',
+    // postmeter-secret-allow: synthetic private-key marker verifies OAuth provider error redaction.
     'provider failed with -----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
     'provider returned Cookie sid=bare-cookie-secret; csrftoken=second-bare-cookie-secret authentication failed',
     'provider returned Set-Cookie sid=bare-set-cookie-secret; Path=/; HttpOnly token endpoint failed',

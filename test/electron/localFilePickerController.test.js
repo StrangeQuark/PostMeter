@@ -6,51 +6,54 @@ const vm = require('node:vm');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 
-test('local file picker configures modal copy, manual paths, selected local files, and request-import state', async () => {
+test('local file picker configures modal copy, selected local files, and request-import state', async () => {
   const { elements, sandbox, state } = loadLocalFilePickerController();
 
   sandbox.configureFilePickerModal({
     accept: '.json',
-    allowManualPath: false,
-    defaultPath: '/tmp/default.json',
     dropDetail: 'Drop JSON here.',
     dropTitle: 'Drop request JSON',
-    manualPathPlaceholder: '/tmp/request.json',
     message: 'Choose a request JSON file.',
     title: 'Import Request'
   });
   assert.equal(elements.get('filePickerTitle').textContent, 'Import Request');
   assert.equal(elements.get('filePickerMessage').textContent, 'Choose a request JSON file.');
   assert.equal(elements.get('filePickerInput').accept, '.json');
-  assert.equal(elements.get('filePickerManualPathField').hidden, true);
-  assert.equal(elements.get('filePickerManualPathInput').value, '/tmp/default.json');
   assert.equal(elements.get('filePickerDropZone').querySelector('strong').textContent, 'Drop request JSON');
   assert.equal(elements.get('filePickerDropZone').querySelector('span').textContent, 'Drop JSON here.');
+  assert.equal(sandbox.useManualPathFromFilePicker, undefined);
 
   sandbox.activeFilePickerOptions = { kind: 'request-import' };
-  elements.get('filePickerManualPathInput').value = '';
-  sandbox.useManualPathFromFilePicker();
-  assert.match(elements.get('filePickerError').textContent, /Enter a local file path/);
-  assert.equal(elements.get('filePickerError').hidden, false);
-  assert.equal(elements.get('filePickerManualPathInput').focusCount, 1);
-
-  elements.get('filePickerManualPathInput').value = '/tmp/manual.json';
-  sandbox.useManualPathFromFilePicker();
+  await sandbox.selectLocalFileFromPicker({ name: 'dropped.json', size: 2, text: async () => '{}' });
   assert.deepEqual(fromVm(state.resolvedModal), {
-    manualPath: true,
-    name: 'manual.json',
-    path: '/tmp/manual.json',
-    picker: 'request-import'
-  });
-
-  await sandbox.selectLocalFileFromPicker({ name: 'dropped.json', path: '/tmp/dropped.json' });
-  assert.deepEqual(fromVm(state.resolvedModal), {
+    contentBase64: 'e30=',
+    fileName: 'dropped.json',
     name: 'dropped.json',
-    path: '/tmp/dropped.json',
     picker: 'request-import'
   });
 
-  await sandbox.selectRequestImportFile({ name: 'request.postmeter.json', path: '/tmp/request.postmeter.json' });
+  await sandbox.selectLocalFileFromPicker({ name: 'too-large.json', size: 11 * 1024 * 1024 });
+  assert.match(elements.get('filePickerError').textContent, /10 MB or smaller/);
+  assert.equal(elements.get('filePickerError').hidden, false);
+
+  sandbox.activeFilePickerOptions = { kind: 'collection-import', readText: true };
+  await sandbox.selectLocalFileFromPicker({
+    name: 'collection.json',
+    size: 17,
+    text: async () => '{"item":[]}'
+  });
+  assert.deepEqual(fromVm(state.resolvedModal), {
+    fileName: 'collection.json',
+    name: 'collection.json',
+    picker: 'collection-import',
+    text: '{"item":[]}'
+  });
+
+  await sandbox.selectRequestImportFile({
+    name: 'request.postmeter.json',
+    size: 18,
+    text: async () => '{"url":"https://x"}'
+  });
   assert.equal(elements.get('requestImportFileSelection').textContent, 'Selected file: request.postmeter.json');
   assert.equal(elements.get('requestImportFileSelection').hidden, false);
   assert.equal(elements.get('confirmRequestImportButton').disabled, false);
@@ -72,25 +75,25 @@ test('local file source input menu and binding keep local paths workspace-local'
 
   const selected = await sandbox.applySelectedFileSourceToInput(input, '', 'formdata', {
     name: 'upload.txt',
-    path: '/tmp/upload.txt'
+    source: 'upload.txt'
   });
   assert.equal(selected, true);
-  assert.equal(input.value, '/tmp/upload.txt');
+  assert.equal(input.value, 'upload.txt');
   assert.equal(input.inputDispatches, 1);
   assert.equal(state.collectCount, 1);
   assert.equal(state.statuses.at(-1), 'File source selected: upload.txt.');
   assert.deepEqual(fromVm(sandbox.workspace.settings.sandbox.fileBindings.map((binding) => ({
     fileName: binding.fileName,
     key: binding.key,
-    localPath: binding.localPath,
+    bound: binding.bound,
     mode: binding.mode,
     source: binding.source
   }))), [{
+    bound: true,
     fileName: 'upload.txt',
     key: 'payload',
-    localPath: '/tmp/upload.txt',
     mode: 'formdata',
-    source: '/tmp/upload.txt'
+    source: 'upload.txt'
   }]);
 
   sandbox.updateLocalFileSourceInputState(input, { enabled: false });
@@ -106,6 +109,9 @@ function loadLocalFilePickerController() {
     Event: FakeEvent,
     activeFilePickerOptions: null,
     activeFileSourceTarget: null,
+    selectedRequestImportText: '',
+    selectedRequestImportFileName: '',
+    selectedRequestImportFilePath: '',
     cloneWorkspaceSettings: () => JSON.parse(JSON.stringify(workspace.settings)),
     closeContextMenu() {},
     closeToolbarMenus() {},
@@ -127,8 +133,41 @@ function loadLocalFilePickerController() {
       innerHeight: 600,
       innerWidth: 800,
       postmeter: {
-        files: {
-          pathForFile: (file) => file?.path || ''
+        fileBindings: {
+          choose: async (payload) => ({
+            cancelled: false,
+            binding: {
+              bound: true,
+              contentType: payload.contentType || '',
+              fileName: payload.fileName || 'upload.txt',
+              key: payload.key || '',
+              mode: payload.mode || 'file',
+              reviewedAt: '2026-05-25T00:00:00.000Z',
+              source: payload.source
+            }
+          }),
+          storeContent: async (payload) => ({
+            cancelled: false,
+            binding: {
+              bound: true,
+              contentType: payload.contentType || '',
+              fileName: payload.fileName || 'upload.txt',
+              key: payload.key || '',
+              mode: payload.mode || 'file',
+              reviewedAt: '2026-05-25T00:00:00.000Z',
+              source: payload.source
+            }
+          })
+        },
+        localFiles: {
+          storeContent: async (payload) => ({
+            cancelled: false,
+            binding: {
+              bound: true,
+              fileName: payload.fileName || 'file',
+              source: `postmeter-local-file/file/test/${payload.fileName || 'file'}`
+            }
+          })
         }
       }
     },
@@ -164,8 +203,6 @@ function createElements() {
     ['filePickerTitle', new FakeElement('div')],
     ['filePickerMessage', new FakeElement('div')],
     ['filePickerInput', new FakeElement('input')],
-    ['filePickerManualPathField', new FakeElement('label')],
-    ['filePickerManualPathInput', new FakeElement('input')],
     ['filePickerDropZone', dropZone],
     ['filePickerError', new FakeElement('div')],
     ['requestImportFileSelection', new FakeElement('div')],

@@ -1,8 +1,8 @@
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
-const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
+const { redactSmokeOutputText } = require('../../scripts/smokeProcess');
+const { runSourceElectronSmoke } = require('./electronSmokeRunner');
 
 const UI_REGRESSION_TIMEOUT_MILLIS = 150_000;
 
@@ -17,8 +17,7 @@ async function main() {
     POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || path.join(tempDir, 'validation-artifacts')
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['--force-high-contrast', '.'], env), {
-    cwd: path.join(__dirname, '..', '..'),
+  const result = await runSourceElectronSmoke(electronPath, ['--force-high-contrast', '.'], {
     env,
     timeoutMillis: UI_REGRESSION_TIMEOUT_MILLIS,
     timeoutMessage: `Electron UI regression smoke timed out after ${UI_REGRESSION_TIMEOUT_MILLIS} ms.`

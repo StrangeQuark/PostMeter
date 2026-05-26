@@ -23,6 +23,8 @@ async function main() {
     appId: packageJson.build?.appId || '',
     version: packageJson.version,
     generatedAt: new Date().toISOString(),
+    buildCommit: String(process.env.GITHUB_SHA || process.env.POSTMETER_BUILD_COMMIT || '').trim(),
+    buildTimestamp: String(process.env.POSTMETER_BUILD_TIMESTAMP || process.env.GITHUB_RUN_STARTED_AT || '').trim() || new Date().toISOString(),
     artifacts: []
   };
 

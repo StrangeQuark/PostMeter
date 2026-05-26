@@ -669,6 +669,7 @@ function assertSandboxFileBindings(values, field) {
     object(binding, itemField);
     assertAllowedObjectFields(binding, itemField, [
       'contentType',
+      'bound',
       'enabled',
       'fileName',
       'filePath',
@@ -684,12 +685,13 @@ function assertSandboxFileBindings(values, field) {
     const source = binding.source ?? binding.src;
     const localPath = binding.localPath ?? binding.path ?? binding.filePath;
     string(source, `${itemField}.source`, LIMITS.value);
-    string(localPath, `${itemField}.localPath`, LIMITS.value);
+    optionalString(localPath, `${itemField}.localPath`, LIMITS.value);
     optionalString(binding.id, `${itemField}.id`, LIMITS.name);
     optionalString(binding.key, `${itemField}.key`, LIMITS.key);
     optionalString(binding.contentType, `${itemField}.contentType`, LIMITS.value);
     optionalString(binding.fileName, `${itemField}.fileName`, LIMITS.name);
     optionalString(binding.reviewedAt, `${itemField}.reviewedAt`, LIMITS.name);
+    optionalBoolean(binding.bound, `${itemField}.bound`);
     optionalBoolean(binding.enabled, `${itemField}.enabled`);
     if (binding.mode != null) {
       string(binding.mode, `${itemField}.mode`, LIMITS.short);

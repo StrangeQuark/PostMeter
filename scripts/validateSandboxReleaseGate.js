@@ -138,7 +138,8 @@ requireFile('Production readiness source matrix', productionReadinessMatrixSourc
 ]);
 
 requireWorkflow('CI workflow', ciWorkflow, [
-  /node-version:\s*22/,
+  /node-version:\s*24/,
+  /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
   /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
   /npm run renderer:html:check/,
@@ -177,6 +178,8 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm run release:validate:packaged-smoke/,
   /npm run release:validate:packaged-workflow/,
   /npm run release:validate:packaged-auth/,
+  /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/,
+  /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run release:validate:win-protocol/,
   /npm run release:validate:mac-protocol/,
@@ -191,6 +194,8 @@ requireWorkflow('CI workflow', ciWorkflow, [
 ]);
 
 requireWorkflow('Release workflow', releaseWorkflow, [
+  /node-version:\s*24/,
+  /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /platform:\s*linux/,
   /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
   /ci_no_sandbox:\s*"1"/,
@@ -236,6 +241,9 @@ requireWorkflow('Release workflow', releaseWorkflow, [
   /npm run release:validate:packaged-smoke/,
   /npm run release:validate:packaged-workflow/,
   /npm run release:validate:packaged-auth/,
+  /Windows renderer UI smoke is skipped on GitHub-hosted Windows runners/,
+  /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/,
+  /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
   /xvfb-run -a npm run sandbox:validate:packaged/,
@@ -252,6 +260,8 @@ requireWorkflow('Release workflow', releaseWorkflow, [
 requireWorkflow('Manual native release validation workflow', releaseValidationWorkflow, [
   /workflow_dispatch:/,
   /contents:\s*read/,
+  /node-version:\s*24/,
+  /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /platform:\s*linux/,
   /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
   /ci_no_sandbox:\s*"1"/,
@@ -296,6 +306,9 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /npm run release:validate:packaged-smoke/,
   /npm run release:validate:packaged-workflow/,
   /npm run release:validate:packaged-auth/,
+  /Windows renderer UI smoke is skipped on GitHub-hosted Windows runners/,
+  /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/,
+  /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
   /xvfb-run -a npm run sandbox:validate:packaged/,
@@ -347,6 +360,8 @@ for (const [label, workflowDocument, requiredRunSteps] of [
     /npm run release:validate:packaged-smoke/,
     /npm run release:validate:packaged-workflow/,
     /npm run release:validate:packaged-auth/,
+    /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/,
+    /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/,
     /xvfb-run -a npm run sandbox:validate:packaged/,
     /npm run release:validate:win-protocol/,
     /npm run release:validate:mac-protocol/
@@ -385,6 +400,9 @@ for (const [label, workflowDocument, requiredRunSteps] of [
     /npm run release:validate:packaged-smoke/,
     /npm run release:validate:packaged-workflow/,
     /npm run release:validate:packaged-auth/,
+    /Windows renderer UI smoke is skipped on GitHub-hosted Windows runners/,
+    /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/,
+    /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/,
     /npm run release:validate:win-protocol/,
     /npm run release:validate:mac-protocol/,
     /npm run release:prepare/,
@@ -423,6 +441,9 @@ for (const [label, workflowDocument, requiredRunSteps] of [
     /npm run release:validate:packaged-smoke/,
     /npm run release:validate:packaged-workflow/,
     /npm run release:validate:packaged-auth/,
+    /Windows renderer UI smoke is skipped on GitHub-hosted Windows runners/,
+    /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/,
+    /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/,
     /npm run release:validate:win-protocol/,
     /npm run release:validate:mac-protocol/,
     /npm run release:prepare/,
@@ -445,6 +466,8 @@ requireWorkflow('OAuth provider certification workflow', oauthProviderCertificat
   /run_live:/,
   /evidence_path:/,
   /contents:\s*read/,
+  /node-version:\s*24/,
+  /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /npm run oauth:certify:validate/,
   /npm run oauth:certify:mock/,
   /POSTMETER_LIVE_OAUTH_CERTIFICATION:\s*"1"/,
@@ -463,8 +486,15 @@ if (/gh release create/.test(releaseValidationWorkflow) || /contents:\s*write/.t
 for (const [label, workflow] of [
   ['CI workflow', ciWorkflow],
   ['Release workflow', releaseWorkflow],
-  ['Manual native release validation workflow', releaseValidationWorkflow]
+  ['Manual native release validation workflow', releaseValidationWorkflow],
+  ['OAuth provider certification workflow', oauthProviderCertificationWorkflow]
 ]) {
+  if (/node-version:\s*22/.test(workflow)) {
+    errors.push(`${label} must use Node 24 for all GitHub Actions Node setup steps.`);
+  }
+  if (!/FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/.test(workflow)) {
+    errors.push(`${label} must force JavaScript GitHub Actions to run on Node 24.`);
+  }
   if (/release\/\*\.(msi|rpm)/.test(workflow)) {
     errors.push(`${label} must not upload unconfigured MSI/RPM release artifact types.`);
   }

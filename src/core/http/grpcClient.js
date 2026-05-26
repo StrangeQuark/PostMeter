@@ -22,6 +22,10 @@ const {
   normalizeRequestTlsSettings,
   normalizeTlsSettings
 } = require('./tlsSettings');
+const {
+  normalizeSandboxFileBindings
+} = require('./fileAttachmentBindings');
+const { classifyNetworkDestination } = require('../security/networkPolicy');
 
 const DEFAULT_GRPC_TIMEOUT_MILLIS = 3 * 60 * 1000;
 const MAX_GRPC_METADATA_PAIRS = 1000;
@@ -51,6 +55,7 @@ const GRPC_STATUS_NAMES = Object.freeze({
 async function invokeGrpcRequest(request = {}, environment = { variables: [] }, options = {}) {
   const started = performance.now();
   const invocation = await prepareGrpcInvocation(request, environment, options);
+  await enforceGrpcNetworkPolicy(invocation, options.networkPolicy);
   const credentialResult = await grpcCredentialsForRequest(invocation, environment, options);
   const client = new invocation.Client(invocation.target, credentialResult.credentials, grpcClientOptions(invocation));
   let result;
@@ -63,6 +68,65 @@ async function invokeGrpcRequest(request = {}, environment = { variables: [] }, 
   return {
     response: grpcResponseFromInvocation(result, invocation, durationMillis, credentialResult.tlsDiagnostics)
   };
+}
+
+async function enforceGrpcNetworkPolicy(invocation = {}, policy = {}) {
+  if (!policy || policy.enabled !== true) {
+    return;
+  }
+  const url = `${invocation.secure ? 'https' : 'http'}://${invocation.target}`;
+  const classification = await classifyNetworkDestination(url, {
+    resolveHost: policy.resolveHost
+  });
+  if (classification.category === 'public') {
+    await recordGrpcNetworkPolicyEvent(policy, 'request.network.public.allowed', classification);
+    return;
+  }
+  if (classification.category === 'metadata') {
+    await recordGrpcNetworkPolicyEvent(policy, 'request.network.metadata.blocked', classification, 'metadata_endpoint_blocked');
+    const error = new Error('Metadata-service requests are blocked by PostMeter network safe mode.');
+    error.code = 'POSTMETER_METADATA_REQUEST_BLOCKED';
+    throw error;
+  }
+  if (policy.allowPrivateNetworkRequests === true) {
+    await recordGrpcNetworkPolicyEvent(policy, 'request.network.private.allowed', classification);
+    return;
+  }
+  if (typeof policy.confirmPrivateNetworkRequest === 'function') {
+    await recordGrpcNetworkPolicyEvent(policy, 'request.network.private.prompted', classification);
+    const accepted = await policy.confirmPrivateNetworkRequest({
+      category: classification.category || 'unknown',
+      hostname: classification.hostname || '',
+      reason: classification.reason || ''
+    });
+    if (accepted === true) {
+      await recordGrpcNetworkPolicyEvent(policy, 'request.network.private.allowed', classification);
+      return;
+    }
+    await recordGrpcNetworkPolicyEvent(policy, 'request.network.private.denied', classification, 'private_network_request_denied');
+  } else {
+    await recordGrpcNetworkPolicyEvent(policy, 'request.network.private.blocked', classification, 'private_network_request_blocked');
+  }
+  const error = new Error('Private-network requests are blocked by PostMeter network safe mode.');
+  error.code = 'POSTMETER_PRIVATE_NETWORK_REQUEST_BLOCKED';
+  throw error;
+}
+
+async function recordGrpcNetworkPolicyEvent(policy, type, classification, failureCode = '') {
+  if (typeof policy?.recordDiagnosticEvent !== 'function') {
+    return;
+  }
+  await Promise.resolve(policy.recordDiagnosticEvent({
+    type,
+    level: failureCode ? 'warn' : 'info',
+    outcome: failureCode ? 'blocked' : 'completed',
+    failureCode: failureCode || undefined,
+    fields: {
+      category: classification?.category || 'unknown',
+      hostname: classification?.hostname || '',
+      reason: classification?.reason || ''
+    }
+  })).catch(() => {});
 }
 
 async function prepareGrpcInvocation(request, environment, options) {
@@ -347,6 +411,7 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
     };
   }
   const transportEnvironment = invocation.transportEnvironment || environment;
+  const fileBindings = Array.isArray(options.fileBindings) ? options.fileBindings : null;
   const tlsConfig = invocation.grpcConfig.tls || {};
   const settings = normalizeTlsSettings(options.tlsSettings || {});
   const clientCertificates = [
@@ -362,11 +427,11 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
   };
   const rootCertParts = [];
   const settingsCaPath = resolveEnvironmentValue(settings.caCertificatePath, transportEnvironment).trim();
-  const settingsRootCerts = await readOptionalPem(settingsCaPath, transportEnvironment, 'CA certificate');
+  const settingsRootCerts = await readOptionalPem(settingsCaPath, transportEnvironment, 'CA certificate', fileBindings);
   if (settingsRootCerts) {
     rootCertParts.push(settingsRootCerts);
   }
-  const rootCerts = await readOptionalPem(tlsConfig.caPath, transportEnvironment, 'CA certificate');
+  const rootCerts = await readOptionalPem(tlsConfig.caPath, transportEnvironment, 'CA certificate', fileBindings);
   if (rootCerts) {
     rootCertParts.push(rootCerts);
   }
@@ -387,7 +452,7 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
           keyPath: matchedCertificate.keyPath || '',
           passphrase: matchedCertificate.passphrase || '',
           pfxPath: matchedCertificate.pfxPath || ''
-        }, transportEnvironment, rootCertParts, effectiveSettings),
+        }, transportEnvironment, rootCertParts, effectiveSettings, fileBindings),
         tlsDiagnostics: grpcTlsDiagnostics(effectiveSettings, rootCertParts, matchedCertificate, transportEnvironment)
       };
     }
@@ -419,26 +484,26 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
     pfxPath: certificateBinding.pfxPath || ''
   } : clientAuth;
   return {
-    credentials: await grpcCredentialsForClientCertificate(auth, transportEnvironment, rootCertParts, effectiveSettings),
+    credentials: await grpcCredentialsForClientCertificate(auth, transportEnvironment, rootCertParts, effectiveSettings, fileBindings),
     tlsDiagnostics: grpcTlsDiagnostics(effectiveSettings, rootCertParts, certificateBinding || auth, transportEnvironment, {
       certificateId
     })
   };
 }
 
-async function grpcCredentialsForClientCertificate(auth, transportEnvironment, rootCertParts, settings) {
-  const ca = await readOptionalPem(auth.caPath, transportEnvironment, 'CA certificate');
+async function grpcCredentialsForClientCertificate(auth, transportEnvironment, rootCertParts, settings, fileBindings = null) {
+  const ca = await readOptionalPem(auth.caPath, transportEnvironment, 'CA certificate', fileBindings);
   const caParts = ca ? [...rootCertParts, ca] : rootCertParts;
   const rootCerts = grpcRootCertificatesWithSystemRoots(caParts) || undefined;
   const pfxPath = resolveEnvironmentValue(String(auth.pfxPath || ''), transportEnvironment).trim();
   if (pfxPath) {
-    const extracted = await extractPfxForGrpc(pfxPath, resolveEnvironmentValue(auth.passphrase, transportEnvironment));
+    const extracted = await extractPfxForGrpc(resolveMainOwnedFilePath(pfxPath, fileBindings, 'PFX/P12 bundle'), resolveEnvironmentValue(auth.passphrase, transportEnvironment));
     return grpc.credentials.createSsl(rootCerts, extracted.privateKey, extracted.certChain, grpcVerifyOptions(settings));
   }
 
-  const certChain = await readRequiredPem(auth.certPath, transportEnvironment, 'PEM certificate');
+  const certChain = await readRequiredPem(auth.certPath, transportEnvironment, 'PEM certificate', fileBindings);
   const privateKey = decryptPemPrivateKey(
-    await readRequiredPem(auth.keyPath, transportEnvironment, 'PEM key'),
+    await readRequiredPem(auth.keyPath, transportEnvironment, 'PEM key', fileBindings),
     resolveEnvironmentValue(auth.passphrase, transportEnvironment),
     'gRPC PEM key'
   );
@@ -478,20 +543,20 @@ function grpcUrlForTarget(invocation) {
   return new URL(invocation.finalUrl || `grpcs://${invocation.target}`);
 }
 
-async function readOptionalPem(filePath, environment, label) {
+async function readOptionalPem(filePath, environment, label, fileBindings = null) {
   const resolved = resolveEnvironmentValue(String(filePath || ''), environment).trim();
   if (!resolved) {
     return null;
   }
-  return readBoundedFile(resolved, label);
+  return readBoundedFile(resolveMainOwnedFilePath(resolved, fileBindings, label), label);
 }
 
-async function readRequiredPem(filePath, environment, label) {
+async function readRequiredPem(filePath, environment, label, fileBindings = null) {
   const resolved = resolveEnvironmentValue(String(filePath || ''), environment).trim();
   if (!resolved) {
     throw new Error(`gRPC client certificate ${label} path is required.`);
   }
-  return readBoundedFile(resolved, label);
+  return readBoundedFile(resolveMainOwnedFilePath(resolved, fileBindings, label), label);
 }
 
 async function readBoundedFile(filePath, label) {
@@ -503,6 +568,26 @@ async function extractPfxForGrpc(filePath, passphrase = '') {
     bundleLabel: 'gRPC PFX/P12 bundle',
     maxBytes: DEFAULT_MAX_PFX_BYTES
   });
+}
+
+function resolveMainOwnedFilePath(value, fileBindings = null, label = 'file') {
+  const reference = String(value || '').trim();
+  if (!reference) {
+    return '';
+  }
+  if (Array.isArray(fileBindings)) {
+    const bindings = normalizeSandboxFileBindings(fileBindings);
+    const binding = bindings.find((candidate) => (
+      candidate.enabled !== false
+      && candidate.localPath
+      && (candidate.source === reference || candidate.id === reference)
+    ));
+    if (binding?.localPath) {
+      return path.resolve(binding.localPath);
+    }
+    throw new Error(`gRPC client certificate ${label} requires a main-owned local file binding.`);
+  }
+  return path.resolve(reference);
 }
 
 function grpcMetadataForRequest(request, grpcConfig, environment) {

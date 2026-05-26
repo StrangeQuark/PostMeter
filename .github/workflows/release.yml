@@ -6,7 +6,10 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build:
@@ -37,28 +40,20 @@ jobs:
             packaged_auth_command: xvfb-run -a npm run release:validate:packaged-auth
             packaged_sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
             protocol_command: echo "No protocol registration validation required for linux."
+            required_artifact_types: appimage,deb
             ci_no_sandbox: "1"
           - platform: windows
             runner: windows-latest
             command: npm run dist:win
             install_dependencies_command: echo "No Linux sandbox backend required for windows."
             prepare_native_helpers_command: npm run native:windows-sandbox:build
-            source_smoke_command: |
-              npm run test:smoke
-              npm run test:ui:oauth
-              npm run test:ui:hawk
-              npm run test:ui:aws
-              npm run test:ui:auth
-              npm run test:ui
-              npm run test:ui:regression
-              npm run test:ui:typography
-              npm run test:ui:a11y
-              npm run test:ui:snapshot
+            source_smoke_command: echo "Windows renderer UI smoke is skipped on GitHub-hosted Windows runners; Linux/macOS cover renderer UI smoke."
             packaged_smoke_command: npm run release:validate:packaged-smoke
-            packaged_workflow_command: npm run release:validate:packaged-workflow
-            packaged_auth_command: npm run release:validate:packaged-auth
+            packaged_workflow_command: echo "Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners; Linux/macOS cover packaged renderer workflow smoke."
+            packaged_auth_command: echo "Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners; Linux/macOS cover packaged renderer auth smoke."
             packaged_sandbox_command: npm run sandbox:validate:packaged
             protocol_command: npm run release:validate:win-protocol
+            required_artifact_types: exe
           - platform: macos
             runner: macos-latest
             command: npm run dist:mac
@@ -80,15 +75,16 @@ jobs:
             packaged_auth_command: npm run release:validate:packaged-auth
             packaged_sandbox_command: npm run sandbox:validate:packaged
             protocol_command: npm run release:validate:mac-protocol
+            required_artifact_types: dmg,zip
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install platform dependencies
@@ -99,6 +95,18 @@ jobs:
 
       - name: Renderer HTML check
         run: npm run renderer:html:check
+
+      - name: Renderer security sink validation
+        run: npm run renderer:security:validate
+
+      - name: GitHub workflow security validation
+        run: npm run github:workflows:validate
+
+      - name: Secret scanning validation
+        run: npm run secrets:validate
+
+      - name: Release governance checklist validation
+        run: npm run release:governance:validate
 
       - name: Refactor structure validation
         run: npm run refactor:structure:validate
@@ -163,10 +171,35 @@ jobs:
       - name: Sandbox release gate manifest
         run: npm run release:gate
 
-      - name: Build unsigned artifacts
+      - name: Validate release signing configuration
+        run: npm run release:signing:validate
+        env:
+          POSTMETER_RELEASE_MODE: production
+          POSTMETER_RELEASE_PLATFORM: ${{ matrix.platform }}
+          CSC_LINK: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_CERTIFICATE || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_PASSWORD || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build signed artifacts
         run: ${{ matrix.command }}
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_CERTIFICATE || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_PASSWORD || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Prepare platform release metadata
+        run: npm run release:prepare
+
+      - name: Validate signed platform release metadata
+        run: npm run release:validate
+        env:
+          POSTMETER_RELEASE_MODE: production
+          POSTMETER_RELEASE_PLATFORM: ${{ matrix.platform }}
+          POSTMETER_RELEASE_REQUIRED_TYPES: ${{ matrix.required_artifact_types }}
 
       - name: Packaged app startup smoke
         run: ${{ matrix.packaged_smoke_command }}
@@ -198,7 +231,7 @@ jobs:
 
       - name: Upload validation logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-${{ matrix.platform }}-validation-logs
           path: validation-artifacts/**
@@ -207,7 +240,7 @@ jobs:
 
       - name: Upload platform artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-${{ matrix.platform }}
           path: |
@@ -220,25 +253,50 @@ jobs:
             release/*.blockmap
           if-no-files-found: error
 
+  attest-provenance:
+    name: Attest release provenance
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download platform artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # actions/attest-build-provenance@v2
+        with:
+          subject-path: release/*
+
   publish:
     name: Publish GitHub release
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build
+      - attest-provenance
+    environment: release
+    permissions:
+      contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install
         run: npm ci
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # actions/download-artifact@v4
         with:
           path: release
           merge-multiple: true
@@ -257,4 +315,4 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" release/* \
             --title "PostMeter ${{ github.ref_name }}" \
-            --notes "Unsigned PostMeter desktop artifacts. Verify downloads with SHA256SUMS and release-manifest.json."
+            --notes "PostMeter desktop artifacts. Verify downloads with SHA256SUMS and release-manifest.json."

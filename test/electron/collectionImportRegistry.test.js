@@ -161,6 +161,7 @@ test('collection import and export preserve Postman request settings through reg
     cipherSuiteSelection: 'AES128-SHA'
   });
   assert.equal(importedDefaults.cookieJar.enabled, true);
+  assert.equal(importedDefaults.settings.sslCertificateVerification, 'inherit');
   assert.equal(importedDefaults.settings.httpVersion, 'auto');
   assert.equal(importedDefaults.settings.followRedirects, true);
   assert.equal(importedDefaults.settings.encodeUrlAutomatically, true);
@@ -189,6 +190,6 @@ test('collection import and export preserve Postman request settings through reg
   assert.equal(exportedAll.useServerCipherSuiteDuringHandshake, true);
   assert.deepEqual(exportedAll.disabledTlsProtocols, ['TLSv1', 'TLSv1.1']);
   assert.equal(exportedAll.cipherSuiteSelection, 'AES128-SHA');
-  assert.deepEqual(exportedDefaults, { strictHttpParser: true });
+  assert.deepEqual(exportedDefaults, { strictSSL: true, strictHttpParser: true });
   assert.equal(exportedHttp1.httpVersion, 'http1');
 });

@@ -1,7 +1,6 @@
 const electron = require('electron');
 
 const { contextBridge, ipcRenderer } = electron;
-const webUtils = electron.webUtils || null;
 
 const postmeterApi = {
   app: {
@@ -108,7 +107,7 @@ const postmeterApi = {
     ),
     delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
     duplicate: (workspaceId) => ipcRenderer.invoke('workspace:duplicate', workspaceId),
-    importWorkspace: (filePath) => ipcRenderer.invoke('workspace:import', optionalFilePath(filePath)),
+    importWorkspace: (source) => ipcRenderer.invoke('workspace:import', safeFileImportSource(source)),
     exportWorkspace: (workspace, workspaceId, encryptionKey = '') => ipcRenderer.invoke('workspace:export', workspace, workspaceId, String(encryptionKey || '').slice(0, 1024)),
     onKeyPrompt: (callback) => {
       const listener = (_event, payload) => callback(safeWorkspaceKeyPromptPayload(payload));
@@ -118,11 +117,11 @@ const postmeterApi = {
     resolveKeyPrompt: (promptId, key) => ipcRenderer.invoke('workspace:key-prompt-response', String(promptId || '').slice(0, 128), String(key || '').slice(0, 1024))
   },
   collection: {
-    importCollection: (filePath) => ipcRenderer.invoke('collection:import', optionalFilePath(filePath)),
+    importCollection: (source) => ipcRenderer.invoke('collection:import', safeFileImportSource(source)),
     exportCollection: (collection, format) => ipcRenderer.invoke('collection:export', collection, format)
   },
   environment: {
-    importEnvironment: (filePath) => ipcRenderer.invoke('environment:import', optionalFilePath(filePath)),
+    importEnvironment: (source) => ipcRenderer.invoke('environment:import', safeFileImportSource(source)),
     exportEnvironment: (environment, format) => ipcRenderer.invoke('environment:export', environment, format)
   },
   request: {
@@ -162,13 +161,20 @@ const postmeterApi = {
     export: () => ipcRenderer.invoke('diagnostics:export')
   },
   clipboard: {
-    writeText: (text) => ipcRenderer.invoke('clipboard:writeText', String(text || ''))
+    writeText: (payload) => ipcRenderer.invoke('clipboard:writeText', safeClipboardPayload(payload))
   },
   fileExport: {
     choosePath: (options) => ipcRenderer.invoke('file-export:choosePath', options),
     prepare: (request) => ipcRenderer.invoke('file-export:prepare', request),
     writePrepared: (exportId, filePath) => ipcRenderer.invoke('file-export:writePrepared', exportId, filePath),
     cancelPrepared: (exportId) => ipcRenderer.invoke('file-export:cancelPrepared', exportId)
+  },
+  fileBindings: {
+    choose: (payload) => ipcRenderer.invoke('file-binding:choose', safeFileBindingPayload(payload)),
+    storeContent: (payload) => ipcRenderer.invoke('file-binding:storeContent', safeFileBindingPayload(payload))
+  },
+  localFiles: {
+    storeContent: (payload) => ipcRenderer.invoke('local-file:storeContent', safeLocalFilePayload(payload))
   },
   runner: {
     start: (id, collection, environment, config) => ipcRenderer.invoke('runner:start', id, collection, environment, config),
@@ -177,7 +183,7 @@ const postmeterApi = {
     estimateResultStore: (collection, config) => ipcRenderer.invoke('runner:estimateResultStore', collection, config),
     resultPage: (id, query) => ipcRenderer.invoke('runner:resultPage', id, query),
     resultDetail: (id, resultIndex) => ipcRenderer.invoke('runner:resultDetail', id, resultIndex),
-    importDefinition: (filePath) => ipcRenderer.invoke('runner:importDefinition', optionalFilePath(filePath)),
+    importDefinition: (source) => ipcRenderer.invoke('runner:importDefinition', safeFileImportSource(source)),
     exportDefinition: (runner, format) => ipcRenderer.invoke('runner:exportDefinition', runner, format),
     onProgress: (callback) => {
       const listener = (_event, payload) => callback(payload);
@@ -190,7 +196,7 @@ const postmeterApi = {
     cancel: (id) => ipcRenderer.invoke('performance:cancel', id),
     calibrate: (id) => ipcRenderer.invoke('performance:calibrate', id),
     cancelCalibration: (id) => ipcRenderer.invoke('performance:calibrate:cancel', id),
-    importTest: (filePath) => ipcRenderer.invoke('performance:import', optionalFilePath(filePath)),
+    importTest: (source) => ipcRenderer.invoke('performance:import', safeFileImportSource(source)),
     exportTest: (performanceTest, format) => ipcRenderer.invoke('performance:export', performanceTest, format),
     exportResult: (result, format, htmlReportOptions) => ipcRenderer.invoke('performance:exportResult', result, format, htmlReportOptions),
     estimateResultStore: (performanceTest) => ipcRenderer.invoke('performance:estimateResultStore', performanceTest),
@@ -202,9 +208,6 @@ const postmeterApi = {
       return () => ipcRenderer.removeListener('performance:progress', listener);
     }
   },
-  files: {
-    pathForFile: (file) => localPathForFile(file)
-  }
 };
 
 if (process.isMainFrame === true) {
@@ -282,36 +285,65 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function optionalFilePath(value) {
-  return typeof value === 'string' ? value : undefined;
+function safeFileImportSource(source) {
+  if (typeof source === 'string') {
+    return undefined;
+  }
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return undefined;
+  }
+  return {
+    fileName: stringField(source.fileName || source.name, 256),
+    text: typeof source.text === 'string' ? stringField(source.text, 10 * 1024 * 1024 + 1) : undefined
+  };
 }
 
 function safeRequestImportSource(source) {
   if (typeof source === 'string') {
-    return { filePath: source };
+    return {};
   }
   if (!source || typeof source !== 'object') {
     return {};
   }
   return {
-    filePath: typeof source.filePath === 'string' ? source.filePath : undefined,
     text: typeof source.text === 'string' ? source.text : undefined
   };
 }
 
-function localPathForFile(file) {
-  if (!file) {
-    return '';
+function safeClipboardPayload(payload) {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return {
+      text: stringField(payload.text, 64 * 1024 + 1),
+      reason: stringField(payload.reason, 128),
+      contentKind: stringField(payload.contentKind, 64)
+    };
   }
-  try {
-    const filePath = typeof webUtils?.getPathForFile === 'function'
-      ? webUtils.getPathForFile(file)
-      : '';
-    if (typeof filePath === 'string' && filePath) {
-      return filePath;
-    }
-  } catch {
-    return '';
-  }
-  return typeof file.path === 'string' ? file.path : '';
+  return {
+    text: stringField(payload, 64 * 1024 + 1),
+    reason: '',
+    contentKind: ''
+  };
+}
+
+function safeFileBindingPayload(payload = {}) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  return {
+    source: stringField(source.source || source.src, 32768),
+    key: stringField(source.key, 512),
+    mode: stringField(source.mode, 64),
+    contentType: stringField(source.contentType, 32768),
+    fileName: stringField(source.fileName || source.name, 256),
+    contentBase64: stringField(source.contentBase64, 14 * 1024 * 1024)
+  };
+}
+
+function safeLocalFilePayload(payload = {}) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  return {
+    contentBase64: stringField(source.contentBase64, 14 * 1024 * 1024),
+    contentKind: stringField(source.contentKind, 64),
+    contentType: stringField(source.contentType, 32768),
+    fileName: stringField(source.fileName || source.name, 256),
+    purpose: stringField(source.purpose, 64)
+  };
 }

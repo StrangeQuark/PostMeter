@@ -167,7 +167,8 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
       cookieJar: state.cookies,
       clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
       fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
-      tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {}
+      tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
+      networkPolicy: options.networkPolicy || options.scriptOptions?.networkPolicy
     }
   );
   if (Array.isArray(response.updatedCookies)) {
@@ -294,7 +295,8 @@ async function runGrpcRequestLifecycle(state, options = {}) {
       grpcProtoBaseDir: options.grpcProtoBaseDir || options.scriptOptions?.grpcProtoBaseDir,
       grpcProtoIncludeDirs: options.grpcProtoIncludeDirs || options.scriptOptions?.grpcProtoIncludeDirs || [],
       grpcTransportEnvironment,
-      grpcTransportConfig
+      grpcTransportConfig,
+      networkPolicy: options.networkPolicy
     });
     response = normalizeGrpcResponse(invoked);
   } catch (error) {
@@ -401,6 +403,7 @@ function scriptOptionsForLifecycle(options = {}, overrides = {}) {
     sandboxPackages: options.scriptOptions?.sandboxPackages || options.sandboxPackages || [],
     clientCertificates: options.scriptOptions?.clientCertificates || options.clientCertificates || [],
     tlsSettings: options.scriptOptions?.tlsSettings || options.tlsSettings || {},
+    networkPolicy: options.scriptOptions?.networkPolicy || options.networkPolicy,
     sendRequest: options.scriptOptions?.sendRequest || send,
     signal: options.signal,
     trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},

@@ -71,6 +71,13 @@
       "tokenCount": 1
     },
     {
+      "id": "learning:docs-collections-running-collections-run-collection-with-simulation",
+      "kind": "postman-learning-doc",
+      "title": "Run Collection With Simulation",
+      "url": "https://learning.postman.com/docs/collections/running-collections/run-collection-with-simulation",
+      "tokenCount": 0
+    },
+    {
       "id": "learning:docs-collections-running-collections-running-collections-overview",
       "kind": "postman-learning-doc",
       "title": "Running Collections Overview",
@@ -103,104 +110,6 @@
       "kind": "postman-learning-doc",
       "title": "Working With Data Files",
       "url": "https://learning.postman.com/docs/collections/running-collections/working-with-data-files",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-command-line-integration-with-newman",
-      "kind": "postman-learning-doc",
-      "title": "Command Line Integration With Newman",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/command-line-integration-with-newman",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-continuous-integration",
-      "kind": "postman-learning-doc",
-      "title": "Continuous Integration",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/continuous-integration",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-installing-running-newman",
-      "kind": "postman-learning-doc",
-      "title": "Installing Running Newman",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/installing-running-newman",
-      "tokenCount": 2
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-integration-with-jenkins",
-      "kind": "postman-learning-doc",
-      "title": "Integration With Jenkins",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/integration-with-jenkins",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-integration-with-travis",
-      "kind": "postman-learning-doc",
-      "title": "Integration With Travis",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/integration-with-travis",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-newman-built-in-reporters",
-      "kind": "postman-learning-doc",
-      "title": "Newman Built In Reporters",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/newman-built-in-reporters",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-newman-custom-reporters",
-      "kind": "postman-learning-doc",
-      "title": "Newman Custom Reporters",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/newman-custom-reporters",
-      "tokenCount": 1
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-newman-file-uploads",
-      "kind": "postman-learning-doc",
-      "title": "Newman File Uploads",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/newman-file-uploads",
-      "tokenCount": 4
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-newman-options",
-      "kind": "postman-learning-doc",
-      "title": "Newman Options",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/newman-options",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-collections-using-newman-cli-newman-with-docker",
-      "kind": "postman-learning-doc",
-      "title": "Newman With Docker",
-      "url": "https://learning.postman.com/docs/collections/using-newman-cli/newman-with-docker",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-developer-vs-code-extension-tests-and-scripts-collection-runner",
-      "kind": "postman-learning-doc",
-      "title": "Collection Runner",
-      "url": "https://learning.postman.com/docs/developer/vs-code-extension/tests-and-scripts/collection-runner",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-developer-vs-code-extension-tests-and-scripts-overview",
-      "kind": "postman-learning-doc",
-      "title": "Overview",
-      "url": "https://learning.postman.com/docs/developer/vs-code-extension/tests-and-scripts/overview",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-developer-vs-code-extension-tests-and-scripts-packages",
-      "kind": "postman-learning-doc",
-      "title": "Packages",
-      "url": "https://learning.postman.com/docs/developer/vs-code-extension/tests-and-scripts/packages",
-      "tokenCount": 0
-    },
-    {
-      "id": "learning:docs-developer-vs-code-extension-tests-and-scripts-test",
-      "kind": "postman-learning-doc",
-      "title": "Test",
-      "url": "https://learning.postman.com/docs/developer/vs-code-extension/tests-and-scripts/test",
       "tokenCount": 0
     },
     {
@@ -673,6 +582,41 @@
       "tokenCount": 0
     },
     {
+      "id": "learning:docs-tests-and-scripts-datasets-create-datasets",
+      "kind": "postman-learning-doc",
+      "title": "Create Datasets",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/datasets/create-datasets",
+      "tokenCount": 0
+    },
+    {
+      "id": "learning:docs-tests-and-scripts-datasets-example-dataset-views",
+      "kind": "postman-learning-doc",
+      "title": "Example Dataset Views",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/datasets/example-dataset-views",
+      "tokenCount": 0
+    },
+    {
+      "id": "learning:docs-tests-and-scripts-datasets-manage-datasets",
+      "kind": "postman-learning-doc",
+      "title": "Manage Datasets",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/datasets/manage-datasets",
+      "tokenCount": 0
+    },
+    {
+      "id": "learning:docs-tests-and-scripts-datasets-overview",
+      "kind": "postman-learning-doc",
+      "title": "Overview",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/datasets/overview",
+      "tokenCount": 0
+    },
+    {
+      "id": "learning:docs-tests-and-scripts-datasets-use-datasets",
+      "kind": "postman-learning-doc",
+      "title": "Use Datasets",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/datasets/use-datasets",
+      "tokenCount": 6
+    },
+    {
       "id": "learning:docs-tests-and-scripts-run-tests-run-tests",
       "kind": "postman-learning-doc",
       "title": "Run Tests",
@@ -743,6 +687,27 @@
       "tokenCount": 0
     },
     {
+      "id": "learning:docs-tests-and-scripts-test-applications-application-testing-faqs",
+      "kind": "postman-learning-doc",
+      "title": "Application Testing Faqs",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/test-applications/application-testing-faqs",
+      "tokenCount": 0
+    },
+    {
+      "id": "learning:docs-tests-and-scripts-test-applications-overview",
+      "kind": "postman-learning-doc",
+      "title": "Overview",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/test-applications/overview",
+      "tokenCount": 1
+    },
+    {
+      "id": "learning:docs-tests-and-scripts-test-applications-test",
+      "kind": "postman-learning-doc",
+      "title": "Test",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/test-applications/test",
+      "tokenCount": 0
+    },
+    {
       "id": "learning:docs-tests-and-scripts-tests-and-scripts",
       "kind": "postman-learning-doc",
       "title": "Tests And Scripts",
@@ -782,7 +747,7 @@
       "kind": "postman-learning-doc",
       "title": "Overview",
       "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/overview",
-      "tokenCount": 14
+      "tokenCount": 15
     },
     {
       "id": "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-cookies",
@@ -790,6 +755,13 @@
       "title": "Pm Cookies",
       "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-cookies",
       "tokenCount": 11
+    },
+    {
+      "id": "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-datasets",
+      "kind": "postman-learning-doc",
+      "title": "Pm Datasets",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-datasets",
+      "tokenCount": 1
     },
     {
       "id": "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-execution",
@@ -1032,16 +1004,16 @@
   ],
   "summary": {
     "coveredRowCount": 165,
-    "sourceCount": 140,
-    "tokenCount": 431,
+    "sourceCount": 136,
+    "tokenCount": 432,
     "unmatched": [],
     "byCoverage": {
-      "matrix-row": 429,
-      "excluded": 2
+      "matrix-row": 431,
+      "excluded": 1
     },
     "byKind": {
       "newman-version": 1,
-      "pm-api": 145,
+      "pm-api": 146,
       "require": 12,
       "require-api": 1,
       "sdk-reference": 272
@@ -1343,6 +1315,21 @@
       }
     },
     {
+      "id": "pm-datasets",
+      "kind": "pm-api",
+      "sourceRefs": [
+        "learning:docs-tests-and-scripts-datasets-use-datasets",
+        "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-overview",
+        "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-datasets"
+      ],
+      "token": "pm.datasets",
+      "coverage": {
+        "type": "excluded",
+        "rowIds": [],
+        "reason": "Postman datasets are a newly documented data-source management surface outside the current imported script parity contract; PostMeter continues to cover run data through pm.iterationData."
+      }
+    },
+    {
       "id": "pm-environment",
       "kind": "pm-api",
       "sourceRefs": [
@@ -1590,7 +1577,7 @@
       "id": "pm-expect",
       "kind": "pm-api",
       "sourceRefs": [
-        "learning:docs-collections-using-newman-cli-newman-file-uploads",
+        "learning:docs-tests-and-scripts-datasets-use-datasets",
         "learning:docs-tests-and-scripts-run-tests-test-with-monitors",
         "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-overview",
         "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-send-request",
@@ -2235,7 +2222,6 @@
         "type": "matrix-row",
         "rowIds": [
           "require.pm.jsr-package",
-          "require.pm.latest-package",
           "require.pm.jsr-esm-module-semantics"
         ],
         "reason": "Postman package import token maps to the reviewed package workflow rows."
@@ -2403,7 +2389,7 @@
       "id": "pm-response-json",
       "kind": "pm-api",
       "sourceRefs": [
-        "learning:docs-collections-using-newman-cli-newman-file-uploads",
+        "learning:docs-tests-and-scripts-datasets-use-datasets",
         "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-response",
         "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-test-expect",
         "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-visualizer",
@@ -2866,7 +2852,6 @@
       "id": "pm-response-to-have-status",
       "kind": "pm-api",
       "sourceRefs": [
-        "learning:docs-collections-using-newman-cli-newman-file-uploads",
         "learning:docs-tests-and-scripts-run-tests-test-with-monitors",
         "learning:docs-tests-and-scripts-write-scripts-packages-package-library",
         "learning:docs-tests-and-scripts-write-scripts-test-examples",
@@ -3174,8 +3159,9 @@
       "id": "pm-test",
       "kind": "pm-api",
       "sourceRefs": [
-        "learning:docs-collections-using-newman-cli-newman-file-uploads",
+        "learning:docs-tests-and-scripts-datasets-use-datasets",
         "learning:docs-tests-and-scripts-run-tests-test-with-monitors",
+        "learning:docs-tests-and-scripts-test-applications-overview",
         "learning:docs-tests-and-scripts-write-scripts-packages-package-library",
         "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-overview",
         "learning:docs-tests-and-scripts-write-scripts-postman-sandbox-reference-pm-response",
@@ -3467,6 +3453,21 @@
       }
     },
     {
+      "id": "require-http",
+      "kind": "require",
+      "sourceRefs": [
+        "learning:docs-tests-and-scripts-datasets-use-datasets"
+      ],
+      "token": "require('http')",
+      "coverage": {
+        "type": "matrix-row",
+        "rowIds": [
+          "require.builtin.full-library-parity"
+        ],
+        "reason": "Built-in require token maps to the pinned Postman sandbox bundled library rows."
+      }
+    },
+    {
       "id": "require-modulename",
       "kind": "require-api",
       "sourceRefs": [
@@ -3479,20 +3480,6 @@
           "require.builtin.full-library-parity"
         ],
         "reason": "Exact documented token maps to an explicit parity row."
-      }
-    },
-    {
-      "id": "require-newman",
-      "kind": "require",
-      "sourceRefs": [
-        "learning:docs-collections-using-newman-cli-installing-running-newman",
-        "learning:docs-collections-using-newman-cli-newman-custom-reporters"
-      ],
-      "token": "require('newman')",
-      "coverage": {
-        "type": "excluded",
-        "rowIds": [],
-        "reason": "The Newman Node.js library is a host runner API, not an imported Postman sandbox script API."
       }
     },
     {
@@ -3512,16 +3499,18 @@
       }
     },
     {
-      "id": "require-sample-collection-json",
+      "id": "require-url",
       "kind": "require",
       "sourceRefs": [
-        "learning:docs-collections-using-newman-cli-installing-running-newman"
+        "learning:docs-tests-and-scripts-datasets-use-datasets"
       ],
-      "token": "require('./sample-collection.json')",
+      "token": "require('url')",
       "coverage": {
-        "type": "excluded",
-        "rowIds": [],
-        "reason": "Host-side Newman example code can require local files, but imported Postman sandbox scripts cannot require local filesystem paths."
+        "type": "matrix-row",
+        "rowIds": [
+          "require.builtin.full-library-parity"
+        ],
+        "reason": "Built-in require token maps to the pinned Postman sandbox bundled library rows."
       }
     },
     {

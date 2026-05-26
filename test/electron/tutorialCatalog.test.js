@@ -41,6 +41,19 @@ test('workspace tutorial covers encrypted workspace workflow', () => {
   ]);
 });
 
+test('settings tutorials start with coach-only navigation steps', () => {
+  const tutorials = createTutorials(new Proxy({}, { get: () => () => {} }));
+  for (const tutorialId of ['local-secrets-and-files', 'ssl-certificates']) {
+    const tutorial = tutorials.find((item) => item.id === tutorialId);
+    assert.ok(tutorial, `Expected ${tutorialId} tutorial to exist.`);
+    const firstStep = tutorial.steps[0];
+    assert.equal(firstStep.title, 'Navigate to Settings');
+    assert.equal(firstStep.selector, undefined);
+    assert.equal(typeof firstStep.beforeStep, 'function');
+    assert.equal(firstStep.coachPlacement, 'top-left');
+  }
+});
+
 test('tutorial catalog has unique IDs and selectors that resolve to renderer targets', () => {
   const rendererHtml = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'renderer', 'index.html'), 'utf8');
   const rendererIds = new Set([...rendererHtml.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
@@ -57,9 +70,16 @@ test('tutorial catalog has unique IDs and selectors that resolve to renderer tar
     assert.ok(Array.isArray(tutorial.steps) && tutorial.steps.length > 0, `${tutorial.id} needs steps`);
 
     for (const step of tutorial.steps) {
-      assert.ok(step.selector, `${tutorial.id} step "${step.title}" needs a selector`);
       assert.ok(step.title, `${tutorial.id} has an untitled step`);
       assert.ok(step.body, `${tutorial.id} step "${step.title}" needs body text`);
+      if (!step.selector) {
+        assert.equal(
+          step.coachPlacement,
+          'top-left',
+          `${tutorial.id} step "${step.title}" without a selector should pin the coach to the top left`
+        );
+        continue;
+      }
       const ids = [...String(step.selector).matchAll(/#([A-Za-z][\w-]*)/g)].map((match) => match[1]);
       for (const id of ids) {
         if (DYNAMIC_TUTORIAL_IDS.has(id)) {

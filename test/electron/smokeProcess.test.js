@@ -1,6 +1,19 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
-const { appendBoundedText, redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
+const {
+  appendBoundedText,
+  isLinuxElectronSmokeTimeout,
+  isRetryableElectronSmokeFailure,
+  isWindowsElectronGpuProcessFailure,
+  redactSmokeOutputText,
+  sanitizeElectronSmokeEnv,
+  spawnWithRetries,
+  spawnWithTimeout,
+  withWindowsElectronGpuWorkaroundArgs
+} = require('../../scripts/smokeProcess');
 const {
   defaultValidationTimeoutMillis: defaultPackagedSandboxTimeoutMillis,
   packagedAppResourcePath,
@@ -52,6 +65,102 @@ test('smoke process helper rejects spawn errors', async () => {
     () => spawnWithTimeout('__postmeter_missing_smoke_command__', [], { timeoutMillis: 1000 }),
     /ENOENT/
   );
+});
+
+test('smoke process retry helper retries only matching child failures', async () => {
+  const markerPath = path.join(os.tmpdir(), `postmeter-smoke-retry-${process.pid}-${Date.now()}`);
+  try {
+    const result = await spawnWithRetries(process.execPath, [
+      '-e',
+      [
+        "const fs = require('node:fs');",
+        `const markerPath = ${JSON.stringify(markerPath)};`,
+        "if (!fs.existsSync(markerPath)) { fs.writeFileSync(markerPath, '1'); console.error('GPU process isn\\'t usable. Goodbye.'); process.exit(1); }",
+        "process.stdout.write('retry-ok');"
+      ].join(' ')
+    ], {
+      maxAttempts: 2,
+      retryDelayMillis: 1,
+      retryWhen: (attempt) => isWindowsElectronGpuProcessFailure(attempt, 'win32'),
+      timeoutMillis: 1000
+    });
+
+    assert.equal(result.code, 0);
+    assert.equal(result.attempts.length, 2);
+    assert.match(result.stderr, /\[attempt 1 stderr\]\nGPU process isn't usable\. Goodbye\./);
+    assert.match(result.stdout, /\[attempt 2 stdout\]\nretry-ok/);
+  } finally {
+    await fs.rm(markerPath, { force: true });
+  }
+});
+
+test('smoke process helper detects Windows Electron GPU process failures', () => {
+  assert.equal(isWindowsElectronGpuProcessFailure({
+    code: 2147483651,
+    stderr: 'GPU process exited unexpectedly: exit_code=-2147483645\nGPU process isn\'t usable. Goodbye.'
+  }, 'win32'), true);
+  assert.equal(isWindowsElectronGpuProcessFailure({
+    code: 1,
+    stderr: 'ordinary validation failure'
+  }, 'win32'), false);
+  assert.equal(isWindowsElectronGpuProcessFailure({
+    code: 2147483651,
+    stderr: 'GPU process isn\'t usable. Goodbye.'
+  }, 'linux'), false);
+  assert.equal(isRetryableElectronSmokeFailure({
+    code: 2147483651,
+    stderr: 'GPU process isn\'t usable. Goodbye.'
+  }, 'win32'), true);
+});
+
+test('smoke process helper detects retryable Linux Electron DBus startup timeouts', () => {
+  assert.equal(isLinuxElectronSmokeTimeout({
+    code: 124,
+    timedOut: true,
+    stderr: 'Failed to connect to the bus: Could not parse server address'
+  }, 'linux'), true);
+  assert.equal(isLinuxElectronSmokeTimeout({
+    code: 124,
+    timedOut: true,
+    stderr: 'Electron smoke child timed out'
+  }, 'linux'), true);
+  assert.equal(isLinuxElectronSmokeTimeout({
+    code: 1,
+    timedOut: false,
+    stderr: 'Failed to connect to the bus: Could not parse server address'
+  }, 'linux'), false);
+  assert.equal(isRetryableElectronSmokeFailure({
+    code: 124,
+    timedOut: true,
+    stderr: 'Failed to connect to the bus: Could not parse server address'
+  }, 'linux'), true);
+});
+
+test('smoke process helper adds Windows GPU workaround args without disabling software rasterization', () => {
+  assert.deepEqual(withWindowsElectronGpuWorkaroundArgs(['.'], 'linux'), ['.']);
+  const args = withWindowsElectronGpuWorkaroundArgs(['--disable-gpu', '.'], 'win32');
+
+  assert.equal(args.filter((value) => value === '--disable-gpu').length, 1);
+  assert.ok(args.includes('--disable-gpu-compositing'));
+  assert.ok(args.includes('--use-angle=swiftshader'));
+  assert.ok(args.includes('--use-gl=swiftshader'));
+  assert.ok(args.includes('--enable-unsafe-swiftshader'));
+  assert.equal(args.includes('--disable-software-rasterizer'), false);
+  assert.equal(args.at(-1), '.');
+});
+
+test('smoke process helper removes invalid Linux DBus addresses from smoke env', () => {
+  assert.deepEqual(sanitizeElectronSmokeEnv({
+    DBUS_SESSION_BUS_ADDRESS: 'disabled:',
+    PATH: '/bin'
+  }, 'linux'), {
+    PATH: '/bin'
+  });
+  assert.deepEqual(sanitizeElectronSmokeEnv({
+    DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus'
+  }, 'linux'), {
+    DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus'
+  });
 });
 
 test('smoke process helper bounds stdout and stderr capture', async () => {
@@ -110,6 +219,7 @@ test('smoke output redactor removes local paths and common secret values', () =>
     'X-Amz-Credential=aws-query-credential x-amz-credential=aws-lower-credential xAmzCredential=aws-camel-credential X-Amz-Signature=aws-query-signature X-Amz-Security-Token=aws-security-token',
     'https://example.test/path?visible=1&X-Amz-Credential=aws-url-credential&X-Amz-Signature=aws-url-signature&X-Amz-Security-Token=aws-url-security-token',
     'https://user:password@example.test/callback?access_token=url-token&visible=1',
+    // postmeter-secret-allow: synthetic private-key marker verifies smoke output redaction.
     '-----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
     'C:\\Users\\alice\\oauth.json Digest realm="digest-private-realm", nonce="digest-secret-nonce", response="digest-secret-response"',
     'client-secret=hyphen client secret next=ok',

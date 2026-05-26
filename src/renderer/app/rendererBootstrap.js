@@ -278,6 +278,8 @@
     bindClick(doc, 'openCookiesButton', options.onOpenCookies);
     bindClick(doc, 'openRequestCookiesButton', options.onOpenCookies);
     bindClick(doc, 'openPerformanceCookiesButton', options.onOpenCookies);
+    bindClick(doc, 'openRequestCertificatesSettingsButton', options.onOpenCertificatesSettings);
+    bindClick(doc, 'openPerformanceCertificatesSettingsButton', options.onOpenCertificatesSettings);
     bindClick(doc, 'cookiesAddDomainButton', options.onAddCookieDomain);
     bindKey(doc, 'cookiesDomainInput', options.onAddCookieDomain, ['Enter']);
     bindClick(doc, 'clearExpiredWorkspaceCookiesButton', options.onClearExpiredWorkspaceCookies);
@@ -579,6 +581,9 @@
     bindClick(doc, 'chooseClientCertificateCertPathButton', options.onChooseClientCertificateCertPath);
     bindClick(doc, 'chooseClientCertificateKeyPathButton', options.onChooseClientCertificateKeyPath);
     bindClick(doc, 'chooseClientCertificatePfxPathButton', options.onChooseClientCertificatePfxPath);
+    bindClick(doc, 'clearClientCertificateCertPathButton', options.onClearClientCertificateCertPath);
+    bindClick(doc, 'clearClientCertificateKeyPathButton', options.onClearClientCertificateKeyPath);
+    bindClick(doc, 'clearClientCertificatePfxPathButton', options.onClearClientCertificatePfxPath);
     bindClick(doc, 'toggleClientCertificatePassphraseButton', options.onToggleClientCertificatePassphraseVisibility);
     bindChange(doc, 'clientCertificateFormatSelect', options.onClientCertificateFormatChange);
     bindClick(doc, 'closeCsvVariablesModalButton', () => options.onResolveActiveModal?.(null));

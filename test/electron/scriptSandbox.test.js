@@ -328,6 +328,9 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
     environment: { id: 'env', name: 'Env', variables: [] }
   }, {
     ...unavailableBackendOptions,
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    },
     timeoutMillis: 500,
     workerTimeoutMillis: scriptWorkerTestTimeoutMillis(1000)
   });
@@ -336,6 +339,11 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
   assert.match(execution.result.error, /OS-level script sandboxing is required/);
   assert.equal(execution.result.commitSideEffects, false);
   assert.equal(execution.environmentVariables.find((item) => item.key === 'shouldNotCommit'), undefined);
+  assert.ok(events.some((event) => (
+    event.type === 'sandbox.script-execution.denied'
+      && event.outcome === 'denied'
+      && event.failureCode === 'script_execution_sandbox_unavailable'
+  )));
 });
 
 test('builds Windows AppContainer helper launches with private temp and explicit allowlists', async () => {

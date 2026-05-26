@@ -163,6 +163,7 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
       transport: launch.transport || ''
     });
   } catch (error) {
+    recordScriptExecutionDenied(options, error);
     return Promise.resolve(failedExecution(error, context));
   }
 
@@ -304,6 +305,22 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
       transport: launch.transport || ''
     });
   });
+}
+
+function recordScriptExecutionDenied(options = {}, error) {
+  const recordDiagnosticEvent = options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent;
+  if (typeof recordDiagnosticEvent !== 'function') {
+    return;
+  }
+  Promise.resolve(recordDiagnosticEvent({
+    type: 'sandbox.script-execution.denied',
+    level: 'error',
+    outcome: 'denied',
+    failureCode: 'script_execution_sandbox_unavailable',
+    fields: {
+      error: error?.message || String(error || 'OS sandbox unavailable')
+    }
+  })).catch(() => {});
 }
 
 function scriptWorkerProgressReporter(options = {}) {
@@ -895,6 +912,7 @@ async function runBrokeredSendRequest(state, payload) {
     cookieJar: request.cookieJar.enabled ? state.cookies : [],
     clientCertificates,
     fileBindings: state.options.fileBindings || [],
+    networkPolicy: state.options.networkPolicy,
     signal: state.options.signal,
     tlsSettings: state.options.tlsSettings || {},
     timeoutMillis: request.timeoutMillis

@@ -3,11 +3,13 @@ const {
   scriptPackageBundleIntegrity,
   scriptPackageIntegrity
 } = require('./sandboxPackageCache');
+const { assertPublicHttpsUrl } = require('../security/networkPolicy');
 
-const REVIEWED_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@\d[\w.+-]*)?|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+(?:@\d[\w.+-]*)?|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const EXACT_VERSION_SOURCE = String.raw`(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
+const REVIEWED_PACKAGE_SPECIFIER_PATTERN = new RegExp(String.raw`^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)@${EXACT_VERSION_SOURCE}|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+@${EXACT_VERSION_SOURCE}|@[a-z0-9._-]+\/[a-z0-9._-]+)$`, 'i');
 const TEAM_PACKAGE_PATTERN = /^@[a-z0-9._-]+\/[a-z0-9._-]+$/i;
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)$/i;
-const VERSION_PATTERN = /^\d[\w.+-]*$/;
+const VERSION_PATTERN = new RegExp(`^${EXACT_VERSION_SOURCE}$`);
 const MAX_PACKAGE_SOURCE_BYTES = 128 * 1024;
 const MAX_PACKAGE_FETCH_BYTES = 50 * 1024 * 1024;
 const MAX_REGISTRY_METADATA_BYTES = 2 * 1024 * 1024;
@@ -56,7 +58,7 @@ async function fetchSandboxPackageForReview(specifier, options = {}) {
 function parseSandboxPackageSpecifier(specifier) {
   const value = String(specifier || '').trim();
   if (!REVIEWED_PACKAGE_SPECIFIER_PATTERN.test(value)) {
-    throw new Error('Package fetch requires @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].');
+    throw new Error('Package fetch requires @team/package, npm:package@version, npm:@scope/package@version, or jsr:@scope/package@version. npm and JSR package versions must be exact.');
   }
   if (TEAM_PACKAGE_PATTERN.test(value)) {
     return {
@@ -100,7 +102,7 @@ async function fetchNpmPackageForReview(parsed, options = {}) {
     headers: { accept: 'application/json' },
     maxBytes: MAX_REGISTRY_METADATA_BYTES
   }), `npm package metadata for ${parsed.packageName}`);
-  const resolvedVersion = parsed.version || resolveLatestPackageVersion(metadata?.['dist-tags']?.latest, `npm package ${parsed.packageName}`);
+  const resolvedVersion = parsed.version;
   const resolved = { ...parsed, version: resolvedVersion };
   const versionInfo = metadata?.versions?.[resolved.version];
   if (!versionInfo) {
@@ -133,7 +135,7 @@ async function fetchNpmPackageForReview(parsed, options = {}) {
 
 async function fetchJsrPackageForReview(parsed, options = {}) {
   const [scope, name] = splitScopedPackageName(parsed.packageName);
-  const resolvedVersion = parsed.version || await fetchLatestJsrPackageVersion(scope, name, parsed, options);
+  const resolvedVersion = parsed.version;
   const resolved = { ...parsed, version: resolvedVersion };
   const metadataUrl = `https://jsr.io/@${encodeURIComponent(scope)}/${encodeURIComponent(name)}/${encodeURIComponent(resolved.version)}_meta.json`;
   const metadata = parseJson(await fetchText(metadataUrl, {
@@ -166,25 +168,6 @@ async function fetchJsrPackageForReview(parsed, options = {}) {
     source,
     sourceUrl
   });
-}
-
-async function fetchLatestJsrPackageVersion(scope, name, parsed, options = {}) {
-  const metadataUrl = `https://jsr.io/@${encodeURIComponent(scope)}/${encodeURIComponent(name)}/meta.json`;
-  const metadata = parseJson(await fetchText(metadataUrl, {
-    ...options,
-    allowedUrl: isJsrRegistryUrl,
-    headers: { accept: 'application/json' },
-    maxBytes: MAX_REGISTRY_METADATA_BYTES
-  }), `JSR package metadata for ${parsed.packageName}`);
-  return resolveLatestPackageVersion(metadata?.latest, `JSR package ${parsed.packageName}`);
-}
-
-function resolveLatestPackageVersion(version, label) {
-  const value = String(version || '').trim();
-  if (!VERSION_PATTERN.test(value)) {
-    throw new Error(`${label} does not expose a supported latest version.`);
-  }
-  return value;
 }
 
 async function fetchTeamPackageForReview(parsed, options = {}) {
@@ -587,7 +570,7 @@ async function fetchBytes(url, options = {}) {
   const allowedUrl = typeof options.allowedUrl === 'function' ? options.allowedUrl : isSafeUserProvidedPackageUrl;
   let nextUrl = new URL(String(url || ''));
   for (let redirectCount = 0; redirectCount <= REDIRECT_LIMIT; redirectCount += 1) {
-    assertAllowedFetchUrl(nextUrl, allowedUrl);
+    await assertAllowedFetchUrl(nextUrl, allowedUrl, options);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Number(options.timeoutMillis || FETCH_TIMEOUT_MILLIS));
     let response;
@@ -612,7 +595,7 @@ async function fetchBytes(url, options = {}) {
       throw new Error(`Package fetch failed with HTTP ${response.status}.`);
     }
     if (response.url) {
-      assertAllowedFetchUrl(new URL(response.url), allowedUrl);
+      await assertAllowedFetchUrl(new URL(response.url), allowedUrl, options);
     }
     return readResponseBytes(response, maxBytes);
   }
@@ -650,9 +633,16 @@ async function readResponseBytes(response, maxBytes) {
   return buffer;
 }
 
-function assertAllowedFetchUrl(url, allowedUrl) {
+async function assertAllowedFetchUrl(url, allowedUrl, options = {}) {
   if (url.protocol !== 'https:') {
     throw new Error('Package fetch only allows HTTPS URLs.');
+  }
+  if (allowedUrl === isSafeUserProvidedPackageUrl) {
+    await assertPublicHttpsUrl(url, {
+      allowedHosts: options.allowedTeamPackageHosts || options.allowedHosts,
+      resolveHost: options.resolveHost
+    });
+    return;
   }
   if (!allowedUrl(url)) {
     throw new Error(`Package fetch URL is not allowed: ${url.hostname}`);

@@ -81,6 +81,10 @@ function setRequestTlsSettingsFromInput(request, inputId) {
   if (verification) {
     verification.dataset.verificationValue = request.settings.sslCertificateVerification;
   }
+  const inheritActions = $(ids.sslCertificateVerificationInheritActions);
+  if (inheritActions) {
+    inheritActions.hidden = request.settings.sslCertificateVerification !== 'inherit';
+  }
 }
 
 function requestTlsSettingsFromInputs(existingSettings = {}, inputId = '') {
@@ -88,11 +92,11 @@ function requestTlsSettingsFromInputs(existingSettings = {}, inputId = '') {
   const scope = requestSettingsScopeFromInputId(inputId);
   const ids = requestSettingsControlIds(scope);
   const verification = $(ids.sslCertificateVerification);
-  const sslChanged = inputId === ids.sslCertificateVerification;
+  const verificationValue = verification?.value
+    || verification?.dataset?.verificationValue
+    || existing.sslCertificateVerification;
   const sslCertificateVerification = verification
-    ? (sslChanged
-      ? (verification.checked === true ? 'enabled' : 'disabled')
-      : normalizeRendererRequestSslVerification(verification.dataset.verificationValue || existing.sslCertificateVerification))
+    ? normalizeRendererRequestSslVerification(verificationValue)
     : existing.sslCertificateVerification;
   return {
     sslCertificateVerification,

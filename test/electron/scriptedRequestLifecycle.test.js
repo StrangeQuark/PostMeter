@@ -149,6 +149,45 @@ test('uses collection auth and scripts only when the request does not define the
   assert.equal(result.testScriptResult.tests[0].name, 'request test');
 });
 
+test('scripted request lifecycle passes network safe-mode policy to primary requests and pm.sendRequest broker', async () => {
+  const networkPolicy = { enabled: true, marker: 'policy' };
+  const sendOptions = [];
+  const scriptOptionsSeen = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'network-policy',
+      name: 'Network Policy',
+      method: 'GET',
+      url: 'https://api.example.test/policy',
+      scripts: { preRequest: 'pre', tests: '' }
+    }, { id: 'env', name: 'Env', variables: [] }),
+    {
+      networkPolicy,
+      scriptRunner: async (script, _context, options = {}) => {
+        scriptOptionsSeen.push(options.networkPolicy);
+        if (script === 'pre') {
+          await options.sendRequest({ method: 'GET', url: 'https://api.example.test/script', headers: [], queryParams: [], bodyType: 'NONE', body: '' }, null, {});
+        }
+        return {
+          result: emptyScriptResult(),
+          environmentVariables: [],
+          collectionVariables: [],
+          globals: [],
+          localVariables: []
+        };
+      },
+      sendRequest: async (_request, _environment, options = {}) => {
+        sendOptions.push(options);
+        return response(200, 'ok');
+      }
+    }
+  );
+  assert.equal(result.response.statusCode, 200);
+  assert.equal(scriptOptionsSeen[0], networkPolicy);
+  assert.equal(sendOptions.length, 2);
+  assert.ok(sendOptions.some((options) => options.networkPolicy === networkPolicy));
+});
+
 test('uses folder auth and scripts ahead of collection defaults when request fields are empty', async () => {
   const scripts = [];
   const sends = [];

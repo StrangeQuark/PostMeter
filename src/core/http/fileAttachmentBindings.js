@@ -21,7 +21,7 @@ function normalizeSandboxFileBindings(value) {
   const output = [];
   for (const item of value) {
     const normalized = normalizeFileBinding(item);
-    if (!normalized.source || !normalized.localPath || seen.has(normalized.source)) {
+    if (!normalized.source || seen.has(normalized.source)) {
       continue;
     }
     seen.add(normalized.source);
@@ -33,6 +33,51 @@ function normalizeSandboxFileBindings(value) {
   return output;
 }
 
+function mainOwnedFileBindingsForWorkspace(workspace = {}) {
+  return normalizeSandboxFileBindings([
+    ...(workspace.localsettings?.sandbox?.fileBindings || []),
+    ...certificatePathBindingsFromWorkspace(workspace)
+  ]);
+}
+
+function certificatePathBindingsFromWorkspace(workspace = {}) {
+  const bindings = [];
+  collectCertificatePathBindings(workspace.localsettings?.request, bindings);
+  return bindings;
+}
+
+function collectCertificatePathBindings(requestSettings = {}, bindings = []) {
+  if (!requestSettings || typeof requestSettings !== 'object') {
+    return;
+  }
+  addCertificatePathBinding(requestSettings.caCertificatePath, 'caCertificatePath', bindings);
+  for (const certificate of Array.isArray(requestSettings.clientCertificates) ? requestSettings.clientCertificates : []) {
+    addCertificatePathBinding(certificate?.caPath, 'caPath', bindings);
+    addCertificatePathBinding(certificate?.certPath, 'certPath', bindings);
+    addCertificatePathBinding(certificate?.keyPath, 'keyPath', bindings);
+    addCertificatePathBinding(certificate?.pfxPath, 'pfxPath', bindings);
+  }
+}
+
+function addCertificatePathBinding(value, key, bindings) {
+  const localPath = String(value || '').trim();
+  if (!localPath || localPath.startsWith('postmeter-local-file/')) {
+    return;
+  }
+  if (!path.isAbsolute(localPath)) {
+    return;
+  }
+  const resolved = path.resolve(localPath);
+  bindings.push({
+    source: localPath,
+    localPath: resolved,
+    mode: 'file',
+    key,
+    fileName: path.basename(resolved),
+    reviewedAt: ''
+  });
+}
+
 function normalizeFileBinding(item = {}) {
   const source = normalizeSource(item.source || item.src);
   const localPath = String(item.localPath || item.path || item.filePath || '').slice(0, LIMITS.value);
@@ -41,6 +86,7 @@ function normalizeFileBinding(item = {}) {
     id,
     source,
     localPath,
+    bound: item.bound === true || Boolean(localPath),
     mode: normalizeFileReferenceMode(item.mode),
     key: item.key == null ? '' : String(item.key).slice(0, LIMITS.key),
     contentType: item.contentType == null ? '' : String(item.contentType).slice(0, LIMITS.value),
@@ -104,15 +150,25 @@ function fileBindingStatusRows(workspace = {}) {
     collectImportedFileReferencesFromNode(test?.request, references);
   }
   const normalizedReferences = normalizeImportedFileReferences(references);
+  const mainBindingsBySource = new Map(mainOwnedFileBindingsForWorkspace(workspace)
+    .filter((item) => item.enabled !== false)
+    .map((item) => [item.source, item]));
   const bindings = normalizeSandboxFileBindings(workspace.settings?.sandbox?.fileBindings || []);
-  const bindingBySource = new Map(bindings.filter((item) => item.enabled !== false).map((item) => [item.source, item]));
+  const bindingBySource = new Map(bindings.filter((item) => item.enabled !== false).map((item) => {
+    const main = mainBindingsBySource.get(item.source);
+    return [item.source, {
+      ...item,
+      localPath: main?.localPath || '',
+      bound: Boolean(main?.localPath) || item.bound === true
+    }];
+  }));
   return normalizedReferences.map((reference) => {
     const binding = bindingBySource.get(reference.source);
     return {
       ...reference,
       binding: binding || null,
-      bound: Boolean(binding?.localPath),
-      status: binding?.localPath ? 'Bound' : 'Needs local file binding'
+      bound: binding?.bound === true || Boolean(binding?.localPath),
+      status: binding?.bound === true || binding?.localPath ? 'Bound' : 'Needs local file binding'
     };
   });
 }
@@ -128,7 +184,36 @@ function resolveFileAttachmentBinding(reference, fileBindings = []) {
   if (!binding) {
     throw new Error(`File attachment binding is required for ${source || bindingId || 'request body'}; scripts cannot read arbitrary local files.`);
   }
+  if (!binding.localPath) {
+    throw new Error(`File attachment binding is required for ${source || bindingId || 'request body'}; scripts cannot read arbitrary local files.`);
+  }
   return binding;
+}
+
+function sanitizeSandboxFileBindingsForRenderer(value = []) {
+  return normalizeSandboxFileBindings(value).map((binding) => ({
+    id: binding.id,
+    source: binding.source,
+    mode: binding.mode,
+    key: binding.key,
+    contentType: binding.contentType,
+    fileName: binding.fileName,
+    enabled: binding.enabled,
+    reviewedAt: binding.reviewedAt,
+    bound: binding.bound === true || Boolean(binding.localPath)
+  }));
+}
+
+function mergeRendererFileBindingMetadataWithMainPaths(rendererBindings = [], mainBindings = []) {
+  const mainBySource = new Map(normalizeSandboxFileBindings(mainBindings).map((binding) => [binding.source, binding]));
+  return normalizeSandboxFileBindings(rendererBindings).map((binding) => {
+    const main = mainBySource.get(binding.source);
+    return {
+      ...binding,
+      localPath: main?.localPath || '',
+      bound: Boolean(main?.localPath) || binding.bound === true
+    };
+  });
 }
 
 function normalizeSource(value) {
@@ -207,8 +292,11 @@ module.exports = {
   displayFileBindingPath,
   fileBindingIdForSource,
   fileBindingStatusRows,
+  mainOwnedFileBindingsForWorkspace,
+  mergeRendererFileBindingMetadataWithMainPaths,
   normalizeImportedFileReference,
   normalizeImportedFileReferences,
   normalizeSandboxFileBindings,
-  resolveFileAttachmentBinding
+  resolveFileAttachmentBinding,
+  sanitizeSandboxFileBindingsForRenderer
 };

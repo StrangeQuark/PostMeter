@@ -185,6 +185,7 @@ test('OAuth flow controller redacts failed provider progress messages', async ()
     'provider failed at https://user:password@example.test/callback?access_token=url-token&visible=1',
     'provider failed at file:///Users/Alice/oauth.json?token=file-token',
     'provider failed at C:\\Users\\Alice\\oauth.json Digest realm="private-realm", nonce="secret-nonce", response="secret-response"',
+    // postmeter-secret-allow: synthetic private-key marker verifies OAuth progress redaction.
     'provider failed with -----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
     'provider returned Cookie: sid=first-cookie-secret; csrftoken=second-cookie-secret',
     'provider returned Set-Cookie: sid=first-set-cookie-secret; Path=/; HttpOnly; csrfToken=second-set-cookie-secret',

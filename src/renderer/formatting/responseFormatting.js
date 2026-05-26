@@ -69,6 +69,7 @@
       if (document.getElementsByTagName?.('parsererror')?.length) {
         return body;
       }
+      // postmeter-security-allow-html: serialized parsed response markup is read for pretty-printing only and never inserted into the DOM.
       const serialized = document.documentElement?.outerHTML
         || new XMLSerializer().serializeToString(document);
       return prettyMarkup(serialized);

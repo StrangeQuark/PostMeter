@@ -1675,7 +1675,7 @@ test('renderer workflows update the workspace catalog without replacing the curr
   assert.equal(state.workspace, currentWorkspace);
 });
 
-test('renderer workflows pass renderer-selected import file paths to preload boundaries', async () => {
+test('renderer workflows pass renderer-selected import sources to preload boundaries', async () => {
   const state = createRendererState();
   state.workspace = { collections: [], environments: [], settings: {} };
   const importCalls = [];
@@ -1689,15 +1689,15 @@ test('renderer workflows pass renderer-selected import file paths to preload bou
     windowObject: {
       postmeter: {
         workspace: {
-          importWorkspace: async (filePath) => {
-            importCalls.push(['workspace', filePath]);
+          importWorkspace: async (source) => {
+            importCalls.push(['workspace', source]);
             return { cancelled: true };
           },
           save: async (workspace) => workspace
         },
         collection: {
-          importCollection: async (filePath) => {
-            importCalls.push(['collection', filePath]);
+          importCollection: async (source) => {
+            importCalls.push(['collection', source]);
             return { cancelled: true };
           }
         }
@@ -1705,12 +1705,12 @@ test('renderer workflows pass renderer-selected import file paths to preload bou
     }
   });
 
-  await workflows.importWorkspace('/tmp/dragged-workspace.json');
-  await workflows.importCollection('/tmp/dragged-collection.json');
+  await workflows.importWorkspace({ fileName: 'dragged-workspace.json', text: '{"schemaVersion":11}' });
+  await workflows.importCollection({ fileName: 'dragged-collection.json', text: '{"requests":[]}' });
 
   assert.deepEqual(importCalls, [
-    ['workspace', '/tmp/dragged-workspace.json'],
-    ['collection', '/tmp/dragged-collection.json']
+    ['workspace', { fileName: 'dragged-workspace.json', text: '{"schemaVersion":11}' }],
+    ['collection', { fileName: 'dragged-collection.json', text: '{"requests":[]}' }]
   ]);
 });
 

@@ -106,6 +106,26 @@ function validateDialogFilePath(value, label = 'dialog selected path') {
   return value;
 }
 
+function validateRendererProvidedFilePath(value, label = 'renderer provided path', env = process.env) {
+  if (!rendererProvidedFilePathsAllowed(env)) {
+    throw new Error(`${label} cannot be supplied by the renderer. Use the native file picker.`);
+  }
+  return validateDialogFilePath(value, label);
+}
+
+function rendererProvidedFilePathsAllowed(env = process.env) {
+  if (env.POSTMETER_PACKAGED_PRODUCTION === '1') {
+    return false;
+  }
+  if (env.POSTMETER_ALLOW_RENDERER_FILE_PATHS === '1') {
+    return true;
+  }
+  if (env.NODE_ENV === 'test' || env.NODE_TEST_CONTEXT) {
+    return true;
+  }
+  return /(?:^|[/\\])test[/\\]electron[/\\].+\.test\.js$/u.test(String(process.argv[1] || ''));
+}
+
 module.exports = {
   collectionExportExtension,
   collectionExportFilters,
@@ -120,5 +140,7 @@ module.exports = {
   safeFilename,
   selectedOpenFilePath,
   selectedSaveFilePath,
-  validateDialogFilePath
+  validateDialogFilePath,
+  validateRendererProvidedFilePath,
+  rendererProvidedFilePathsAllowed
 };

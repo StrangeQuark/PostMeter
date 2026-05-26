@@ -78,6 +78,31 @@ const EXECUTION_RESULT_PAGE_SIZE = 100;
 const MAX_RUNNER_REQUEST_ITERATIONS = 1000000;
 const POSTMETER_USER_AGENT = 'PostMeter/0.2.0';
 const BODY_METHOD_SET = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const UI_SMOKE_FLAGS = Object.freeze([
+  'uiWorkflowSmoke',
+  'uiRegressionSmoke',
+  'uiSnapshotSmoke',
+  'uiTypographySmoke',
+  'uiOauthSmoke',
+  'uiHawkSmoke',
+  'uiAwsSmoke',
+  'uiA11ySmoke',
+  'uiAuthMatrixSmoke'
+]);
+const UI_SMOKE_SCRIPT_PATHS = Object.freeze([
+  'smoke/uiSmokeCommon.js',
+  'smoke/uiSnapshotManifest.js',
+  'smoke/uiWorkflowSmoke.js',
+  'smoke/uiRegressionSmoke.js',
+  'smoke/uiSnapshotSmoke.js',
+  'smoke/uiTypographySmoke.js',
+  'smoke/uiOauthSmoke.js',
+  'smoke/uiHawkSmoke.js',
+  'smoke/uiAwsSmoke.js',
+  'smoke/uiA11ySmoke.js',
+  'smoke/uiAuthMatrixSmoke.js',
+  'smoke/uiSmoke.js'
+]);
 const AUTO_HEADER_PLACEHOLDER = '<calculated when request is sent>';
 const AUTO_REFRESH_AUTH_TYPE = 'autoRefresh';
 const AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE = 'autoRefreshRefreshToken';
@@ -152,6 +177,7 @@ const TUTORIALS = typeof TUTORIAL_CATALOG.createTutorials === 'function'
       tutorialEnsureClientCertificateModal,
       tutorialEnsureClientCertificateModalFormat,
       tutorialEnsureCollectionRequestContext,
+      tutorialEnsureCoachOnlyStep,
       tutorialEnsureCookieDomainInput,
       tutorialEnsureCookiesClearMenu,
       tutorialEnsureCookiesModal,
@@ -257,6 +283,7 @@ let selectedRequestExportTarget = null;
 let expandedRequestExportCollectionIds = [];
 let selectedRequestImportFilePath = '';
 let selectedRequestImportFileName = '';
+let selectedRequestImportText = '';
 let authRefreshAutoDetectCandidates = [];
 let selectedAuthRefreshAutoDetectCandidateId = '';
 let activeRequestExportContent = '';
@@ -607,6 +634,33 @@ const rendererWorkflows = createRendererWorkflows({
   walkCollectionRequests
 });
 
+async function loadUiSmokeHarnessIfRequested() {
+  const params = new URLSearchParams(window.location.search || '');
+  if (!UI_SMOKE_FLAGS.some((flag) => params.get(flag) === '1')) {
+    return;
+  }
+  for (const scriptPath of UI_SMOKE_SCRIPT_PATHS) {
+    await loadRendererScript(scriptPath);
+  }
+}
+
+function loadRendererScript(scriptPath) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = scriptPath;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load renderer support script: ${scriptPath}`));
+    document.body.appendChild(script);
+  });
+}
+
+function queueUiSmokeIfPresent(name) {
+  const queue = window[name];
+  if (typeof queue === 'function') {
+    queue();
+  }
+}
+
 initializeRenderer({
   doc: document,
   windowObject: window,
@@ -685,15 +739,16 @@ initializeRenderer({
     sessionPersistenceEnabled = true;
     scheduleSessionSave({ immediate: true });
     markUiWorkflowStartupStep('before-smoke-queue');
-    queueUiWorkflowSmoke();
-    queueUiRegressionSmoke();
-    queueUiSnapshotSmoke();
-    queueUiTypographySmoke();
-    queueUiOauthSmoke();
-    queueUiHawkSmoke();
-    queueUiAwsSmoke();
-    queueUiA11ySmoke();
-    queueUiAuthMatrixSmoke();
+    await loadUiSmokeHarnessIfRequested();
+    queueUiSmokeIfPresent('queueUiWorkflowSmoke');
+    queueUiSmokeIfPresent('queueUiRegressionSmoke');
+    queueUiSmokeIfPresent('queueUiSnapshotSmoke');
+    queueUiSmokeIfPresent('queueUiTypographySmoke');
+    queueUiSmokeIfPresent('queueUiOauthSmoke');
+    queueUiSmokeIfPresent('queueUiHawkSmoke');
+    queueUiSmokeIfPresent('queueUiAwsSmoke');
+    queueUiSmokeIfPresent('queueUiA11ySmoke');
+    queueUiSmokeIfPresent('queueUiAuthMatrixSmoke');
     scheduleStartupUpdateReminder();
     markUiWorkflowStartupStep('after-smoke-queue');
   }

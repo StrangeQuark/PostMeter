@@ -1,12 +1,8 @@
-function canResolveLocalFilePaths() {
-  return typeof window.postmeter?.files?.pathForFile === 'function';
-}
+const MAX_RENDERER_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 
 function bindLocalFilePickerUi() {
   const fileInput = $('filePickerInput');
   const browseButton = $('filePickerBrowseButton');
-  const usePathButton = $('filePickerUsePathButton');
-  const manualPathInput = $('filePickerManualPathInput');
   const cancelButton = $('filePickerCancelButton');
   const closeButton = $('filePickerCloseButton');
   const dropZone = $('filePickerDropZone');
@@ -15,14 +11,6 @@ function bindLocalFilePickerUi() {
   browseButton?.addEventListener('click', (event) => {
     event.preventDefault();
     fileInput?.click?.();
-  });
-  usePathButton?.addEventListener('click', useManualPathFromFilePicker);
-  manualPathInput?.addEventListener('input', clearFilePickerError);
-  manualPathInput?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      useManualPathFromFilePicker();
-    }
   });
   cancelButton?.addEventListener('click', () => resolveActiveModal(null));
   closeButton?.addEventListener('click', () => resolveActiveModal(null));
@@ -65,6 +53,10 @@ function bindLocalFilePickerUi() {
 
   configureLocalFileSourceInput($('binaryBodySourceInput'), '', 'binary');
   configureLocalFileSourceInput($('performanceBinaryBodySourceInput'), 'performance', 'binary');
+  bindStaticFileSourceControl('binaryBodySourceInput', '', 'binary');
+  bindStaticFileSourceControl('performanceBinaryBodySourceInput', 'performance', 'binary');
+  bindAuthCertificateFileControls('');
+  bindAuthCertificateFileControls('performance');
   bindRequestImportModalUi();
   bindRequestExportPickerModalUi();
   bindRequestExportModalUi();
@@ -79,16 +71,6 @@ function configureFilePickerModal(options = {}) {
   const fileInput = $('filePickerInput');
   fileInput.value = '';
   fileInput.accept = options.accept || '';
-  const manualPathField = $('filePickerManualPathField');
-  const manualPathInput = $('filePickerManualPathInput');
-  const allowManualPath = options.allowManualPath !== false;
-  if (manualPathField) {
-    manualPathField.hidden = !allowManualPath;
-  }
-  if (manualPathInput) {
-    manualPathInput.value = options.defaultPath || '';
-    manualPathInput.placeholder = options.manualPathPlaceholder || '/path/to/file';
-  }
   clearFilePickerError();
   const dropZone = $('filePickerDropZone');
   dropZone.classList.remove('is-dragover');
@@ -103,9 +85,6 @@ function configureFilePickerModal(options = {}) {
 }
 
 async function showLocalFilePicker(options = {}) {
-  if (!canResolveLocalFilePaths() && options.allowManualPath === false) {
-    return null;
-  }
   activeFilePickerOptions = options;
   configureFilePickerModal(options);
   const selection = await showModal('filePickerModal', null);
@@ -120,61 +99,133 @@ function resetFilePickerModal() {
     fileInput.value = '';
     fileInput.accept = '';
   }
-  const manualPathInput = $('filePickerManualPathInput');
-  if (manualPathInput) {
-    manualPathInput.value = '';
-    manualPathInput.placeholder = '/path/to/file';
-  }
-  const manualPathField = $('filePickerManualPathField');
-  if (manualPathField) {
-    manualPathField.hidden = false;
-  }
   $('filePickerDropZone')?.classList.remove('is-dragover');
   clearFilePickerError();
-}
-
-function useManualPathFromFilePicker() {
-  const input = $('filePickerManualPathInput');
-  const filePath = String(input?.value || '').trim();
-  if (!filePath) {
-    renderFilePickerError(activeFilePickerOptions?.manualPathRequiredMessage || 'Enter a local file path or choose a file.');
-    input?.focus?.();
-    return;
-  }
-  resolveActiveModal({
-    name: fileNameFromLocalPath(filePath),
-    path: filePath,
-    picker: activeFilePickerOptions?.kind || 'file',
-    manualPath: true
-  });
 }
 
 async function selectLocalFileFromPicker(file) {
   if (!file) {
     return;
   }
-  const filePath = localPathForFile(file);
-  if (!filePath) {
-    renderFilePickerError('PostMeter could not read a local path for that file. Use the manual path field.');
+  if (activeFilePickerOptions?.readText === true) {
+    const selection = await importSelectionFromFile(file);
+    if (selection) {
+      resolveActiveModal({
+        ...selection,
+        picker: activeFilePickerOptions?.kind || 'file'
+      });
+    }
+    return;
+  }
+  if (activeFilePickerOptions?.fileBinding === true) {
+    const contentBase64 = await fileToBase64(file);
+    if (!contentBase64) {
+      renderFilePickerFallbackError('PostMeter could not read that file for binding.');
+      return;
+    }
+    resolveActiveModal({
+      name: file.name || 'file',
+      fileName: file.name || 'file',
+      contentBase64,
+      picker: activeFilePickerOptions?.kind || 'file'
+    });
+    return;
+  }
+  const contentBase64 = await fileToBase64(file);
+  if (!contentBase64) {
+    renderFilePickerFallbackError('PostMeter could not read that file.');
     return;
   }
   resolveActiveModal({
-    name: file.name || fileNameFromLocalPath(filePath),
-    path: filePath,
+    name: file.name || 'file',
+    fileName: file.name || 'file',
+    contentBase64,
     picker: activeFilePickerOptions?.kind || 'file'
   });
 }
 
-function localPathForFile(file) {
-  try {
-    const resolved = window.postmeter?.files?.pathForFile?.(file);
-    if (typeof resolved === 'string' && resolved.trim()) {
-      return resolved.trim();
-    }
-  } catch {
+async function fileToBase64(file) {
+  const size = Number(file?.size || 0);
+  if (size > MAX_RENDERER_IMPORT_FILE_BYTES) {
+    renderFilePickerError('File attachments must be 10 MB or smaller.');
     return '';
   }
-  return typeof file?.path === 'string' ? file.path.trim() : '';
+  const buffer = typeof file.arrayBuffer === 'function'
+    ? await file.arrayBuffer()
+    : stringToUtf8Buffer(typeof file.text === 'function' ? await file.text() : '');
+  if (buffer.byteLength > MAX_RENDERER_IMPORT_FILE_BYTES) {
+    renderFilePickerError('File attachments must be 10 MB or smaller.');
+    return '';
+  }
+  const bytes = new Uint8Array(buffer);
+  return bytesToBase64(bytes);
+}
+
+function stringToUtf8Buffer(value) {
+  const text = String(value || '');
+  if (typeof TextEncoder === 'function') {
+    return new TextEncoder().encode(text).buffer;
+  }
+  const encoded = encodeURIComponent(text);
+  const bytes = [];
+  for (let index = 0; index < encoded.length; index += 1) {
+    if (encoded[index] === '%' && /^[0-9a-fA-F]{2}$/.test(encoded.slice(index + 1, index + 3))) {
+      bytes.push(parseInt(encoded.slice(index + 1, index + 3), 16));
+      index += 2;
+    } else {
+      bytes.push(encoded.charCodeAt(index));
+    }
+  }
+  return new Uint8Array(bytes).buffer;
+}
+
+function renderFilePickerFallbackError(message) {
+  const error = $('filePickerError');
+  if (!error || error.hidden !== false || !error.textContent) {
+    renderFilePickerError(message);
+  }
+}
+
+function bytesToBase64(bytes) {
+  if (typeof btoa === 'function') {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    }
+    return btoa(binary);
+  }
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let output = '';
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index];
+    const second = index + 1 < bytes.length ? bytes[index + 1] : 0;
+    const third = index + 2 < bytes.length ? bytes[index + 2] : 0;
+    const triplet = (first << 16) | (second << 8) | third;
+    output += alphabet[(triplet >> 18) & 63];
+    output += alphabet[(triplet >> 12) & 63];
+    output += index + 1 < bytes.length ? alphabet[(triplet >> 6) & 63] : '=';
+    output += index + 2 < bytes.length ? alphabet[triplet & 63] : '=';
+  }
+  return output;
+}
+
+async function importSelectionFromFile(file) {
+  const size = Number(file.size || 0);
+  if (size > MAX_RENDERER_IMPORT_FILE_BYTES) {
+    renderFilePickerError('Import files must be 10 MB or smaller.');
+    return null;
+  }
+  const text = await file.text();
+  if (text.length > MAX_RENDERER_IMPORT_FILE_BYTES) {
+    renderFilePickerError('Import files must be 10 MB or smaller.');
+    return null;
+  }
+  return {
+    name: file.name || 'import.json',
+    fileName: file.name || 'import.json',
+    text
+  };
 }
 
 function clearFilePickerError() {
@@ -195,6 +246,69 @@ function renderFilePickerError(message) {
   error.hidden = false;
 }
 
+function selectedFileLabelIdForInputId(inputId) {
+  const id = String(inputId || '');
+  return id.endsWith('Input') ? `${id.slice(0, -5)}Label` : `${id}Label`;
+}
+
+function selectedFileDisplayName(value) {
+  const text = String(value || '').trim();
+  return text ? fileNameFromLocalPath(text) : 'No file selected';
+}
+
+function findDescendantElementById(root, id) {
+  if (!root || !id) {
+    return null;
+  }
+  if (root.id === id) {
+    return root;
+  }
+  const children = root.children || root.childNodes || [];
+  for (const child of children) {
+    const match = findDescendantElementById(child, id);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+function selectedFileLabelForInput(input) {
+  if (!input?.id) {
+    return null;
+  }
+  const labelId = selectedFileLabelIdForInputId(input.id);
+  return $(labelId) || findDescendantElementById(input.parentElement, labelId);
+}
+
+function syncSelectedFileLabel(inputOrId) {
+  const input = typeof inputOrId === 'string' ? $(inputOrId) : inputOrId;
+  if (!input?.id) {
+    return;
+  }
+  const label = selectedFileLabelForInput(input);
+  if (!label) {
+    return;
+  }
+  const value = String(input.value || '').trim();
+  label.textContent = selectedFileDisplayName(value);
+  label.title = value;
+  label.classList?.toggle?.('is-empty', !value);
+}
+
+function setSelectedFileValue(inputOrId, value, options = {}) {
+  const input = typeof inputOrId === 'string' ? $(inputOrId) : inputOrId;
+  if (!input) {
+    return;
+  }
+  input.value = String(value || '').trim();
+  syncSelectedFileLabel(input);
+  if (options.dispatch === true) {
+    input.dispatchEvent?.(new Event('input', { bubbles: true }));
+    input.dispatchEvent?.(new Event('change', { bubbles: true }));
+  }
+}
+
 function bindRequestImportModalUi() {
   const textInput = $('requestImportTextInput');
   const fileInput = $('requestImportFileInput');
@@ -212,11 +326,16 @@ function bindRequestImportModalUi() {
   confirmButton?.addEventListener('click', () => {
     const text = String(textInput?.value || '').trim();
     const filePath = selectedRequestImportFilePath;
-    if (!text && !filePath) {
+    const fileText = selectedRequestImportText;
+    if (!text && !fileText && !filePath) {
       renderRequestImportError('Paste request text or choose a request file.');
       return;
     }
-    resolveActiveModal({ text, filePath });
+    resolveActiveModal({
+      text: text || fileText,
+      fileName: selectedRequestImportFileName,
+      filePath: text || fileText ? '' : filePath
+    });
   });
   textInput?.addEventListener('input', updateRequestImportConfirmState);
   fileInput?.addEventListener('change', () => {
@@ -347,6 +466,7 @@ function renderRequestExportStatus(message) {
 function resetRequestImportModal() {
   selectedRequestImportFilePath = '';
   selectedRequestImportFileName = '';
+  selectedRequestImportText = '';
   const textInput = $('requestImportTextInput');
   if (textInput) {
     textInput.value = '';
@@ -374,13 +494,18 @@ async function selectRequestImportFile(file) {
   if (!file) {
     return;
   }
-  const filePath = localPathForFile(file);
-  if (!filePath) {
-    renderRequestImportError('PostMeter could not read a local path for that file.');
+  if (Number(file.size || 0) > MAX_RENDERER_IMPORT_FILE_BYTES) {
+    renderRequestImportError('Import files must be 10 MB or smaller.');
     return;
   }
-  selectedRequestImportFilePath = filePath;
-  selectedRequestImportFileName = file.name || fileNameFromLocalPath(filePath);
+  const text = await file.text();
+  if (text.length > MAX_RENDERER_IMPORT_FILE_BYTES) {
+    renderRequestImportError('Import files must be 10 MB or smaller.');
+    return;
+  }
+  selectedRequestImportText = text;
+  selectedRequestImportFilePath = '';
+  selectedRequestImportFileName = file.name || 'request import';
   const selection = $('requestImportFileSelection');
   if (selection) {
     selection.textContent = `Selected file: ${selectedRequestImportFileName}`;
@@ -406,9 +531,10 @@ function renderRequestImportError(message) {
 function updateRequestImportConfirmState() {
   const text = String($('requestImportTextInput')?.value || '').trim();
   const hasSource = Boolean(text || selectedRequestImportFilePath);
+  const hasFileText = Boolean(selectedRequestImportText);
   const confirm = $('confirmRequestImportButton');
   if (confirm) {
-    confirm.disabled = !hasSource;
+    confirm.disabled = !hasSource && !hasFileText;
   }
 }
 
@@ -417,6 +543,10 @@ function configureLocalFileSourceInput(input, prefix, mode) {
     return;
   }
   updateLocalFileSourceInputState(input, { enabled: true, prefix, mode });
+  syncSelectedFileLabel(input);
+  if (input.type === 'hidden') {
+    return;
+  }
   if (input.dataset.filePickerBound === 'true') {
     return;
   }
@@ -494,61 +624,228 @@ async function chooseFileForActiveSourceInput() {
   if (!target?.input) {
     return null;
   }
+  return chooseFileForSourceInput(target.input, target.prefix, target.mode);
+}
+
+async function chooseFileForSourceInput(input, prefix = '', mode = 'file') {
+  if (!input) {
+    return null;
+  }
   const selected = await showLocalFilePicker({
+    fileBinding: true,
     kind: 'body-file-source',
     title: 'Choose request file',
     message: 'Drop a file here or choose one to use as the request body file source.',
     dropTitle: 'Drop request file here',
-    dropDetail: 'The selected path will be bound to this request file source.'
+    dropDetail: 'The selected file will be bound to this request file source.'
   });
-  if (!selected?.path) {
+  if (!selected?.path && !selected?.contentBase64 && !selected?.fileName && !selected?.name) {
     return null;
   }
-  await applySelectedFileSourceToInput(target.input, target.prefix, target.mode, selected);
+  await applySelectedFileSourceToInput(input, prefix, mode, selected);
   return selected;
 }
 
 async function applySelectedFileSourceToInput(input, prefix, mode, selected) {
-  const localPath = String(selected?.path || '').trim();
-  if (!input || !localPath) {
+  const source = String(selected?.source || selected?.path || selected?.fileName || selected?.name || '').trim();
+  if (!input || !source) {
     return false;
   }
   const key = mode === 'formdata' ? fileSourceKeyForInput(input) : '';
-  const bound = await upsertLocalFileAttachmentBinding(localPath, {
-    fileName: selected.name || fileNameFromLocalPath(localPath),
+  const bound = await upsertLocalFileAttachmentBinding(source, {
+    contentBase64: selected.contentBase64 || '',
+    fileName: selected.fileName || selected.name || fileNameFromLocalPath(source),
     key,
-    localPath,
     mode
   });
   if (!bound) {
     return false;
   }
-  input.value = localPath;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
+  setSelectedFileValue(input, bound.source || source, { dispatch: true });
   collectBodyEditorAndMarkDirty(prefix);
-  setStatus(`File source selected: ${fileNameFromLocalPath(localPath)}.`);
+  setStatus(`File source selected: ${bound.fileName || fileNameFromLocalPath(source)}.`);
   return true;
+}
+
+function bindStaticFileSourceControl(inputId, prefix, mode) {
+  const input = $(inputId);
+  if (!input || input.dataset.staticFileSourceBound === 'true') {
+    syncSelectedFileLabel(input);
+    return;
+  }
+  input.dataset.staticFileSourceBound = 'true';
+  syncSelectedFileLabel(input);
+  const importButton = $(`${inputId.slice(0, -5)}ImportButton`);
+  const clearButton = $(`${inputId.slice(0, -5)}ClearButton`);
+  importButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    void chooseFileForSourceInput(input, prefix, mode);
+  });
+  bindSelectedFileLabelTrigger(input, () => chooseFileForSourceInput(input, prefix, mode));
+  clearButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    setSelectedFileValue(input, '', { dispatch: true });
+    collectBodyEditorAndMarkDirty(prefix);
+  });
+}
+
+function bindAuthCertificateFileControls(prefix = '') {
+  const normalizedPrefix = prefix === 'performance' ? 'performance' : '';
+  const bodyPrefix = normalizedPrefix === 'performance' ? 'performance' : '';
+  const idPrefix = normalizedPrefix ? 'performanceAuthClient' : 'authClient';
+  const controls = [
+    { suffix: 'PfxPath', accept: '.pfx,.p12', title: 'Import PFX/P12 bundle' },
+    { suffix: 'CertPath', accept: '.crt,.cer,.pem', title: 'Import PEM certificate' },
+    { suffix: 'KeyPath', accept: '.key,.pem', title: 'Import PEM key' },
+    { suffix: 'CaPath', accept: '.crt,.cer,.pem', title: 'Import CA certificate' }
+  ];
+  for (const control of controls) {
+    const inputId = `${idPrefix}${control.suffix}Input`;
+    const input = $(inputId);
+    if (!input || input.dataset.authFileControlBound === 'true') {
+      syncSelectedFileLabel(input);
+      continue;
+    }
+    input.dataset.authFileControlBound = 'true';
+    syncSelectedFileLabel(input);
+    $(`${idPrefix}${control.suffix}ImportButton`)?.addEventListener('click', (event) => {
+      event.preventDefault();
+      void chooseAuthCertificateFile(input, control, bodyPrefix);
+    });
+    bindSelectedFileLabelTrigger(input, () => chooseAuthCertificateFile(input, control, bodyPrefix));
+    $(`${idPrefix}${control.suffix}ClearButton`)?.addEventListener('click', (event) => {
+      event.preventDefault();
+      setSelectedFileValue(input, '', { dispatch: true });
+      collectBodyEditorAndMarkDirty(bodyPrefix);
+    });
+  }
+}
+
+async function chooseAuthCertificateFile(input, config, prefix) {
+  const selection = await showLocalFilePicker({
+    accept: config.accept,
+    fileBinding: true,
+    dropDetail: 'or choose a certificate file from this computer.',
+    dropTitle: 'Drop certificate file here',
+    kind: 'certificate',
+    message: 'Drop a certificate file here or choose one from this computer.',
+    title: config.title
+  });
+  const binding = await storeMainOwnedLocalFile(selection, {
+    contentKind: 'certificate',
+    fileName: selection?.fileName || selection?.name || '',
+    purpose: 'certificate'
+  });
+  if (!binding?.source) {
+    return;
+  }
+  setSelectedFileValue(input, binding.source, { dispatch: true });
+  collectBodyEditorAndMarkDirty(prefix);
+}
+
+function bindSelectedFileLabelTrigger(inputOrId, callback) {
+  const input = typeof inputOrId === 'string' ? $(inputOrId) : inputOrId;
+  if (!input?.id || typeof callback !== 'function') {
+    return;
+  }
+  const label = selectedFileLabelForInput(input);
+  if (!label || label.dataset.filePickerLabelBound === 'true') {
+    return;
+  }
+  label.dataset.filePickerLabelBound = 'true';
+  label.setAttribute('role', 'button');
+  label.setAttribute('tabindex', '0');
+  label.addEventListener('click', (event) => {
+    event.preventDefault();
+    void callback();
+  });
+  label.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    void callback();
+  });
+}
+
+async function storeMainOwnedLocalFile(selection, options = {}) {
+  if (!selection?.contentBase64) {
+    return null;
+  }
+  const storeContent = window.__postmeterStoreLocalFile || window.postmeter?.localFiles?.storeContent;
+  if (typeof storeContent !== 'function') {
+    setStatus('Local file storage is unavailable in this runtime.');
+    return null;
+  }
+  try {
+    const result = await storeContent({
+      contentBase64: selection.contentBase64,
+      contentKind: options.contentKind || '',
+      contentType: options.contentType || '',
+      fileName: options.fileName || selection.fileName || selection.name || 'file',
+      purpose: options.purpose || 'file'
+    });
+    if (result?.cancelled) {
+      return null;
+    }
+    return result?.binding || null;
+  } catch (error) {
+    setStatus(`Local file save failed: ${error.message || String(error)}`);
+    return null;
+  }
 }
 
 async function upsertLocalFileAttachmentBinding(source, options = {}) {
   const normalizedSource = String(source || '').trim();
-  const localPath = String(options.localPath || source || '').trim();
-  if (!normalizedSource || !localPath) {
+  if (!normalizedSource) {
     return false;
   }
   ensureSettings();
   const previousSettings = cloneWorkspaceSettings();
+  let binding = null;
+  try {
+    if (options.contentBase64 && window.postmeter?.fileBindings?.storeContent) {
+      const result = await window.postmeter.fileBindings.storeContent({
+        contentBase64: options.contentBase64,
+        contentType: options.contentType || '',
+        fileName: options.fileName || fileNameFromLocalPath(normalizedSource),
+        key: options.key || '',
+        mode: options.mode || 'file',
+        source: normalizedSource
+      });
+      if (result?.cancelled) {
+        return false;
+      }
+      binding = result?.binding || null;
+    } else if (window.postmeter?.fileBindings?.choose) {
+      const result = await window.postmeter.fileBindings.choose({
+        contentType: options.contentType || '',
+        fileName: options.fileName || fileNameFromLocalPath(normalizedSource),
+        key: options.key || '',
+        mode: options.mode || 'file',
+        source: normalizedSource
+      });
+      if (result?.cancelled) {
+        return false;
+      }
+      binding = result?.binding || null;
+    }
+  } catch (error) {
+    setStatus(`File binding save failed: ${error.message || String(error)}`);
+    return false;
+  }
+  const metadata = binding || {
+    bound: false,
+    contentType: options.contentType || '',
+    fileName: options.fileName || fileNameFromLocalPath(normalizedSource),
+    key: options.key || '',
+    mode: options.mode || 'file',
+    reviewedAt: new Date().toISOString(),
+    source: normalizedSource
+  };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings([
     ...workspace.settings.sandbox.fileBindings.filter((item) => item.source !== normalizedSource),
-    {
-      contentType: options.contentType || '',
-      fileName: options.fileName || fileNameFromLocalPath(localPath),
-      key: options.key || '',
-      localPath,
-      mode: options.mode || 'file',
-      reviewedAt: new Date().toISOString(),
-      source: normalizedSource
-    }
+    metadata
   ]);
   return saveWorkspaceSettingsWithRollback(
     previousSettings,
@@ -571,9 +868,6 @@ function fileNameFromLocalPath(filePath) {
 }
 
 async function chooseImportFilePath(kind) {
-  if (!canResolveLocalFilePaths()) {
-    return undefined;
-  }
   const configs = {
     workspace: {
       accept: '.json,application/json',
@@ -606,9 +900,16 @@ async function chooseImportFilePath(kind) {
     ...config,
     dropTitle: 'Drop file here',
     dropDetail: 'or choose a file from this computer.',
-    kind
+    kind,
+    readText: true
   });
-  return selected?.path ? selected.path : null;
+  if (selected?.text != null) {
+    return {
+      fileName: selected.fileName || selected.name || 'import.json',
+      text: selected.text
+    };
+  }
+  return null;
 }
 
 function focusInitialModalElement(modalId) {
