@@ -1858,7 +1858,12 @@ test('matches managed client certificates by HTTPS host and port', async (t) => 
   }
 });
 
-test('runs live TLS smoke coverage against public badssl endpoints', async () => {
+test('runs opt-in live TLS smoke coverage against public badssl endpoints', async (t) => {
+  if (process.env.POSTMETER_LIVE_TLS_SMOKE !== '1') {
+    t.skip('Set POSTMETER_LIVE_TLS_SMOKE=1 to exercise public badssl endpoints.');
+    return;
+  }
+
   const trusted = await sendRequest(liveTlsRequest('https://sha256.badssl.com/'), null, {
     collectTimings: true,
     tlsSettings: {

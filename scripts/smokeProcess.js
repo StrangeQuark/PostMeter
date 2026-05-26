@@ -8,7 +8,15 @@ const {
 
 const DEFAULT_KILL_GRACE_MILLIS = 2_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024;
+const DEFAULT_RETRY_DELAY_MILLIS = 1_000;
 const PROJECT_ROOT = path.join(__dirname, '..');
+const WINDOWS_ELECTRON_GPU_WORKAROUND_ARGS = Object.freeze([
+  '--disable-gpu',
+  '--disable-gpu-compositing',
+  '--use-angle=swiftshader',
+  '--use-gl=swiftshader',
+  '--enable-unsafe-swiftshader'
+]);
 const AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate|aws4-hmac-sha256|eg1-hmac-sha256';
 const SIMPLE_AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate';
 const AUTH_PARAMETER_PAIR_PATTERN = '[A-Za-z][A-Za-z0-9_-]*\\s*=\\s*(?:"[^"\\r\\n<>]*"|[^\\s,;\\[\\]\\\'"<>]+)';
@@ -109,6 +117,102 @@ function spawnWithTimeout(command, args = [], options = {}) {
   });
 }
 
+async function spawnWithRetries(command, args = [], options = {}) {
+  const maxAttempts = Math.max(1, Number.parseInt(options.maxAttempts || '1', 10) || 1);
+  const retryDelayMillis = Math.max(0, Number.parseInt(options.retryDelayMillis || String(DEFAULT_RETRY_DELAY_MILLIS), 10) || 0);
+  const retryWhen = typeof options.retryWhen === 'function' ? options.retryWhen : () => false;
+  const attempts = [];
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await spawnWithTimeout(command, args, options);
+    attempts.push(result);
+    if (result.code === 0 || attempt === maxAttempts || !retryWhen(result, attempt)) {
+      return mergeSmokeAttemptResults(attempts);
+    }
+    if (retryDelayMillis > 0) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMillis));
+    }
+  }
+  return mergeSmokeAttemptResults(attempts);
+}
+
+function mergeSmokeAttemptResults(attempts = []) {
+  const values = Array.isArray(attempts) ? attempts.filter(Boolean) : [];
+  if (values.length <= 1) {
+    return values[0] || {
+      code: 1,
+      forceKilled: false,
+      signal: null,
+      stderr: '',
+      stderrTruncated: false,
+      stdout: '',
+      stdoutTruncated: false,
+      timedOut: false
+    };
+  }
+  const latest = values[values.length - 1];
+  return {
+    ...latest,
+    attempts: values,
+    stderr: mergeAttemptOutput(values, 'stderr'),
+    stderrTruncated: values.some((attempt) => attempt.stderrTruncated),
+    stdout: mergeAttemptOutput(values, 'stdout'),
+    stdoutTruncated: values.some((attempt) => attempt.stdoutTruncated),
+    timedOut: values.some((attempt) => attempt.timedOut === true)
+  };
+}
+
+function mergeAttemptOutput(attempts, key) {
+  return attempts
+    .map((attempt, index) => `[attempt ${index + 1} ${key}]\n${attempt?.[key] || ''}`.trimEnd())
+    .join('\n');
+}
+
+function isWindowsElectronGpuProcessFailure(result = {}, platform = process.platform) {
+  const effectivePlatform = typeof platform === 'string' ? platform : process.platform;
+  if (effectivePlatform !== 'win32' || result.code === 0) {
+    return false;
+  }
+  return /GPU process isn't usable|GPU process exited unexpectedly|gpu_process_host\.cc|exit_code=-2147483645/i
+    .test(`${result.stderr || ''}\n${result.stdout || ''}`);
+}
+
+function isLinuxElectronSmokeTimeout(result = {}, platform = process.platform) {
+  const effectivePlatform = typeof platform === 'string' ? platform : process.platform;
+  if (effectivePlatform !== 'linux' || result.code === 0 || result.timedOut !== true) {
+    return false;
+  }
+  return true;
+}
+
+function isRetryableElectronSmokeFailure(result = {}, platform = process.platform) {
+  return isWindowsElectronGpuProcessFailure(result, platform)
+    || isLinuxElectronSmokeTimeout(result, platform);
+}
+
+function withWindowsElectronGpuWorkaroundArgs(args = [], platform = process.platform) {
+  const values = Array.isArray(args) ? [...args] : [];
+  if (platform !== 'win32') {
+    return values;
+  }
+  const existingSwitches = new Set(values.map((value) => switchName(value)));
+  const additions = WINDOWS_ELECTRON_GPU_WORKAROUND_ARGS.filter((value) => !existingSwitches.has(switchName(value)));
+  return [...additions, ...values];
+}
+
+function sanitizeElectronSmokeEnv(env = process.env, platform = process.platform) {
+  const next = { ...env };
+  if (platform === 'linux'
+    && next.DBUS_SESSION_BUS_ADDRESS
+    && !/^(unix|tcp):/i.test(String(next.DBUS_SESSION_BUS_ADDRESS))) {
+    delete next.DBUS_SESSION_BUS_ADDRESS;
+  }
+  return next;
+}
+
+function switchName(value) {
+  return String(value || '').split('=')[0].toLowerCase();
+}
+
 function killChild(child, signal, killProcessTree = false) {
   if (killProcessTree && child.pid) {
     try {
@@ -188,7 +292,13 @@ function redactCookieHeaderValue(_match, key, separator, value = '') {
 
 module.exports = {
   appendBoundedText,
+  isLinuxElectronSmokeTimeout,
+  isRetryableElectronSmokeFailure,
+  isWindowsElectronGpuProcessFailure,
   killChild,
   redactSmokeOutputText,
-  spawnWithTimeout
+  sanitizeElectronSmokeEnv,
+  spawnWithRetries,
+  spawnWithTimeout,
+  withWindowsElectronGpuWorkaroundArgs
 };

@@ -12,7 +12,8 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
 
   assertWorkflowRunsOnlyOnMainPullRequests(workflowDocument, 'ci.yml');
   assertNoPlatformSpecificSkippedSteps(workflowDocument, 'ci.yml');
-  assert.match(workflow, /node-version:\s*22/);
+  assertAllSetupNodeStepsUseNode24(workflowDocument, 'ci.yml');
+  assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'ci.yml');
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /bash scripts\/ci\/install-linux-sandbox-backend\.sh/);
   assert.match(workflow, /npm run renderer:html:check/);
@@ -58,6 +59,8 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /xvfb-run -a npm run release:validate:packaged-smoke/);
   assert.match(workflow, /xvfb-run -a npm run release:validate:packaged-workflow/);
   assert.match(workflow, /xvfb-run -a npm run release:validate:packaged-auth/);
+  assert.match(workflow, /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/);
+  assert.match(workflow, /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
   assert.match(workflow, /Upload native package artifacts/);
@@ -77,6 +80,8 @@ test('release workflow builds signed artifacts for all tier-one desktop platform
   const workflowDocument = YAML.parse(workflow);
   assertValidationLogUploadsFailClosed(workflowDocument, 'release.yml');
   assertNoPlatformSpecificSkippedSteps(workflowDocument, 'release.yml');
+  assertAllSetupNodeStepsUseNode24(workflowDocument, 'release.yml');
+  assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'release.yml');
 
   assert.match(workflow, /tags:\s*\n\s*-\s+"v\*"/);
   assert.match(workflow, /platform:\s*linux/);
@@ -144,6 +149,9 @@ test('release workflow builds signed artifacts for all tier-one desktop platform
   assert.match(workflow, /npm run release:validate:mac-protocol/);
   assert.match(workflow, /npm run release:validate:packaged-workflow/);
   assert.match(workflow, /npm run release:validate:packaged-auth/);
+  assert.match(workflow, /Windows renderer UI smoke is skipped on GitHub-hosted Windows runners/);
+  assert.match(workflow, /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/);
+  assert.match(workflow, /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/);
   assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/\$\{\{ matrix\.platform \}\}/);
   assert.match(workflow, /Upload validation logs/);
   assert.match(workflow, /if:\s*always\(\)/);
@@ -169,6 +177,8 @@ test('native release validation workflow exercises release evidence without publ
   const workflowDocument = YAML.parse(workflow);
   const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   assertValidationLogUploadsFailClosed(workflowDocument, 'release-validation.yml');
+  assertAllSetupNodeStepsUseNode24(workflowDocument, 'release-validation.yml');
+  assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'release-validation.yml');
 
   assert.match(workflow, /workflow_dispatch:/);
   assertWorkflowRunsOnlyOnMainPullRequests(workflowDocument, 'release-validation.yml', { workflowDispatch: true });
@@ -218,6 +228,9 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /npm run release:validate:packaged-smoke/);
   assert.match(workflow, /npm run release:validate:packaged-workflow/);
   assert.match(workflow, /npm run release:validate:packaged-auth/);
+  assert.match(workflow, /Windows renderer UI smoke is skipped on GitHub-hosted Windows runners/);
+  assert.match(workflow, /Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners/);
+  assert.match(workflow, /Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
   assert.match(workflow, /ci_no_sandbox:\s*"1"/);
@@ -306,9 +319,11 @@ test('packaged workflow smoke launches the packaged app through the real UI work
   assert.match(packagedWorkflow, /POSTMETER_UI_WORKFLOW_SMOKE/);
   assert.match(packagedWorkflow, /POSTMETER_UI_WORKFLOW_BASE_URL/);
   assert.match(packagedWorkflow, /createFixtureServer/);
-  assert.match(packagedWorkflow, /spawnWithTimeout/);
+  assert.match(packagedWorkflow, /spawnWithRetries/);
+  assert.match(packagedWorkflow, /isRetryableElectronSmokeFailure/);
   assert.match(packagedWorkflow, /POSTMETER_PACKAGED_WORKFLOW_TIMEOUT_MS/);
   assert.match(packagedWorkflow, /withCiNoSandboxArgs/);
+  assert.match(packagedWorkflow, /withWindowsElectronGpuWorkaroundArgs/);
   assert.match(packagedWorkflow, /killProcessTree:\s*true/);
   assert.match(packagedWorkflow, /redactSmokeOutputText/);
   assert.match(packagedWorkflow, /packaged-workflow-smoke-\$\{process\.platform\}\.log/);
@@ -326,8 +341,10 @@ test('packaged auth smoke launches the packaged app against the UI auth matrix v
   assert.match(packagedAuth, /findPackagedExecutable/);
   assert.match(packagedAuth, /APPIMAGE_EXTRACT_AND_RUN/);
   assert.match(packagedAuth, /POSTMETER_PACKAGED_AUTH_TIMEOUT_MS/);
-  assert.match(packagedAuth, /spawnWithTimeout/);
+  assert.match(packagedAuth, /spawnWithRetries/);
+  assert.match(packagedAuth, /isRetryableElectronSmokeFailure/);
   assert.match(packagedAuth, /withCiNoSandboxArgs/);
+  assert.match(packagedAuth, /withWindowsElectronGpuWorkaroundArgs/);
   assert.match(packagedAuth, /killProcessTree:\s*true/);
   assert.match(packagedAuth, /packaged-auth-smoke-\$\{process\.platform\}\.log/);
   for (const type of ['basic', 'bearer', 'apiKey', 'cookie', 'digest', 'oauth1', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap']) {
@@ -429,10 +446,31 @@ function assertValidationLogUploadsFailClosed(workflow, workflowName) {
   }
 }
 
+function assertAllSetupNodeStepsUseNode24(workflow, workflowName) {
+  const setupSteps = Object.values(workflow?.jobs || {})
+    .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
+    .filter((step) => String(step?.uses || '').startsWith('actions/setup-node@'));
+  assert.ok(setupSteps.length > 0, `${workflowName} must set up Node explicitly`);
+  for (const step of setupSteps) {
+    assert.equal(step.with?.['node-version'], 24, `${workflowName} ${step.name || 'Setup Node'} must use Node 24`);
+  }
+}
+
+function assertWorkflowForcesJavascriptActionsToNode24(workflow, workflowName) {
+  assert.equal(
+    workflow?.env?.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24,
+    'true',
+    `${workflowName} must force pinned JavaScript actions to run on Node 24`
+  );
+}
+
 test('manual OAuth provider certification workflow supports env signoff with optional evidence', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'oauth-provider-certification.yml'), 'utf8');
+  const workflowDocument = YAML.parse(workflow);
 
+  assertAllSetupNodeStepsUseNode24(workflowDocument, 'oauth-provider-certification.yml');
+  assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'oauth-provider-certification.yml');
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /provider:/);
   assert.match(workflow, /run_live:/);

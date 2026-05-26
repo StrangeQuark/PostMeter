@@ -5,7 +5,13 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
-const { redactSmokeOutputText, spawnWithTimeout } = require('./smokeProcess');
+const {
+  isRetryableElectronSmokeFailure,
+  redactSmokeOutputText,
+  sanitizeElectronSmokeEnv,
+  spawnWithRetries,
+  withWindowsElectronGpuWorkaroundArgs
+} = require('./smokeProcess');
 const {
   findPackagedExecutable,
   isAppImageExecutable,
@@ -21,7 +27,7 @@ async function main() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-workflow-'));
   const artifactDir = process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || path.join(tempDir, 'validation-artifacts');
   try {
-    const env = {
+    const env = sanitizeElectronSmokeEnv({
       ...process.env,
       POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
       POSTMETER_PACKAGED_SMOKE: '1',
@@ -29,15 +35,20 @@ async function main() {
       POSTMETER_UI_WORKFLOW_SMOKE: '1',
       POSTMETER_UI_WORKFLOW_BASE_URL: server.baseUrl,
       POSTMETER_VALIDATION_ARTIFACT_DIR: artifactDir
-    };
+    });
     if (isAppImageExecutable(executable)) {
       env.APPIMAGE_EXTRACT_AND_RUN = env.APPIMAGE_EXTRACT_AND_RUN || '1';
     }
     delete env.ELECTRON_RUN_AS_NODE;
     await fs.mkdir(artifactDir, { recursive: true });
-    const result = await spawnWithTimeout(executable, withCiNoSandboxArgs(['--disable-gpu'], env), {
+    const result = await spawnWithRetries(executable, withCiNoSandboxArgs(
+      withWindowsElectronGpuWorkaroundArgs(['--disable-gpu']),
+      env
+    ), {
       env,
       killProcessTree: true,
+      maxAttempts: 2,
+      retryWhen: isRetryableElectronSmokeFailure,
       timeoutMillis: TIMEOUT_MILLIS,
       timeoutMessage: `Packaged UI workflow smoke timed out after ${TIMEOUT_MILLIS} ms.`
     });

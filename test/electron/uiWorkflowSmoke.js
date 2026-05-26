@@ -2,8 +2,8 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
-const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
+const { redactSmokeOutputText } = require('../../scripts/smokeProcess');
+const { runSourceElectronSmoke } = require('./electronSmokeRunner');
 
 async function main() {
   const server = await createFixtureServer();
@@ -17,8 +17,7 @@ async function main() {
     POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || path.join(tempDir, 'validation-artifacts')
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['.'], env), {
-    cwd: path.join(__dirname, '..', '..'),
+  const result = await runSourceElectronSmoke(electronPath, ['.'], {
     env,
     timeoutMillis: 180_000,
     timeoutMessage: 'Electron UI workflow smoke timed out after 180000 ms.'

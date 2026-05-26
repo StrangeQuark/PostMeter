@@ -3,8 +3,8 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
-const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
+const { redactSmokeOutputText } = require('../../scripts/smokeProcess');
+const { runSourceElectronSmoke } = require('./electronSmokeRunner');
 
 const AWS_CREDENTIALS = {
   accessKey: 'UIAKIDEXAMPLE',
@@ -28,8 +28,7 @@ async function main() {
   delete env.ELECTRON_RUN_AS_NODE;
   let result;
   try {
-    result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['.'], env), {
-      cwd: path.join(__dirname, '..', '..'),
+    result = await runSourceElectronSmoke(electronPath, ['.'], {
       env,
       timeoutMillis: 20_000,
       timeoutMessage: 'Electron UI AWS smoke timed out after 20000 ms.'

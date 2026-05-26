@@ -301,11 +301,16 @@ test('vault prompt IPC rejects forged, replayed, and expired prompt ids', async 
     promptTimeoutMillis: 5,
     rateLimitMillis: 0
   });
-  assert.deepEqual(await expiringPrompt({ key: 'shortLived', operation: 'get', requestId: 'request-2' }), {
-    granted: false,
-    reset: false,
-    scope: 'request'
-  });
+  const keepAlive = setTimeout(() => {}, 50);
+  try {
+    assert.deepEqual(await expiringPrompt({ key: 'shortLived', operation: 'get', requestId: 'request-2' }), {
+      granted: false,
+      reset: false,
+      scope: 'request'
+    });
+  } finally {
+    clearTimeout(keepAlive);
+  }
   assert.deepEqual(
     await handlers.get('vault:prompt-response')({ sender: expiringWebContents }, expiredPayloads[0].promptId, {
       granted: true,

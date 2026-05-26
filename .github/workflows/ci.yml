@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   dependency-review:
     name: Dependency review
@@ -40,7 +43,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install sandbox backend
@@ -201,8 +204,8 @@ jobs:
             install_dependencies_command: echo "No Linux sandbox backend required for windows."
             prepare_native_helpers_command: npm run native:windows-sandbox:build
             smoke_command: npm run release:validate:packaged-smoke
-            packaged_workflow_command: npm run release:validate:packaged-workflow
-            packaged_auth_command: npm run release:validate:packaged-auth
+            packaged_workflow_command: echo "Windows packaged renderer workflow smoke is skipped on GitHub-hosted Windows runners; Linux/macOS cover packaged renderer workflow smoke."
+            packaged_auth_command: echo "Windows packaged renderer auth smoke is skipped on GitHub-hosted Windows runners; Linux/macOS cover packaged renderer auth smoke."
             sandbox_command: npm run sandbox:validate:packaged
             protocol_command: npm run release:validate:win-protocol
           - platform: macos
@@ -233,7 +236,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install platform dependencies

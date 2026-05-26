@@ -1,8 +1,8 @@
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
-const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
+const { redactSmokeOutputText } = require('../../scripts/smokeProcess');
+const { runSourceElectronSmoke } = require('./electronSmokeRunner');
 const { createAuthMatrixServer } = require('../../scripts/uiAuthMatrixFixture');
 
 async function main() {
@@ -19,8 +19,7 @@ async function main() {
   delete env.ELECTRON_RUN_AS_NODE;
   let result;
   try {
-    result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['.'], env), {
-      cwd: path.join(__dirname, '..', '..'),
+    result = await runSourceElectronSmoke(electronPath, ['.'], {
       env,
       timeoutMillis: 60_000,
       timeoutMessage: 'Electron UI auth matrix smoke timed out after 60000 ms.'
