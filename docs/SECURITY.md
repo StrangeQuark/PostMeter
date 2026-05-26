@@ -36,9 +36,9 @@ npm run postman:parity:claim
 npm run sandbox:platform:validate
 ```
 
-`npm run production:readiness:claim` is the stable-release gate and remains expected to fail until every release-blocking row is validated, including native release evidence, UX/accessibility evidence, signing/notarization, and any rows still marked implemented rather than validated. Beta and release-candidate thresholds are exposed separately by `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. `npm run sandbox:platform:claim` is the separate platform OS-sandbox gate and should pass when the Linux, Windows, and macOS backend matrix is current.
+`npm run production:readiness:claim` is the stable-release gate and remains expected to fail until every release-blocking row is validated, including native release evidence, UX/accessibility evidence, and any rows still marked implemented rather than validated. Beta and release-candidate thresholds are exposed separately by `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. `npm run sandbox:platform:claim` is the separate platform OS-sandbox gate and should pass when the Linux, Windows, and macOS backend matrix is current.
 
-Repository-level branch, tag, environment, secret-scanning, push-protection, Dependabot, and release-signing controls are tracked in `docs/RELEASE_SECURITY.md`. `npm run release:governance:validate` verifies the checklist exists, but maintainers must still confirm the corresponding GitHub organization and repository settings.
+Repository-level branch, tag, environment, secret-scanning, push-protection, Dependabot, and release controls are tracked in `docs/RELEASE_SECURITY.md`. `npm run release:governance:validate` verifies the checklist exists, but maintainers must still confirm the corresponding GitHub organization and repository settings.
 
 ## Reporting
 

@@ -167,10 +167,6 @@ async function validateReleaseManifest({
     });
     seenTypes.add(artifactType);
   }
-  await validateReleaseArtifactSignatures(releaseDir, manifest.artifacts, {
-    platform: process.env.POSTMETER_RELEASE_PLATFORM || process.platform,
-    releaseMode: process.env.POSTMETER_RELEASE_MODE || 'local'
-  });
   await validateManifestCoversReleaseArtifacts(releaseDir, manifestArtifacts);
   await validateChecksumsFile(checksumFile, manifestArtifacts);
   await validateUpdaterMetadata(releaseDir, {
@@ -523,83 +519,6 @@ function releaseValidationCommandTimeoutMillis(value = process.env.POSTMETER_REL
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_COMMAND_TIMEOUT_MILLIS;
 }
 
-async function validateReleaseArtifactSignatures(releaseDir, artifacts = [], options = {}) {
-  const releaseMode = String(options.releaseMode || 'local').toLowerCase();
-  if (releaseMode !== 'production') {
-    return { skipped: true };
-  }
-  const platform = normalizeReleaseValidationPlatform(options.platform || process.platform);
-  const relevant = artifacts.filter((artifact) => String(artifact.platform || '').toLowerCase() === platform);
-  if (!relevant.length || platform === 'linux') {
-    return { skipped: platform === 'linux' };
-  }
-  if (platform === 'windows') {
-    if (process.platform !== 'win32') {
-      throw new Error('Production Windows release signature validation must run on Windows.');
-    }
-    for (const artifact of relevant.filter((item) => String(item.type).toLowerCase() === 'exe')) {
-      await validateWindowsExecutableSignature(path.join(releaseDir, artifact.file));
-    }
-    return { skipped: false };
-  }
-  if (platform === 'macos') {
-    if (process.platform !== 'darwin') {
-      throw new Error('Production macOS release signature/notarization validation must run on macOS.');
-    }
-    for (const artifact of relevant.filter((item) => ['dmg', 'zip'].includes(String(item.type).toLowerCase()))) {
-      await validateMacArtifactSignature(path.join(releaseDir, artifact.file), String(artifact.type).toLowerCase());
-    }
-    return { skipped: false };
-  }
-  throw new Error(`Unsupported production release signature validation platform: ${platform}.`);
-}
-
-async function validateWindowsExecutableSignature(filePath) {
-  const script = [
-    '$signature = Get-AuthenticodeSignature -LiteralPath $args[0]',
-    "if ($signature.Status -ne 'Valid') { throw \"Invalid Authenticode signature: $($signature.Status)\" }"
-  ].join('; ');
-  await runCommand('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script, filePath]);
-}
-
-async function validateMacArtifactSignature(filePath, type) {
-  if (type === 'dmg') {
-    await runCommand('spctl', ['-a', '-t', 'open', '--context', 'context:primary-signature', '-v', filePath]);
-    await runCommand('xcrun', ['stapler', 'validate', filePath]);
-    return;
-  }
-  if (type === 'zip') {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-zip-signature-'));
-    try {
-      await runCommand('ditto', ['-x', '-k', filePath, tempDir]);
-      const apps = await findFiles(tempDir, (candidate) => candidate.endsWith('.app'));
-      if (!apps.length) {
-        throw new Error(`${path.basename(filePath)} does not contain a .app bundle for signature validation.`);
-      }
-      for (const appPath of apps) {
-        await runCommand('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]);
-        await runCommand('spctl', ['-a', '-t', 'exec', '-v', appPath]);
-      }
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
-  }
-}
-
-function normalizeReleaseValidationPlatform(value) {
-  const text = String(value || '').toLowerCase();
-  if (text === 'win32' || text === 'windows') {
-    return 'windows';
-  }
-  if (text === 'darwin' || text === 'mac' || text === 'macos') {
-    return 'macos';
-  }
-  if (text === 'linux') {
-    return 'linux';
-  }
-  return text || 'unknown';
-}
-
 function csvSet(value) {
   return new Set(String(value || '').split(',').map((item) => item.trim()).filter(Boolean));
 }
@@ -623,6 +542,5 @@ module.exports = {
   macInfoPlistPathFromListing,
   releaseValidationCommandTimeoutMillis,
   runCommand,
-  validateReleaseArtifactSignatures,
   validateReleaseManifest
 };

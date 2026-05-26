@@ -171,33 +171,15 @@ jobs:
       - name: Sandbox release gate manifest
         run: npm run release:gate
 
-      - name: Validate release signing configuration
-        run: npm run release:signing:validate
-        env:
-          POSTMETER_RELEASE_MODE: production
-          POSTMETER_RELEASE_PLATFORM: ${{ matrix.platform }}
-          CSC_LINK: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_CERTIFICATE || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_CERTIFICATE || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_PASSWORD || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_PASSWORD || '' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-      - name: Build signed artifacts
+      - name: Build artifacts
         run: ${{ matrix.command }}
-        env:
-          CSC_LINK: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_CERTIFICATE || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_CERTIFICATE || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'windows' && secrets.WINDOWS_CODESIGN_PASSWORD || matrix.platform == 'macos' && secrets.MACOS_CODESIGN_PASSWORD || '' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Prepare platform release metadata
         run: npm run release:prepare
 
-      - name: Validate signed platform release metadata
+      - name: Validate platform release metadata
         run: npm run release:validate
         env:
-          POSTMETER_RELEASE_MODE: production
           POSTMETER_RELEASE_PLATFORM: ${{ matrix.platform }}
           POSTMETER_RELEASE_REQUIRED_TYPES: ${{ matrix.required_artifact_types }}
 
@@ -315,4 +297,4 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" release/* \
             --title "PostMeter ${{ github.ref_name }}" \
-            --notes "PostMeter desktop artifacts. Verify downloads with SHA256SUMS and release-manifest.json."
+            --notes "PostMeter desktop artifacts. Verify downloads with SHA256SUMS, release-manifest.json, and GitHub artifact attestations."

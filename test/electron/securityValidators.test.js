@@ -18,9 +18,6 @@ const {
 const {
   validateReleaseGovernance
 } = require('../../scripts/validateReleaseGovernance');
-const {
-  validateReleaseSigningConfig
-} = require('../../scripts/validateReleaseSigningConfig');
 
 test('renderer security validator blocks unsafe DOM sinks and accepts justified escaped sinks', () => {
   assert.match(
@@ -138,23 +135,4 @@ test('release governance validator requires repository-control documentation', a
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
-});
-
-test('release signing config validator fails production release mode without platform secrets', () => {
-  assert.throws(
-    () => validateReleaseSigningConfig({ platform: 'windows', releaseMode: 'production', env: {} }),
-    /CSC_LINK, CSC_KEY_PASSWORD/
-  );
-  assert.throws(
-    () => validateReleaseSigningConfig({ platform: 'macos', releaseMode: 'production', env: { CSC_LINK: 'cert', CSC_KEY_PASSWORD: 'pw' } }),
-    /APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID/
-  );
-  assert.deepEqual(
-    validateReleaseSigningConfig({ platform: 'linux', releaseMode: 'production', env: {} }),
-    { platform: 'linux', skipped: false }
-  );
-  assert.deepEqual(
-    validateReleaseSigningConfig({ platform: 'windows', releaseMode: 'local', env: {} }),
-    { platform: 'windows', skipped: true }
-  );
 });

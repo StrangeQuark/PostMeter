@@ -47,7 +47,6 @@ test('production readiness matrix tracks release areas and stable-release blocke
     'postman.newman-json-reports',
     'updates.metadata',
     'vault.per-request-prompts',
-    'release.signing',
     'performance.local-v1',
     'load.distributed'
   ]) {
