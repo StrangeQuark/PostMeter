@@ -5,6 +5,7 @@
     dispatchInput
   } = resolveUiSmokeCommon(global);
 
+  // postmeter-secret-allow: static Atlassian ASAP test fixture key used only by UI auth smoke validation.
   const ASAP_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCQqphluuMiRdyU
 or6JHzdG23i/2h8sgQUGY/ttge/5dDNDMpSQM5kqZSN7ubyTlqh/JuWa1AaNlZI4

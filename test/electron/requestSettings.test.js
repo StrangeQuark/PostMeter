@@ -124,8 +124,15 @@ test('request settings sync to and from Postman protocol profiles', () => {
     maxRedirects: 2,
     disabledTlsProtocols: ['TLSv1']
   }, {}), {
+    strictSSL: true,
     strictHttpParser: true
   });
+  assert.equal(syncPostmanRequestSettingsProtocolProfile({}, {
+    sslCertificateVerification: 'inherit'
+  }).strictSSL, true);
+  assert.equal(syncPostmanRequestSettingsProtocolProfile({}, {
+    sslCertificateVerification: 'disabled'
+  }).strictSSL, false);
 });
 
 test('request settings merge protocol profiles and decide transport requirements', () => {

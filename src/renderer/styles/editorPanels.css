@@ -284,6 +284,26 @@
   padding: 4px 8px;
 }
 
+.body-form-data-value-cell {
+  min-width: 0;
+}
+
+.file-import-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.body-form-data-row .file-import-row {
+  min-width: 0;
+}
+
+.body-form-data-row .file-import-row button {
+  min-width: 62px;
+}
+
 .binary-body-grid {
   display: grid;
   grid-template-columns: minmax(180px, 1fr);
@@ -1435,6 +1455,13 @@ textarea.code-editor-input.has-openable-variable-hover {
 .request-settings-columns .settings-toggle {
   align-self: end;
   min-height: 31px;
+}
+
+.request-settings-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .auth-section {

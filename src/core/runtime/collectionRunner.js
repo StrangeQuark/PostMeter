@@ -23,6 +23,9 @@ const {
   csvVariablesToIterationRows,
   normalizeCsvVariableData
 } = require('../workspace/csvVariables');
+const {
+  resolveFileAttachmentBinding
+} = require('../http/fileAttachmentBindings');
 
 const MAX_PM_EXECUTION_RUN_REQUEST_DEPTH = 5;
 const MAX_PM_EXECUTION_RUN_REQUESTS_PER_COLLECTION = 50;
@@ -63,6 +66,7 @@ async function runCollection(collection, environment, options = {}) {
     tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
     fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
     sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
+    networkPolicy: options.networkPolicy || options.scriptOptions?.networkPolicy,
     vault: options.vault || options.scriptOptions?.vault,
     vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
     recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent,
@@ -164,6 +168,7 @@ async function runCollection(collection, environment, options = {}) {
         clientCertificates: collection?.certificates || [],
         tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
         fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
+        networkPolicy: options.networkPolicy || options.scriptOptions?.networkPolicy,
         vault: options.vault || options.scriptOptions?.vault,
         vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
         recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
@@ -256,6 +261,7 @@ async function runCollection(collection, environment, options = {}) {
           clientCertificates: collection?.certificates || [],
           tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
           fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
+          networkPolicy: options.networkPolicy || options.scriptOptions?.networkPolicy,
           trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
           vault: options.vault || options.scriptOptions?.vault,
           vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
@@ -433,7 +439,9 @@ function transportDiagnosticFields(response = {}, options = {}) {
 async function runRunner(runner, environment, options = {}) {
   const normalizedRunner = runnerModel(runner);
   const requests = expandRunnerRequests(normalizedRunner.requests, options.maxRunnerExecutions);
-  const iterationRows = await csvVariableIterationRows(normalizedRunner.csvVariables, requests.length);
+  const iterationRows = await csvVariableIterationRows(normalizedRunner.csvVariables, requests.length, {
+    fileBindings: options.fileBindings
+  });
   if (iterationRows.length) {
     requests.forEach((request, index) => {
       request.iterationData = iterationRows[index] || [];
@@ -467,7 +475,7 @@ async function runRunner(runner, environment, options = {}) {
   return result;
 }
 
-async function csvVariableIterationRows(csvVariables, requiredRows) {
+async function csvVariableIterationRows(csvVariables, requiredRows, options = {}) {
   const normalizedCsvVariables = normalizeCsvVariableData(csvVariables);
   if (!csvVariablesEnabled(normalizedCsvVariables)) {
     return [];
@@ -486,18 +494,27 @@ async function csvVariableIterationRows(csvVariables, requiredRows) {
   }
   const filePath = String(normalizedCsvVariables.filePath || '').trim();
   const recordsToRead = normalizedCsvVariables.reuseFirstRow === true ? 1 : normalizedRequiredRows;
-  const records = await csvVariableRecordsFromFile(filePath, recordsToRead);
+  const records = await csvVariableRecordsFromFile(filePath, recordsToRead, options);
   return csvRecordsToIterationRows(normalizedCsvVariables, records, { requiredRows: normalizedRequiredRows });
 }
 
-async function csvVariableRecordsFromFile(filePath, requiredRows) {
-  const stat = await fsp.stat(filePath).catch((error) => {
+async function csvVariableRecordsFromFile(filePath, requiredRows, options = {}) {
+  const resolvedFilePath = resolveCsvVariableFilePath(filePath, options.fileBindings);
+  const stat = await fsp.stat(resolvedFilePath).catch((error) => {
     throw new Error(`Unable to read CSV variable file: ${error?.code || error?.message || 'unknown error'}.`);
   });
   if (!stat.isFile()) {
     throw new Error('CSV variable file must be a regular file.');
   }
-  return readCsvRecordsFromFile(filePath, requiredRows);
+  return readCsvRecordsFromFile(resolvedFilePath, requiredRows);
+}
+
+function resolveCsvVariableFilePath(filePath, fileBindings) {
+  const reference = String(filePath || '').trim();
+  if (Array.isArray(fileBindings)) {
+    return resolveFileAttachmentBinding({ source: reference }, fileBindings).localPath;
+  }
+  return reference;
 }
 
 async function readCsvRecordsFromFile(filePath, requiredRows) {

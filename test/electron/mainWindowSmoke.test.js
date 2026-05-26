@@ -10,6 +10,7 @@ const {
   bindNumpadZoomShortcuts,
   bindStartupLoadFailureHooks,
   captureUiSmokeDomState,
+  captureUiSmokeScreenshot,
   classifyKeyboardShortcutAction,
   classifyNumpadZoomShortcut,
   completeStartupSmoke,
@@ -35,6 +36,16 @@ const {
 
 function cmdOrCtrlModifier() {
   return process.platform === 'darwin' ? { meta: true } : { control: true };
+}
+
+async function withSuppressedConsoleError(callback) {
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    return await callback();
+  } finally {
+    console.error = originalConsoleError;
+  }
 }
 
 test('numpad zoom shortcut classifier only handles modified numpad zoom keys', () => {
@@ -274,12 +285,21 @@ test('numpad zoom levels clamp to supported bounds', () => {
 });
 
 test('startup smoke probe prevents renderer shutdown from overwriting marker save', async () => {
-  let executedScript = '';
+  const executedScripts = [];
   const savedMarkers = [];
   const mainWindow = {
     webContents: {
       executeJavaScript: async (script) => {
-        executedScript = script;
+        executedScripts.push(script);
+        if (script.includes('appGridDisplay')) {
+          return {
+            appGridDisplay: 'grid',
+            appGridColumns: '280px 6px 700px',
+            sidebarDisplay: 'grid',
+            topbarDisplay: 'flex',
+            topbarHeight: 52
+          };
+        }
         return { markerPresent: false };
       }
     }
@@ -292,6 +312,9 @@ test('startup smoke probe prevents renderer shutdown from overwriting marker sav
     saveStartupSmokeMarker: async (key, value, result) => savedMarkers.push({ key, value, result })
   });
 
+  const chromeStyleProbe = executedScripts.find((script) => script.includes('appGridDisplay'));
+  const executedScript = executedScripts.at(-1);
+  assert.match(chromeStyleProbe, /getComputedStyle\(appGrid\)/);
   assert.match(executedScript, /window\.__postmeterSkipWorkspaceShutdownSave = true/);
   assert.doesNotMatch(executedScript, /window\.postmeter\.workspace\.save/);
   assert.deepEqual(savedMarkers, [{
@@ -466,6 +489,7 @@ test('UI smoke text redaction covers documented auth schemes and OAuth code fiel
     'X-Amz-Credential=aws-query-credential x-amz-credential=aws-lower-credential xAmzCredential=aws-camel-credential X-Amz-Signature=aws-query-signature X-Amz-Security-Token=aws-security-token',
     'https://example.test/path?visible=1&X-Amz-Credential=aws-url-credential&X-Amz-Signature=aws-url-signature&X-Amz-Security-Token=aws-url-security-token',
     'https://user:password@example.test/callback?access_token=url-token&visible=1',
+    // postmeter-secret-allow: synthetic private-key marker verifies smoke failure redaction.
     '-----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
     'C:\\Users\\alice\\oauth.json Digest realm="digest-private-realm", nonce="digest-secret-nonce", response="digest-secret-response"',
     'client-secret=hyphen client secret next=ok',
@@ -666,7 +690,7 @@ test('UI smoke failure artifact writer times out stalled DOM and screenshot capt
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-ui-failure-timeout-'));
   try {
     const startedAt = Date.now();
-    await writeUiSmokeFailureArtifacts({
+    await withSuppressedConsoleError(() => writeUiSmokeFailureArtifacts({
       webContents: {
         capturePage: async () => new Promise(() => {}),
         executeJavaScript: async () => new Promise(() => {})
@@ -674,7 +698,7 @@ test('UI smoke failure artifact writer times out stalled DOM and screenshot capt
     }, {
       POSTMETER_VALIDATION_ARTIFACT_DIR: directory,
       POSTMETER_UI_SMOKE_ARTIFACT_TIMEOUT_MS: '25'
-    }, 'ui-regression', new Error('timeout failure Authorization: Bearer timeout-token'));
+    }, 'ui-regression', new Error('timeout failure Authorization: Bearer timeout-token')));
     const elapsedMillis = Date.now() - startedAt;
     const files = await fs.readdir(directory);
     const logName = files.find((file) => file.endsWith('.log'));
@@ -690,6 +714,60 @@ test('UI smoke failure artifact writer times out stalled DOM and screenshot capt
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+test('UI smoke screenshot capture masks sensitive fields and restores them', async () => {
+  const calls = [];
+  const image = { toPNG: () => Buffer.from('png') };
+  const result = await captureUiSmokeScreenshot({
+    webContents: {
+      executeJavaScript: async (source) => {
+        calls.push(source);
+        if (source.includes('__postmeterSmokeScreenshotMasks[token] = records')) {
+          return { restoreToken: 'mask-token', maskedCount: 2 };
+        }
+        return null;
+      },
+      capturePage: async () => image
+    }
+  }, {});
+
+  assert.equal(result, image);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /password\|passwd\|passphrase/);
+  assert.match(calls[1], /mask-token/);
+});
+
+test('UI smoke screenshot capture skips when masking fails unless dev override is enabled', async () => {
+  let captureCalls = 0;
+  const mainWindow = {
+    webContents: {
+      executeJavaScript: async () => {
+        throw new Error('mask token secret failure');
+      },
+      capturePage: async () => {
+        captureCalls += 1;
+        return { toPNG: () => Buffer.from('png') };
+      }
+    }
+  };
+
+  await withSuppressedConsoleError(async () => {
+    assert.equal(await captureUiSmokeScreenshot(mainWindow, {}), null);
+    assert.equal(captureCalls, 0);
+
+    const captured = await captureUiSmokeScreenshot(mainWindow, {
+      POSTMETER_ALLOW_UNMASKED_SMOKE_SCREENSHOT: '1'
+    });
+    assert.ok(captured);
+    assert.equal(captureCalls, 1);
+
+    assert.equal(await captureUiSmokeScreenshot(mainWindow, {
+      POSTMETER_ALLOW_UNMASKED_SMOKE_SCREENSHOT: '1',
+      POSTMETER_PACKAGED_PRODUCTION: '1'
+    }), null);
+    assert.equal(captureCalls, 1);
+  });
 });
 
 test('UI smoke DOM-state capture redacts secret-like active text inputs', async () => {
@@ -814,6 +892,7 @@ test('UI smoke DOM-state capture redacts secret-like captured text fields', asyn
         validation: 'access_token=validation-token&next=1\nuser_code=validation-user-code&next=1\n{"refresh_token":"validation-json-token","authorizationCode":"validation-auth-code"}\nhttpRequest {"method":"PATCH","size":1444,"bytes":1555}',
         oauthProgress: 'Authorization: Bearer oauth-token\nProxy-Authorization: Basic proxy-secret\nmetadata Authorization Bearer oauth-metadata-secret\n{"client_secret":"oauth-json-secret","user_code":"oauth-json-user-code","clientAssertion":"oauth-client-assertion"}',
         responseStatus: 'headers Authorization Bearer response-header-secret\nhttpResponse {"status":203,"statusText":"Non-Authoritative","size":1222,"timing":{"contentLength":1111}}\n{"httpResponses":[{"status":207,"statusText":"Multi-Status","size":99994}]}',
+        // postmeter-secret-allow: synthetic private-key marker verifies DOM-state smoke redaction.
         bodyText: 'client secret body-secret\n{"access_token":"body-json-token","client_secret":"body-json-secret"}\nCookie: session=body-cookie\neyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c\n-----BEGIN PRIVATE KEY-----\nabc123private\n-----END PRIVATE KEY-----\nproprietary response text',
         visiblePanels: [{
           id: 'workspacePanel',

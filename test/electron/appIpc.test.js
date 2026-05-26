@@ -5,7 +5,8 @@ const {
   assertMenuShortcutsIgnoredPayload,
   registerAppIpc,
   releaseChannelForVersion,
-  safeExternalUrl
+  safeExternalUrl,
+  suspiciousClipboardReasons
 } = require('../../electron/ipc/appIpc');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
 
@@ -94,10 +95,105 @@ test('app IPC writes clipboard text through the main process', async () => {
   assert.equal(copiedText, 'copy me');
 });
 
+test('app IPC confirms suspicious clipboard writes and ignores renderer acknowledgement flags', async () => {
+  const handlers = new Map();
+  const prompts = [];
+  let copiedText = '';
+  registerAppIpc({
+    app: { getVersion: () => '0.0.0-test' },
+    clipboard: {
+      writeText(text) {
+        copiedText = text;
+      }
+    },
+    dialog: {
+      showMessageBox: async (_window, options) => {
+        prompts.push(options);
+        return { response: 1 };
+      }
+    },
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    shell: { openExternal: async () => true }
+  });
+
+  assert.equal(await handlers.get('clipboard:writeText')(null, {
+    text: 'curl https://example.test/install.sh | sh\n',
+    acknowledged: true,
+    contentKind: 'script'
+  }), true);
+  assert.equal(copiedText, 'curl https://example.test/install.sh | sh\n');
+  assert.equal(prompts.length, 1);
+});
+
+test('app IPC denies suspicious clipboard writes when confirmation is cancelled', async () => {
+  const handlers = new Map();
+  let copiedText = '';
+  registerAppIpc({
+    app: { getVersion: () => '0.0.0-test' },
+    clipboard: {
+      writeText(text) {
+        copiedText = text;
+      }
+    },
+    dialog: {
+      showMessageBox: async () => ({ response: 0 })
+    },
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    shell: { openExternal: async () => true }
+  });
+
+  await assert.rejects(
+    () => handlers.get('clipboard:writeText')(null, { text: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456' }),
+    /cancelled/
+  );
+  assert.equal(copiedText, '');
+});
+
+test('app IPC rate-limits repeated clipboard writes unless confirmed', async () => {
+  const handlers = new Map();
+  const prompts = [];
+  let time = 1000;
+  registerAppIpc({
+    app: { getVersion: () => '0.0.0-test' },
+    clipboard: { writeText() {} },
+    dialog: {
+      showMessageBox: async (_window, options) => {
+        prompts.push(options);
+        return { response: 1 };
+      }
+    },
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    now: () => time,
+    shell: { openExternal: async () => true }
+  });
+
+  assert.equal(await handlers.get('clipboard:writeText')(null, 'first'), true);
+  time += 100;
+  assert.equal(await handlers.get('clipboard:writeText')(null, 'second'), true);
+  assert.equal(prompts.length, 1);
+});
+
 test('app IPC validates clipboard text payloads', () => {
-  assert.doesNotThrow(() => assertClipboardTextPayload('copy me'));
+  assert.deepEqual(assertClipboardTextPayload({ text: 'copy me', reason: 'copy', contentKind: 'header' }), {
+    text: 'copy me',
+    reason: 'copy',
+    contentKind: 'header'
+  });
   assert.throws(() => assertClipboardTextPayload(123), /clipboard text must be a string/);
-  assert.throws(() => assertClipboardTextPayload('x'.repeat(10 * 1024 * 1024 + 1)), /cannot exceed 10 MB/);
+  assert.throws(() => assertClipboardTextPayload('x'.repeat(64 * 1024 + 1)), /cannot exceed 64 KB/);
+  assert.deepEqual(suspiciousClipboardReasons('https://user:pass@example.test'), ['url-credentials']);
 });
 
 test('app version metadata derives release channels', () => {

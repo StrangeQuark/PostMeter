@@ -14,6 +14,7 @@ test('tutorial overlay positions target frame, restores navigation focus, and bl
   assert.equal(elements.get('tutorialOverlay').hidden, false);
   assert.equal(elements.get('tutorialCoachProgress').textContent, 'Step 1 of 2');
   assert.equal(elements.get('tutorialTargetFrame').hidden, false);
+  assert.equal(elements.get('tutorialOverlay').classList.contains('is-coach-only'), false);
   assert.equal(elements.get('tutorialTargetFrame').style.left, '94px');
   assert.equal(elements.get('tutorialTargetFrame').style.top, '114px');
   assert.equal(elements.get('tutorialCoach').style.left, '16px');
@@ -53,9 +54,33 @@ test('tutorial focus trap wraps coach focus and Escape cleans up overlay listene
   sandbox.blockTutorialBackgroundInteraction(escapeEvent);
   assert.equal(elements.get('tutorialOverlay').hidden, true);
   assert.equal(elements.get('tutorialTargetFrame').hidden, true);
+  assert.equal(elements.get('tutorialOverlay').classList.contains('is-coach-only'), false);
   assert.equal(state.windowRemoved.some((listener) => listener.type === 'resize'), true);
   assert.equal(state.documentRemoved.some((listener) => listener.type === 'click'), true);
   assert.equal(state.statuses.at(-1), 'Tutorial ended.');
+});
+
+test('coach-only tutorial setup closes active modal surfaces', () => {
+  const { sandbox, state } = loadTutorialController();
+  sandbox.state.activeModalId = 'settingsModal';
+  sandbox.state.activeModalCancelValue = 'cancel';
+  sandbox.tutorialEnsureCoachOnlyStep();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(state.resolvedModals)), [{
+    value: 'cancel',
+    options: { flushNotifications: false }
+  }]);
+});
+
+test('selector-less tutorial steps dim the background without a target frame', () => {
+  const { elements, sandbox } = loadTutorialController();
+
+  sandbox.startTutorial('intro');
+  sandbox.nextTutorialStep();
+
+  assert.equal(elements.get('tutorialOverlay').hidden, false);
+  assert.equal(elements.get('tutorialTargetFrame').hidden, true);
+  assert.equal(elements.get('tutorialOverlay').classList.contains('is-coach-only'), true);
 });
 
 function loadTutorialController() {
@@ -63,6 +88,7 @@ function loadTutorialController() {
     documentListeners: [],
     documentRemoved: [],
     focused: [],
+    resolvedModals: [],
     statuses: [],
     windowListeners: [],
     windowRemoved: []
@@ -116,7 +142,9 @@ function loadTutorialController() {
     'closeFileSourceMenu',
     'resolveActiveModal'
   ]) {
-    sandbox[name] = () => {};
+    sandbox[name] = name === 'resolveActiveModal'
+      ? (value, options) => state.resolvedModals.push({ value, options })
+      : () => {};
   }
   const sourcePath = path.join(PROJECT_ROOT, 'src/renderer/features/tutorialController.js');
   vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), sandbox, { filename: sourcePath });
@@ -180,6 +208,7 @@ class FakeElement {
     this.disabled = false;
     this.hidden = false;
     this.id = '';
+    this.classList = new FakeClassList();
     this.offsetParent = {};
     this.parentElement = null;
     this.rect = {
@@ -217,4 +246,22 @@ class FakeElement {
   }
 
   scrollIntoView() {}
+}
+
+class FakeClassList {
+  constructor() {
+    this.values = new Set();
+  }
+
+  add(value) {
+    this.values.add(value);
+  }
+
+  contains(value) {
+    return this.values.has(value);
+  }
+
+  remove(value) {
+    this.values.delete(value);
+  }
 }

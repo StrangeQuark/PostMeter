@@ -64,22 +64,28 @@
         <div class="field client-certificate-pem-field">
           <span>CRT file</span>
           <div class="client-certificate-path-row">
-            <input id="clientCertificateCertPathInput" autocomplete="off" placeholder="/path/to/client.crt">
-            <button id="chooseClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathInput" aria-label="Choose CRT file">Choose</button>
+            <input id="clientCertificateCertPathInput" type="hidden">
+            <span id="clientCertificateCertPathLabel" class="selected-file-label is-empty">No file selected</span>
+            <button id="chooseClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathLabel" aria-label="Import CRT file">Import</button>
+            <button id="clearClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathLabel" aria-label="Clear CRT file">Clear</button>
           </div>
         </div>
         <div class="field client-certificate-pem-field">
           <span>KEY file</span>
           <div class="client-certificate-path-row">
-            <input id="clientCertificateKeyPathInput" autocomplete="off" placeholder="/path/to/client.key">
-            <button id="chooseClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathInput" aria-label="Choose KEY file">Choose</button>
+            <input id="clientCertificateKeyPathInput" type="hidden">
+            <span id="clientCertificateKeyPathLabel" class="selected-file-label is-empty">No file selected</span>
+            <button id="chooseClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathLabel" aria-label="Import KEY file">Import</button>
+            <button id="clearClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathLabel" aria-label="Clear KEY file">Clear</button>
           </div>
         </div>
         <div class="field client-certificate-pfx-field">
           <span>PFX/P12 file</span>
           <div class="client-certificate-path-row">
-            <input id="clientCertificatePfxPathInput" autocomplete="off" placeholder="/path/to/client.p12">
-            <button id="chooseClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathInput" aria-label="Choose PFX or P12 file">Choose</button>
+            <input id="clientCertificatePfxPathInput" type="hidden">
+            <span id="clientCertificatePfxPathLabel" class="selected-file-label is-empty">No file selected</span>
+            <button id="chooseClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathLabel" aria-label="Import PFX or P12 file">Import</button>
+            <button id="clearClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathLabel" aria-label="Clear PFX or P12 file">Clear</button>
           </div>
         </div>
         <div class="field client-certificate-passphrase-field">
@@ -243,16 +249,11 @@
         <strong>Drop file here</strong>
         <span>or choose a file from this computer.</span>
       </div>
-      <label id="filePickerManualPathField" class="field file-picker-manual-field">
-        <span>Manual path</span>
-        <input id="filePickerManualPathInput" autocomplete="off" spellcheck="false" placeholder="/path/to/file">
-      </label>
       <p id="filePickerError" class="file-picker-error" role="alert" hidden></p>
       <input id="filePickerInput" type="file" hidden>
       <div class="modal-actions">
         <button id="filePickerCancelButton" type="button">Cancel</button>
-        <button id="filePickerUsePathButton" type="button">Use Path</button>
-        <button id="filePickerBrowseButton" type="button" class="primary">Choose File</button>
+        <button id="filePickerBrowseButton" type="button" class="primary">Import File</button>
       </div>
     </section>
 

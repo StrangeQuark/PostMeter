@@ -110,6 +110,7 @@ test('smoke output redactor removes local paths and common secret values', () =>
     'X-Amz-Credential=aws-query-credential x-amz-credential=aws-lower-credential xAmzCredential=aws-camel-credential X-Amz-Signature=aws-query-signature X-Amz-Security-Token=aws-security-token',
     'https://example.test/path?visible=1&X-Amz-Credential=aws-url-credential&X-Amz-Signature=aws-url-signature&X-Amz-Security-Token=aws-url-security-token',
     'https://user:password@example.test/callback?access_token=url-token&visible=1',
+    // postmeter-secret-allow: synthetic private-key marker verifies smoke output redaction.
     '-----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
     'C:\\Users\\alice\\oauth.json Digest realm="digest-private-realm", nonce="digest-secret-nonce", response="digest-secret-response"',
     'client-secret=hyphen client secret next=ok',

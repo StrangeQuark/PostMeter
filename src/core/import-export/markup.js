@@ -31,6 +31,10 @@ function selectXmlPath(body, expression) {
 }
 
 function parseXml(body) {
+  const text = String(body || '');
+  if (/<!DOCTYPE\b|<!ENTITY\b/i.test(text)) {
+    throw new Error('Response body XML must not contain DTD or entity declarations.');
+  }
   const errors = [];
   const document = new DOMParser({
     onError(level, message) {
@@ -38,7 +42,7 @@ function parseXml(body) {
         errors.push(message);
       }
     }
-  }).parseFromString(String(body || ''), 'text/xml');
+  }).parseFromString(text, 'text/xml');
   if (errors.length) {
     throw new Error(`Response body is not valid XML: ${errors[0]}`);
   }

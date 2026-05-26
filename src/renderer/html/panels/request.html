@@ -371,20 +371,40 @@
 
             <div class="auth-section" data-auth-section="clientCertificate">
               <label class="field">
-                <span>PFX/P12 Bundle Path</span>
-                <input id="authClientPfxPathInput" autocomplete="off">
+                <span>PFX/P12 Bundle</span>
+                <div class="file-import-row">
+                  <input id="authClientPfxPathInput" type="hidden">
+                  <span id="authClientPfxPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientPfxPathImportButton" type="button">Import</button>
+                  <button id="authClientPfxPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
-                <span>PEM Certificate Path</span>
-                <input id="authClientCertPathInput" autocomplete="off">
+                <span>PEM Certificate</span>
+                <div class="file-import-row">
+                  <input id="authClientCertPathInput" type="hidden">
+                  <span id="authClientCertPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientCertPathImportButton" type="button">Import</button>
+                  <button id="authClientCertPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
-                <span>PEM Key Path</span>
-                <input id="authClientKeyPathInput" autocomplete="off">
+                <span>PEM Key</span>
+                <div class="file-import-row">
+                  <input id="authClientKeyPathInput" type="hidden">
+                  <span id="authClientKeyPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientKeyPathImportButton" type="button">Import</button>
+                  <button id="authClientKeyPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
-                <span>CA Certificate Path</span>
-                <input id="authClientCaPathInput" autocomplete="off">
+                <span>CA Certificate</span>
+                <div class="file-import-row">
+                  <input id="authClientCaPathInput" type="hidden">
+                  <span id="authClientCaPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientCaPathImportButton" type="button">Import</button>
+                  <button id="authClientCaPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
                 <span>Passphrase</span>
@@ -758,7 +778,12 @@
             <div class="binary-body-grid">
               <label class="field">
                 <span>File Source</span>
-                <input id="binaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
+                <div class="file-import-row">
+                  <input id="binaryBodySourceInput" type="hidden">
+                  <span id="binaryBodySourceLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="binaryBodySourceImportButton" type="button">Import</button>
+                  <button id="binaryBodySourceClearButton" type="button">Clear</button>
+                </div>
               </label>
             </div>
           </div>
@@ -801,10 +826,17 @@
           <div class="request-settings-grid">
             <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
               <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-              <label id="requestSslCertificateVerificationField" class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                <span>Enable SSL certificate verification</span>
+              <label id="requestSslCertificateVerificationField" class="field" title="Choose SSL certificate verification behavior for this request.">
+                <span>SSL certificate verification</span>
+                <select id="requestSslCertificateVerificationInput" data-request-setting title="Choose SSL certificate verification behavior for this request.">
+                  <option value="inherit">Inherit workspace default</option>
+                  <option value="enabled">Enable</option>
+                  <option value="disabled">Disable</option>
+                </select>
               </label>
+              <div id="requestSslCertificateVerificationInheritActions" class="request-settings-action-row" hidden>
+                <button id="openRequestCertificatesSettingsButton" type="button">Workspace Certificates</button>
+              </div>
             </section>
             <section class="request-settings-section" aria-labelledby="requestCookiesSettingsTitle">
               <h3 id="requestCookiesSettingsTitle" class="request-settings-title">Cookies</h3>

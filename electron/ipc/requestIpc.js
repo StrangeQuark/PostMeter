@@ -17,6 +17,10 @@ const {
   assertRequestPayload
 } = require('../../src/core/contracts/ipcValidation');
 const { resolveTlsSettingsSecrets } = require('../../src/core/http/tlsSettings');
+const {
+  createRequestNetworkPolicyForWorkspace
+} = require('../security/requestNetworkPolicy');
+const { mainOwnedFileBindingsForWorkspace } = require('../../src/core/http/fileAttachmentBindings');
 
 function registerRequestIpc(options = {}) {
   const {
@@ -24,6 +28,8 @@ function registerRequestIpc(options = {}) {
     getWorkspaceId = () => '',
     getVaultStore = () => null,
     getVaultPrompt = () => null,
+    dialog,
+    getMainWindow = () => undefined,
     ipcMain,
     recordDiagnosticEvent = async () => {},
     runRequestWithScripts: runRequest = runRequestWithScripts,
@@ -71,9 +77,15 @@ function registerRequestIpc(options = {}) {
         cookieJar: workspaceSnapshot.cookies || [],
         clientCertificates: requestContext?.collection?.certificates || [],
         collectTimings: true,
-        fileBindings: workspaceSnapshot.settings?.sandbox?.fileBindings || [],
+        fileBindings: mainOwnedFileBindings(workspaceSnapshot),
+        networkPolicy: createRequestNetworkPolicyForWorkspace({
+          dialog,
+          getMainWindow,
+          recordDiagnosticEvent,
+          workspace: workspaceSnapshot
+        }),
         sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: workspaceSnapshot.settings?.sandbox?.trustedCapabilities || {},
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspaceSnapshot),
         tlsSettings,
         vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
@@ -319,6 +331,20 @@ function effectiveFolderVariables(folders) {
     }
   }
   return variables;
+}
+
+function mainOwnedFileBindings(workspace = {}) {
+  return mainOwnedFileBindingsForWorkspace(workspace);
+}
+
+function scriptTrustedCapabilitiesForWorkspace(workspace = {}) {
+  const trusted = workspace.settings?.sandbox?.trustedCapabilities || {};
+  return {
+    sendRequest: trusted.sendRequest !== false,
+    cookies: trusted.cookies !== false,
+    vault: false,
+    vaultGrants: workspace.localsettings?.sandbox?.trustedCapabilities?.vaultGrants || {}
+  };
 }
 
 module.exports = {

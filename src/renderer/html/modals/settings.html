@@ -135,8 +135,9 @@
               <label class="settings-field">
                 <span>CA PEM file</span>
                 <div class="settings-path-row">
-                  <input id="caCertificatePathInput" autocomplete="off" placeholder="/path/to/ca.pem">
-                  <button id="chooseCaCertificateButton" type="button">Choose</button>
+                  <input id="caCertificatePathInput" type="hidden">
+                  <span id="caCertificatePathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="chooseCaCertificateButton" type="button">Import</button>
                   <button id="clearCaCertificateButton" type="button">Clear</button>
                 </div>
               </label>
@@ -310,4 +311,3 @@
         <button id="closeSettingsModalFooterButton" type="button" class="primary">Close</button>
       </div>
     </section>
-

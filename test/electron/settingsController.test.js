@@ -104,11 +104,27 @@ test('settings controller normalizes request TLS, certificates, package cache, a
   ])), [{
     id: 'file-binding-1',
     source: 'fixtures/upload.txt',
-    localPath: '/tmp/upload.txt',
+    bound: true,
     mode: 'binary',
     key: 'payload',
     contentType: '',
+    displayName: 'upload.txt',
     fileName: '',
+    enabled: true,
+    reviewedAt: ''
+  }]);
+
+  assert.deepEqual(fromVm(sandbox.normalizeSandboxFileBindings([
+    { source: 'fixtures/metadata.txt', bound: true, mode: 'file', fileName: 'metadata.txt' },
+    { source: 'fixtures/unbound.txt', mode: 'file', fileName: 'unbound.txt' }
+  ])), [{
+    id: 'file-binding-1',
+    source: 'fixtures/metadata.txt',
+    bound: true,
+    mode: 'file',
+    key: '',
+    contentType: '',
+    fileName: 'metadata.txt',
     enabled: true,
     reviewedAt: ''
   }]);

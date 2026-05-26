@@ -26,6 +26,7 @@ test('writes release manifest with artifact metadata', async () => {
   await fs.writeFile(packageJsonPath, JSON.stringify({
     name: 'postmeter',
     version: '9.9.9',
+    buildTimestamp: '2026-05-25T00:00:00.000Z',
     build: {
       productName: 'PostMeter',
       appId: 'com.example.postmeter'
@@ -44,6 +45,7 @@ test('writes release manifest with artifact metadata', async () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.productName, 'PostMeter');
   assert.equal(manifest.version, '9.9.9');
+  assert.equal(Number.isNaN(Date.parse(manifest.buildTimestamp)), false);
   assert.equal(manifest.artifacts.length, 1);
   assert.equal(manifest.artifacts[0].file, 'PostMeter-9.9.9.zip');
   assert.equal(manifest.artifacts[0].platform, 'macos');
@@ -99,6 +101,7 @@ test('release manifest validation rejects unconfigured MSI and RPM distributable
       productName: 'PostMeter',
       appId: 'com.strangequark.postmeter',
       version: '9.9.9',
+      buildTimestamp: '2026-05-25T00:00:00.000Z',
       artifacts: [{
         file: 'PostMeter-9.9.9.dmg',
         sizeBytes: stat.size,
@@ -138,6 +141,7 @@ test('validates release artifact manifest entries against files and package prot
   const packageJsonPath = path.join(tempDir, 'package.json');
   await fs.writeFile(packageJsonPath, JSON.stringify({
     version: '9.9.9',
+    buildTimestamp: '2026-05-25T00:00:00.000Z',
     author: 'StrangeQuark <support@qrksw.com>',
     homepage: 'https://github.com/StrangeQuark/PostMeter#readme',
     repository: { url: 'git+https://github.com/StrangeQuark/PostMeter.git' },
@@ -169,6 +173,7 @@ test('validates release artifact manifest entries against files and package prot
     productName: 'PostMeter',
     appId: 'com.strangequark.postmeter',
     version: '9.9.9',
+    buildTimestamp: '2026-05-25T00:00:00.000Z',
     artifacts: [{
       file: 'PostMeter-9.9.9.dmg',
       sizeBytes: stat.size,
@@ -211,6 +216,7 @@ test('release validation requires and verifies electron-updater metadata for req
       productName: 'PostMeter',
       appId: 'com.strangequark.postmeter',
       version: '9.9.9',
+      buildTimestamp: '2026-05-25T00:00:00.000Z',
       artifacts: [{
         file: 'PostMeter-Setup-9.9.9.exe',
         sizeBytes: stat.size,
@@ -280,6 +286,7 @@ test('release validation rejects unsafe or unmanifested updater artifact referen
       productName: 'PostMeter',
       appId: 'com.strangequark.postmeter',
       version: '9.9.9',
+      buildTimestamp: '2026-05-25T00:00:00.000Z',
       artifacts: [{
         file: 'PostMeter-Setup-9.9.9.exe',
         sizeBytes: stat.size,
@@ -360,6 +367,7 @@ test('release manifest validation rejects stale checksums and unmanifested top-l
       productName: 'PostMeter',
       appId: 'com.strangequark.postmeter',
       version: '9.9.9',
+      buildTimestamp: '2026-05-25T00:00:00.000Z',
       artifacts: [{
         file: 'PostMeter-9.9.9.dmg',
         sizeBytes: stat.size,
@@ -407,6 +415,7 @@ test('release manifest validation rejects packaged internal paths', async () => 
       productName: 'PostMeter',
       appId: 'com.strangequark.postmeter',
       version: '9.9.9',
+      buildTimestamp: '2026-05-25T00:00:00.000Z',
       artifacts: [{
         file: 'win-unpacked/PostMeter.exe',
         sizeBytes: artifactBytes.length,

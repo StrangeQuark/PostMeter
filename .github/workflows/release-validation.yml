@@ -48,6 +48,7 @@ jobs:
             packaged_auth_command: xvfb-run -a npm run release:validate:packaged-auth
             packaged_sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
             protocol_command: echo "No protocol registration validation required for linux."
+            required_artifact_types: appimage,deb
             ci_no_sandbox: "1"
           - platform: windows
             runner: windows-latest
@@ -70,6 +71,7 @@ jobs:
             packaged_auth_command: npm run release:validate:packaged-auth
             packaged_sandbox_command: npm run sandbox:validate:packaged
             protocol_command: npm run release:validate:win-protocol
+            required_artifact_types: exe
           - platform: macos
             runner: macos-latest
             command: npm run dist:mac
@@ -91,13 +93,14 @@ jobs:
             packaged_auth_command: npm run release:validate:packaged-auth
             packaged_sandbox_command: npm run sandbox:validate:packaged
             protocol_command: npm run release:validate:mac-protocol
+            required_artifact_types: dmg,zip
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -110,6 +113,18 @@ jobs:
 
       - name: Renderer HTML check
         run: npm run renderer:html:check
+
+      - name: Renderer security sink validation
+        run: npm run renderer:security:validate
+
+      - name: GitHub workflow security validation
+        run: npm run github:workflows:validate
+
+      - name: Secret scanning validation
+        run: npm run secrets:validate
+
+      - name: Release governance checklist validation
+        run: npm run release:governance:validate
 
       - name: Refactor structure validation
         run: npm run refactor:structure:validate
@@ -173,10 +188,19 @@ jobs:
       - name: Sandbox release gate manifest
         run: npm run release:gate
 
-      - name: Build unsigned artifacts
+      - name: Build validation artifacts
         run: ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Prepare platform release metadata
+        run: npm run release:prepare
+
+      - name: Validate platform release metadata
+        run: npm run release:validate
+        env:
+          POSTMETER_RELEASE_PLATFORM: ${{ matrix.platform }}
+          POSTMETER_RELEASE_REQUIRED_TYPES: ${{ matrix.required_artifact_types }}
 
       - name: Packaged app startup smoke
         run: ${{ matrix.packaged_smoke_command }}
@@ -208,7 +232,7 @@ jobs:
 
       - name: Upload validation logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-validation-${{ matrix.platform }}-logs
           path: validation-artifacts/**
@@ -217,7 +241,7 @@ jobs:
 
       - name: Upload platform artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-validation-${{ matrix.platform }}
           path: |
@@ -237,10 +261,10 @@ jobs:
     needs: build
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -249,7 +273,7 @@ jobs:
         run: npm ci
 
       - name: Download platform artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # actions/download-artifact@v4
         with:
           path: release
           merge-multiple: true
@@ -266,7 +290,7 @@ jobs:
           POSTMETER_RELEASE_REQUIRED_TYPES: ${{ inputs.required_artifact_types }}
 
       - name: Upload combined validation artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-validation-combined
           path: |

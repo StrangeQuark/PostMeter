@@ -440,9 +440,11 @@ function focusMarkdownPaneInput(inputId) {
 function renderMarkdownPreview(preview, value, emptyText) {
   const source = String(value || '');
   if (!source.trim()) {
+    // postmeter-security-allow-html: empty-state text is escaped before assigning the fixed markdown preview placeholder markup.
     preview.innerHTML = `<p class="markdown-empty">${escapeHtmlText(emptyText)}</p>`;
     return;
   }
+  // postmeter-security-allow-html: MarkdownRenderer keeps markdown-it html:false and fallback rendering escapes source before preview insertion.
   preview.innerHTML = MarkdownRenderer.renderMarkdown
     ? MarkdownRenderer.renderMarkdown(source)
     : escapeHtmlText(source).replace(/\n/g, '<br>');

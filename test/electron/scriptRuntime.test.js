@@ -281,22 +281,22 @@ test('supports exact reviewed team and external package bundles without Node acc
     const team = require('@postmeter/team-utils');
     module.exports = function (value) { return team.label(value).toUpperCase(); };
   `;
-  const latestSource = `
+  const pinnedSource = `
     exports.version = '3.0.0';
     exports.slug = function (value) { return require('lodash').kebabCase(value); };
   `;
   const result = runPostmanScript(`
     const team = pm.require('@postmeter/team-utils');
     const npmPackage = pm.require('npm:@postmeter/example@1.2.3');
-    const latestPackage = pm.require('npm:@postmeter/latest');
+    const pinnedPackage = pm.require('npm:@postmeter/pinned@3.0.0');
     pm.test('reviewed package cache', function () {
       pm.expect(team.label({ name: 'Ada' })).to.equal('Ada:team');
       pm.expect(npmPackage({ name: 'Ada' })).to.equal('ADA:TEAM');
-      pm.expect(latestPackage.version).to.equal('3.0.0');
-      pm.expect(latestPackage.slug('Latest Package')).to.equal('latest-package');
+      pm.expect(pinnedPackage.version).to.equal('3.0.0');
+      pm.expect(pinnedPackage.slug('Pinned Package')).to.equal('pinned-package');
       pm.expect(team.label.constructor).to.be.undefined;
       pm.expect(npmPackage.constructor).to.be.undefined;
-      pm.expect(latestPackage.slug.constructor).to.be.undefined;
+      pm.expect(pinnedPackage.slug.constructor).to.be.undefined;
     });
   `, {
     sandboxPackages: [
@@ -313,11 +313,11 @@ test('supports exact reviewed team and external package bundles without Node acc
         dependencies: ['@postmeter/team-utils']
       },
       {
-        specifier: 'npm:@postmeter/latest',
-        source: latestSource,
-        integrity: scriptPackageIntegrity(latestSource),
+        specifier: 'npm:@postmeter/pinned@3.0.0',
+        source: pinnedSource,
+        integrity: scriptPackageIntegrity(pinnedSource),
         dependencies: ['lodash'],
-        packageName: '@postmeter/latest',
+        packageName: '@postmeter/pinned',
         packageVersion: '3.0.0'
       }
     ]
@@ -1171,7 +1171,7 @@ test('tracks Postman package references for reviewed cache workflows', () => {
   assert.equal(status.find((item) => item.specifier === '@postmeter/tools').status, 'reviewed');
   assert.equal(status.find((item) => item.specifier === 'jsr:@postmeter/protocol@1.0.0').status, 'missing-review');
   assert.equal(status.find((item) => item.specifier === 'npm:@postmeter/mock-tools@1.0.0').status, 'missing-review');
-  assert.equal(status.find((item) => item.specifier === 'npm:left-pad').status, 'missing-review');
+  assert.equal(status.find((item) => item.specifier === 'npm:left-pad').status, 'unpinned-or-invalid');
 });
 
 test('rejects malformed pm.visualizer blocks', () => {

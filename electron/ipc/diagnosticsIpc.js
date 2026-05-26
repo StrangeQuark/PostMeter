@@ -3,6 +3,7 @@ const {
   redactText,
   sanitizeDiagnosticErrorCode
 } = require('../../src/core/diagnostics-release/diagnostics');
+const path = require('node:path');
 const { jsonFilters, selectedSaveFilePath } = require('../app-shell/fileDialogs');
 
 function registerDiagnosticsIpc(options = {}) {
@@ -40,8 +41,17 @@ function registerDiagnosticsIpc(options = {}) {
     } catch (error) {
       throw redactedDiagnosticsExportError(error);
     }
-    return fileOperationResult({ cancelled: false, path: exportedPath });
+    return fileOperationResult(safeFileOperationExportResult(exportedPath));
   });
+}
+
+function safeFileOperationExportResult(filePath) {
+  const displayPath = path.basename(String(filePath || '')) || 'export';
+  return {
+    cancelled: false,
+    path: displayPath,
+    displayPath
+  };
 }
 
 function redactedDiagnosticsExportError(error) {

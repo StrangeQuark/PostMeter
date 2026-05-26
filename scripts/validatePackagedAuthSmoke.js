@@ -24,6 +24,8 @@ async function main() {
     const env = {
       ...process.env,
       POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
+      POSTMETER_PACKAGED_SMOKE: '1',
+      POSTMETER_PACKAGED_UI_SMOKE: '1',
       POSTMETER_UI_AUTH_MATRIX_BASE_URL: server.baseUrl,
       POSTMETER_UI_AUTH_MATRIX_SMOKE: '1',
       POSTMETER_VALIDATION_ARTIFACT_DIR: artifactDir

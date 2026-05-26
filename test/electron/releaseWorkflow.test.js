@@ -71,7 +71,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /Upload native validation logs/);
 });
 
-test('release workflow builds unsigned artifacts for all tier-one desktop platforms', async () => {
+test('release workflow builds signed artifacts for all tier-one desktop platforms', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
   const workflowDocument = YAML.parse(workflow);
@@ -124,11 +124,17 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run diagnostics:privacy:validate/);
   assert.match(workflow, /npm run production:readiness:claim:stable/);
   assert.ok(
-    workflow.indexOf('npm run production:readiness:claim:stable') < workflow.indexOf('Build unsigned artifacts'),
+    workflow.indexOf('npm run production:readiness:claim:stable') < workflow.indexOf('Build signed artifacts'),
     'stable readiness claim must run before release artifacts are built'
   );
   assert.match(workflow, /npm run release:gate/);
-  assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*"false"/);
+  assert.match(workflow, /npm run release:signing:validate/);
+  assert.match(workflow, /POSTMETER_RELEASE_MODE:\s*production/);
+  assert.match(workflow, /WINDOWS_CODESIGN_CERTIFICATE/);
+  assert.match(workflow, /MACOS_CODESIGN_CERTIFICATE/);
+  assert.match(workflow, /APPLE_APP_SPECIFIC_PASSWORD/);
+  assert.doesNotMatch(workflow, /Build unsigned artifacts/);
+  assert.doesNotMatch(workflow, /Unsigned PostMeter desktop artifacts/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
   assert.match(workflow, /ci_no_sandbox:\s*"1"/);

@@ -1,5 +1,10 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
+const tls = require('node:tls');
+const { mainOwnedFileBindingsForWorkspace } = require('../../src/core/http/fileAttachmentBindings');
 const {
   clientCertificateMatchesUrl,
   findMatchingClientCertificate,
@@ -8,6 +13,10 @@ const {
   resolveHttpTlsPolicy,
   resolveTlsSettingsSecrets
 } = require('../../src/core/http/tlsSettings');
+const {
+  mergeWorkspaceLocalSettingsForSave,
+  normalizeWorkspaceLocalSettings
+} = require('../../src/core/workspace/models');
 
 test('resolves managed client-certificate passphrases from the workspace vault', async () => {
   const requestedKeys = [];
@@ -186,4 +195,48 @@ test('builds HTTP TLS policy from global settings and request-local overrides', 
 
   assert.equal(requestLocalCaIgnored.tlsOptions, null);
   assert.equal(requestLocalCaIgnored.tlsDiagnostics.caCertificateConfigured, false);
+});
+
+test('builds HTTP TLS policy from preserved main-owned CA certificate binding', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-tls-ca-binding-'));
+  t.after(async () => fs.rm(tempDir, { recursive: true, force: true }));
+  const caPath = path.join(tempDir, 'self-signed.badssl.pem');
+  const caPem = tls.rootCertificates[0];
+  await fs.writeFile(caPath, caPem);
+  const source = 'postmeter-local-file/certificate/test/self-signed.badssl.pem';
+  const localsettings = mergeWorkspaceLocalSettingsForSave({
+    request: {
+      caCertificatePath: source,
+      sslCertificateVerification: true
+    },
+    sandbox: {
+      fileBindings: []
+    }
+  }, normalizeWorkspaceLocalSettings({
+    request: {
+      caCertificatePath: source,
+      sslCertificateVerification: true
+    },
+    sandbox: {
+      fileBindings: [{
+        source,
+        localPath: caPath,
+        fileName: 'self-signed.badssl.pem',
+        mode: 'file',
+        bound: true
+      }]
+    }
+  }));
+
+  const result = await resolveHttpTlsPolicy({
+    auth: { type: 'none' },
+    settings: { sslCertificateVerification: 'inherit' }
+  }, null, new URL('https://self-signed.badssl.com'), {
+    tlsSettings: { request: localsettings.request },
+    fileBindings: mainOwnedFileBindingsForWorkspace({ localsettings })
+  });
+
+  assert.equal(result.tlsDiagnostics.caCertificateConfigured, true);
+  assert.equal(result.tlsOptions.rejectUnauthorized, true);
+  assert.ok(result.tlsOptions.ca.some((entry) => String(entry).includes(caPem.slice(0, 64))));
 });

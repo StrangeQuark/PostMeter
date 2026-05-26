@@ -173,6 +173,7 @@
     state.wrapper.hidden = textbox.hidden === true;
     state.wrapper.classList.toggle('has-variable-highlight-value', hasValue);
     textbox.classList.toggle('has-variable-highlight-value', hasValue);
+    // postmeter-security-allow-html: variable highlighter escapes text and token names before assigning fixed overlay span markup.
     state.code.innerHTML = highlightVariableTokens(textbox.value || '', { target: textbox });
     copyTextboxMetrics(textbox, state.overlay);
     syncScroll(textbox);

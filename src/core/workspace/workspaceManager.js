@@ -127,7 +127,7 @@ class WorkspaceManager {
       const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
       return this.saveNewWorkspaceTextFile(workspaceName, rawContent, catalog.files);
     }
-    const importedWorkspace = await this.currentStore().importWorkspace(importPath);
+    const importedWorkspace = markWorkspaceImportedUntrusted(await this.currentStore().importWorkspace(importPath));
     const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
     return this.saveNewWorkspaceFile(workspaceName, importedWorkspace, catalog.files);
   }
@@ -765,6 +765,15 @@ function importWorkspaceDisplayName(importPath) {
     ? nestedParsed.name
     : parsed.name;
   return normalizeWorkspaceDisplayName(baseName || 'Workspace');
+}
+
+function markWorkspaceImportedUntrusted(workspace) {
+  const next = workspace && typeof workspace === 'object' ? workspace : {};
+  next.localsettings ||= {};
+  next.localsettings.security ||= {};
+  next.localsettings.security.importedUntrusted = true;
+  next.localsettings.security.allowPrivateNetworkRequests = false;
+  return next;
 }
 
 function workspaceSummary(workspace, extras = {}) {

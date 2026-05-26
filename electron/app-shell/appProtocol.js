@@ -1,16 +1,15 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
+  appRendererAllowedAssetPaths,
+  appRendererAllowedQueryKeys,
   APP_PROTOCOL_HOST,
   APP_PROTOCOL_SCHEME,
-  APP_RENDERER_ALLOWED_ASSET_PATHS,
   APP_RENDERER_CSP,
   APP_RENDERER_PATHNAME,
-  APP_RENDERER_QUERY_KEYS
+  APP_RENDERER_QUERY_KEYS,
+  APP_RENDERER_SMOKE_QUERY_KEYS
 } = require('./rendererAssetManifest');
-
-const ALLOWED_APP_ASSETS = new Set(APP_RENDERER_ALLOWED_ASSET_PATHS);
-const ALLOWED_RENDERER_QUERY_KEYS = new Set(APP_RENDERER_QUERY_KEYS);
 
 function registerAppProtocolScheme(protocol) {
   protocol.registerSchemesAsPrivileged([
@@ -26,7 +25,8 @@ function registerAppProtocolScheme(protocol) {
 
 function registerAppProtocolHandler(protocol, options = {}) {
   const rootPath = path.resolve(options.rootPath || path.join(__dirname, '..', '..'));
-  protocol.handle(APP_PROTOCOL_SCHEME, (request) => serveAppProtocolRequest(request, { rootPath }));
+  const allowSmokeAssets = shouldAllowRendererSmokeAssets(options);
+  protocol.handle(APP_PROTOCOL_SCHEME, (request) => serveAppProtocolRequest(request, { rootPath, allowSmokeAssets }));
 }
 
 async function serveAppProtocolRequest(request, options = {}) {
@@ -37,7 +37,7 @@ async function serveAppProtocolRequest(request, options = {}) {
   const rootPath = path.resolve(options.rootPath || path.join(__dirname, '..', '..'));
   let filePath;
   try {
-    filePath = appProtocolFilePath(request?.url, rootPath);
+    filePath = appProtocolFilePath(request?.url, rootPath, { allowSmokeAssets: options.allowSmokeAssets === true });
   } catch {
     return textResponse('Not found.', 404);
   }
@@ -57,7 +57,7 @@ async function serveAppProtocolRequest(request, options = {}) {
   }
 }
 
-function createAppRendererUrl(query = {}) {
+function createAppRendererUrl(query = {}, options = {}) {
   const url = new URL(`${APP_PROTOCOL_SCHEME}://${APP_PROTOCOL_HOST}${APP_RENDERER_PATHNAME}`);
   for (const [key, value] of Object.entries(query || {})) {
     if (value == null || value === '') {
@@ -68,7 +68,7 @@ function createAppRendererUrl(query = {}) {
   return url.toString();
 }
 
-function isTrustedAppRendererUrl(value) {
+function isTrustedAppRendererUrl(value, options = {}) {
   try {
     const parsed = new URL(String(value || ''));
     return parsed.protocol === `${APP_PROTOCOL_SCHEME}:`
@@ -77,22 +77,23 @@ function isTrustedAppRendererUrl(value) {
       && !parsed.username
       && !parsed.password
       && !parsed.port
-      && hasOnlyAllowedRendererQuery(parsed);
+      && hasOnlyAllowedRendererQuery(parsed, options);
   } catch {
     return false;
   }
 }
 
-function hasOnlyAllowedRendererQuery(parsed) {
+function hasOnlyAllowedRendererQuery(parsed, options = {}) {
+  const allowedQueryKeys = new Set(appRendererAllowedQueryKeys({ includeSmoke: options.allowSmokeQuery === true }));
   for (const key of parsed.searchParams.keys()) {
-    if (!ALLOWED_RENDERER_QUERY_KEYS.has(key)) {
+    if (!allowedQueryKeys.has(key)) {
       return false;
     }
   }
   return true;
 }
 
-function appProtocolFilePath(rawUrl, rootPath) {
+function appProtocolFilePath(rawUrl, rootPath, options = {}) {
   const parsed = new URL(String(rawUrl || ''));
   if (parsed.protocol !== `${APP_PROTOCOL_SCHEME}:`
     || parsed.hostname !== APP_PROTOCOL_HOST
@@ -112,7 +113,14 @@ function appProtocolFilePath(rawUrl, rootPath) {
   if (!normalizedPathname.startsWith('/') || normalizedPathname.includes('\0')) {
     throw new Error('Invalid PostMeter app protocol path.');
   }
-  if (!isAllowedAppAssetPath(normalizedPathname)) {
+  if (normalizedPathname === APP_RENDERER_PATHNAME) {
+    if (!hasOnlyAllowedRendererQuery(parsed, { allowSmokeQuery: options.allowSmokeAssets === true })) {
+      throw new Error('PostMeter app protocol query is not allowlisted.');
+    }
+  } else if (parsed.search) {
+    throw new Error('PostMeter app protocol asset queries are not allowlisted.');
+  }
+  if (!isAllowedAppAssetPath(normalizedPathname, options)) {
     throw new Error('PostMeter app protocol asset is not allowlisted.');
   }
   const resolved = path.resolve(rootPath, `.${normalizedPathname}`);
@@ -123,9 +131,8 @@ function appProtocolFilePath(rawUrl, rootPath) {
   return resolved;
 }
 
-function isAllowedAppAssetPath(pathname) {
-  return ALLOWED_APP_ASSETS.has(pathname)
-    || pathname.startsWith('/src/renderer/')
+function isAllowedAppAssetPath(pathname, options = {}) {
+  return new Set(appRendererAllowedAssetPaths({ includeSmoke: options.allowSmokeAssets === true })).has(pathname);
 }
 
 function contentTypeForPath(filePath) {
@@ -165,17 +172,46 @@ function textResponse(message, status) {
   });
 }
 
+function shouldAllowRendererSmokeAssets(options = {}) {
+  const env = options.env || process.env;
+  const isPackaged = options.isPackaged === true || options.app?.isPackaged === true;
+  if (isPackaged) {
+    return packagedRendererSmokeRequested(env);
+  }
+  if (options.allowSmokeAssets === true) {
+    return true;
+  }
+  return rendererSmokeRequested(env);
+}
+
+function rendererSmokeRequested(env = process.env) {
+  return APP_RENDERER_SMOKE_QUERY_KEYS.some((key) => {
+    if (!key.startsWith('ui') || key.endsWith('BaseUrl')) {
+      return false;
+    }
+    const envKey = `POSTMETER_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`;
+    return env[envKey] === '1';
+  });
+}
+
+function packagedRendererSmokeRequested(env = process.env) {
+  return env.POSTMETER_PACKAGED_SMOKE === '1' && env.POSTMETER_PACKAGED_UI_SMOKE === '1' && rendererSmokeRequested(env);
+}
+
 module.exports = {
   appProtocolFilePath,
   APP_PROTOCOL_HOST,
   APP_RENDERER_CSP,
   APP_RENDERER_QUERY_KEYS,
+  APP_RENDERER_SMOKE_QUERY_KEYS,
   APP_PROTOCOL_SCHEME,
   APP_RENDERER_PATHNAME,
   appProtocolHeaders,
   contentTypeForPath,
   createAppRendererUrl,
   isTrustedAppRendererUrl,
+  packagedRendererSmokeRequested,
+  rendererSmokeRequested,
   registerAppProtocolHandler,
   registerAppProtocolScheme,
   serveAppProtocolRequest

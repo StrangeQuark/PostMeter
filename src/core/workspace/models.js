@@ -609,7 +609,107 @@ function normalizeWorkspaceLocalSettings(settings) {
       trustedCapabilities: {
         vaultGrants: normalized.sandbox.trustedCapabilities.vaultGrants
       }
+    },
+    security: {
+      importedUntrusted: settings?.security?.importedUntrusted === true,
+      allowPrivateNetworkRequests: settings?.security?.allowPrivateNetworkRequests === true,
+      blockPrivateNetworkRequests: settings?.security?.blockPrivateNetworkRequests === true,
+      privateNetworkPolicySource: settings?.security?.privateNetworkPolicySource === 'main' ? 'main' : '',
+      trustedWorkspace: settings?.security?.trustedWorkspace === true,
+      allowHighRiskRuns: settings?.security?.allowHighRiskRuns === true
     }
+  };
+}
+
+function mergeWorkspaceLocalSettingsForSave(settings, fallbackLocalSettings = {}) {
+  const fallback = normalizeWorkspaceLocalSettings(fallbackLocalSettings || {});
+  const source = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : null;
+  if (!source) {
+    return fallback;
+  }
+  const next = normalizeWorkspaceLocalSettings(source);
+  const sourceSandbox = source.sandbox && typeof source.sandbox === 'object' && !Array.isArray(source.sandbox)
+    ? source.sandbox
+    : {};
+  const hasRendererFileBindings = Object.hasOwn(sourceSandbox, 'fileBindings');
+  next.sandbox.fileBindings = mergeLocalFileBindingsForSave(
+    hasRendererFileBindings ? sourceSandbox.fileBindings : fallback.sandbox.fileBindings,
+    fallback.sandbox.fileBindings,
+    next.request
+  );
+  const sourceTrustedCapabilities = sourceSandbox.trustedCapabilities
+    && typeof sourceSandbox.trustedCapabilities === 'object'
+    && !Array.isArray(sourceSandbox.trustedCapabilities)
+    ? sourceSandbox.trustedCapabilities
+    : {};
+  if (!Object.hasOwn(sourceTrustedCapabilities, 'vaultGrants')) {
+    next.sandbox.trustedCapabilities.vaultGrants = fallback.sandbox.trustedCapabilities.vaultGrants;
+  }
+  next.security = mergeSecurityLocalSettingsForSave(source.security, fallback.security, next.security);
+  return next;
+}
+
+function mergeLocalFileBindingsForSave(rendererBindings = [], fallbackBindings = [], requestSettings = {}) {
+  const fallbackBySource = new Map(normalizeSandboxFileBindings(fallbackBindings)
+    .filter((binding) => binding.source)
+    .map((binding) => [binding.source, binding]));
+  const mergedBySource = new Map();
+  for (const binding of normalizeSandboxFileBindings(rendererBindings)) {
+    const mainBinding = fallbackBySource.get(binding.source);
+    mergedBySource.set(binding.source, {
+      ...binding,
+      localPath: mainBinding?.localPath || binding.localPath,
+      bound: Boolean(mainBinding?.localPath) || binding.bound === true
+    });
+  }
+  for (const reference of certificateFileReferencesFromRequestSettings(requestSettings)) {
+    if (!mergedBySource.has(reference) && fallbackBySource.has(reference)) {
+      mergedBySource.set(reference, fallbackBySource.get(reference));
+    }
+  }
+  return Array.from(mergedBySource.values());
+}
+
+function certificateFileReferencesFromRequestSettings(requestSettings = {}) {
+  const references = new Set();
+  const addReference = (value) => {
+    const reference = String(value || '').trim();
+    if (reference) {
+      references.add(reference);
+    }
+  };
+  addReference(requestSettings.caCertificatePath);
+  for (const certificate of Array.isArray(requestSettings.clientCertificates) ? requestSettings.clientCertificates : []) {
+    addReference(certificate?.caPath);
+    addReference(certificate?.certPath);
+    addReference(certificate?.keyPath);
+    addReference(certificate?.pfxPath);
+  }
+  return references;
+}
+
+function mergeSecurityLocalSettingsForSave(sourceSecurity, fallbackSecurity = {}, nextSecurity = {}) {
+  const source = sourceSecurity && typeof sourceSecurity === 'object' && !Array.isArray(sourceSecurity)
+    ? sourceSecurity
+    : {};
+  const merged = {};
+  for (const key of [
+    'importedUntrusted',
+    'allowPrivateNetworkRequests',
+    'blockPrivateNetworkRequests',
+    'privateNetworkPolicySource',
+    'trustedWorkspace',
+    'allowHighRiskRuns'
+  ]) {
+    merged[key] = Object.hasOwn(source, key) ? nextSecurity[key] : fallbackSecurity[key];
+  }
+  return {
+    importedUntrusted: merged.importedUntrusted === true,
+    allowPrivateNetworkRequests: merged.allowPrivateNetworkRequests === true,
+    blockPrivateNetworkRequests: merged.blockPrivateNetworkRequests === true,
+    privateNetworkPolicySource: merged.privateNetworkPolicySource === 'main' ? 'main' : '',
+    trustedWorkspace: merged.trustedWorkspace === true,
+    allowHighRiskRuns: merged.allowHighRiskRuns === true
   };
 }
 
@@ -1189,6 +1289,7 @@ module.exports = {
   normalizeRunnerRequestSource,
   normalizeSettings,
   normalizeWorkspaceLocalSettings,
+  mergeWorkspaceLocalSettingsForSave,
   mergeSettingsWithWorkspaceLocalSettings,
   performanceTestModel,
   requestModel,

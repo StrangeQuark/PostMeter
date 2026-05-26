@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { collectionRunResultToCsv, runCollection, runRunner } = require('../../src/core/runtime/collectionRunner');
+const { fieldLimit } = require('../../src/core/contracts/payloadSchemas');
 const {
   exportPerformanceTestToJson,
   importPerformanceTestFromText,
@@ -50,9 +51,22 @@ const {
   assertRunnerProgressPayload
 } = require('../../src/core/contracts/ipcValidation');
 const { resolveTlsSettingsSecrets } = require('../../src/core/http/tlsSettings');
+const {
+  createRequestNetworkPolicyForWorkspace
+} = require('../security/requestNetworkPolicy');
+const {
+  classifyHostname
+} = require('../../src/core/security/networkPolicy');
+const { mainOwnedFileBindingsForWorkspace } = require('../../src/core/http/fileAttachmentBindings');
 
 const RESULT_STORE_WARNING_MARGIN_BYTES = 1024 * 1024 * 1024;
+const IMPORT_TEXT_LIMIT = fieldLimit('body');
 const RUN_PROGRESS_MIN_INTERVAL_MILLIS = 250;
+const HIGH_RISK_RUN_THRESHOLDS = Object.freeze({
+  plannedRequests: 1000,
+  concurrency: 5,
+  durationSeconds: 60
+});
 
 function normalizeHtmlReportOptions(options = {}) {
   assertHtmlReportOptionsPayload(options);
@@ -135,6 +149,17 @@ function registerRuntimeIpc(options = {}) {
     try {
       const workspace = getWorkspace();
       const plannedRequests = firstClassRunner ? countRunnerRequests(collection) : countCollectionRequests(collection);
+      const highRiskRun = await confirmHighRiskRunIfNeeded({
+        collection,
+        concurrency: 1,
+        dialog,
+        durationSeconds: 0,
+        getMainWindow,
+        kind: 'runner',
+        plannedRequests,
+        recordDiagnosticEvent,
+        workspace
+      });
       currentResultStore?.close?.();
       currentResultStore = await prepareRuntimeResultStore({
         capturePolicy: config.capturePolicy || collection.capturePolicy,
@@ -153,14 +178,21 @@ function registerRuntimeIpc(options = {}) {
       const baseLocalVariablesByRequestId = requestLocalVariablesById(collection);
       const vaultStore = getVaultStore(workspaceId);
       const tlsSettings = await resolveTlsSettingsSecrets(workspace.settings || {}, vaultStore);
+      const networkPolicy = createRequestNetworkPolicyForWorkspace({
+        dialog,
+        getMainWindow,
+        recordDiagnosticEvent,
+        workspace
+      });
       const runnerOptions = {
         abortController,
         signal: abortController.signal,
         cookieJar: workspace.cookies || [],
         globals: workspace.globals || [],
-        fileBindings: workspace.settings?.sandbox?.fileBindings || [],
+        fileBindings: mainOwnedFileBindings(workspace),
+        networkPolicy,
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace),
         includeTransportDiagnostics: true,
         tlsSettings,
         vault: vaultStore,
@@ -175,6 +207,7 @@ function registerRuntimeIpc(options = {}) {
         retainResults: !firstClassRunner,
         recordDiagnosticEvent
       };
+      await recordHighRiskRunStarted(highRiskRun, recordDiagnosticEvent);
       const result = firstClassRunner
         ? await runRunnerImpl(collection, environment, runnerOptions)
         : await runCollectionImpl(collection, environment, runnerOptions);
@@ -294,7 +327,7 @@ function registerRuntimeIpc(options = {}) {
       } else {
         await currentResultStore.exportJson(filePath, { kind: 'runner', result: publicResult });
       }
-      return fileOperationResult({ cancelled: false, path: filePath });
+      return fileOperationResult(safeFileOperationExportResult(filePath));
     }
     const content = format === 'csv'
       ? collectionRunResultToCsv(publicResult)
@@ -302,7 +335,7 @@ function registerRuntimeIpc(options = {}) {
         ? await resultHtmlReportToHtml({ kind: 'runner', result: publicResult, ...normalizedHtmlReportOptions })
         : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-runner-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
+    return fileOperationResult(safeFileOperationExportResult(filePath));
   });
 
   ipcMain.handle('runner:estimateResultStore', async (_event, collection, config = {}) => {
@@ -353,8 +386,25 @@ function registerRuntimeIpc(options = {}) {
       const baseEnvironment = cloneJson(environment);
       const baseCookies = cloneJson(workspace.cookies || []);
       const plannedRequests = estimatePerformancePlannedRequests(performanceTest);
+      const highRiskRun = await confirmHighRiskRunIfNeeded({
+        concurrency: estimatePerformanceConcurrency(performanceTest),
+        dialog,
+        durationSeconds: estimatePerformanceDurationSeconds(performanceTest),
+        getMainWindow,
+        kind: 'performance',
+        performanceTest,
+        plannedRequests,
+        recordDiagnosticEvent,
+        workspace
+      });
       const vaultStore = getVaultStore(workspaceId);
       const tlsSettings = await resolveTlsSettingsSecrets(workspace.settings || {}, vaultStore);
+      const networkPolicy = createRequestNetworkPolicyForWorkspace({
+        dialog,
+        getMainWindow,
+        recordDiagnosticEvent,
+        workspace
+      });
       currentResultStore?.close?.();
       currentResultStore = await prepareRuntimeResultStore({
         capturePolicy: performanceTest.capturePolicy,
@@ -366,14 +416,16 @@ function registerRuntimeIpc(options = {}) {
         },
         plannedRequests
       });
+      await recordHighRiskRunStarted(highRiskRun, recordDiagnosticEvent);
       const result = await runPerformanceTestImpl(performanceTest, environment, {
         abortController,
         signal: abortController.signal,
         cookieJar: workspace.cookies || [],
         globals: workspace.globals || [],
-        fileBindings: workspace.settings?.sandbox?.fileBindings || [],
+        fileBindings: mainOwnedFileBindings(workspace),
+        networkPolicy,
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace),
         tlsSettings,
         vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
@@ -513,18 +565,16 @@ function registerRuntimeIpc(options = {}) {
     return true;
   });
 
-  ipcMain.handle('performance:import', async (_event, providedFilePath = null) => {
-    const filePath = providedFilePath == null
-      ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+  ipcMain.handle('performance:import', async (_event, providedSource = null) => {
+    const importSource = await readTextImportSource(providedSource, 'performance import path', async () => selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
         title: 'Import Performance Test',
         properties: ['openFile'],
         filters: performanceImportFilters()
-      }))
-      : validateDialogFilePath(providedFilePath, 'performance import path');
-    if (!filePath) {
+      })), { dialog, env, getMainWindow });
+    if (!importSource) {
       return fileOperationResult({ cancelled: true });
     }
-    const performanceTest = importPerformanceTestFromText(await fs.readFile(filePath, 'utf8'));
+    const performanceTest = importPerformanceTestFromText(importSource.text);
     assertPerformanceTestPayload(performanceTest);
     return fileOperationResult({ cancelled: false, performanceTest });
   });
@@ -546,7 +596,7 @@ function registerRuntimeIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     await writeTextFileAtomic(filePath, exportPerformanceTestToJson(performanceTest), { prefix: 'postmeter-performance-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
+    return fileOperationResult(safeFileOperationExportResult(filePath));
   });
 
   ipcMain.handle('performance:exportResult', async (_event, result, format = 'json', htmlReportOptions = {}) => {
@@ -573,7 +623,7 @@ function registerRuntimeIpc(options = {}) {
       } else {
         await currentResultStore.exportJson(filePath, { kind: 'performance', result: publicResult });
       }
-      return fileOperationResult({ cancelled: false, path: filePath });
+      return fileOperationResult(safeFileOperationExportResult(filePath));
     }
     const content = format === 'csv'
       ? performanceResultToCsv(publicResult)
@@ -581,7 +631,7 @@ function registerRuntimeIpc(options = {}) {
         ? await resultHtmlReportToHtml({ kind: 'performance', result: publicResult, ...normalizedHtmlReportOptions })
         : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-performance-result-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
+    return fileOperationResult(safeFileOperationExportResult(filePath));
   });
 
   ipcMain.handle('performance:estimateResultStore', async (_event, performanceTest) => {
@@ -646,6 +696,259 @@ async function prepareRuntimeResultStore({ id, kind, capturePolicy, plannedReque
 }
 
 prepareRuntimeResultStore.path = '';
+
+async function confirmHighRiskRunIfNeeded(options = {}) {
+  const assessment = assessHighRiskRun(options);
+  if (!assessment.highRisk || !assessment.requiresConfirmation) {
+    return assessment;
+  }
+  await options.recordDiagnosticEvent?.({
+    type: 'runtime.high-risk-run.prompted',
+    level: 'warn',
+    outcome: 'prompted',
+    fields: assessment.fields
+  });
+  const accepted = await showHighRiskRunPrompt(options, assessment);
+  if (!accepted) {
+    await options.recordDiagnosticEvent?.({
+      type: 'runtime.high-risk-run.denied',
+      level: 'warn',
+      outcome: 'denied',
+      fields: assessment.fields
+    });
+    const error = new Error(`High-risk ${assessment.kind} run was cancelled before execution.`);
+    error.code = 'POSTMETER_HIGH_RISK_RUN_DENIED';
+    throw error;
+  }
+  await options.recordDiagnosticEvent?.({
+    type: 'runtime.high-risk-run.accepted',
+    level: 'warn',
+    outcome: 'accepted',
+    fields: assessment.fields
+  });
+  return {
+    ...assessment,
+    accepted: true
+  };
+}
+
+async function recordHighRiskRunStarted(assessment, recordDiagnosticEvent) {
+  if (!assessment?.highRisk || assessment.requiresConfirmation !== true) {
+    return;
+  }
+  await recordDiagnosticEvent?.({
+    type: 'runtime.high-risk-run.started',
+    level: 'warn',
+    outcome: 'started',
+    fields: assessment.fields
+  });
+}
+
+function assessHighRiskRun(options = {}) {
+  const kind = options.kind === 'performance' ? 'performance' : 'runner';
+  const workspace = options.workspace || {};
+  const security = workspace.localsettings?.security || {};
+  const importedUntrusted = security.importedUntrusted === true;
+  const plannedRequests = boundedRuntimeNumber(options.plannedRequests, 0);
+  const concurrency = boundedRuntimeNumber(options.concurrency, 1);
+  const durationSeconds = boundedRuntimeNumber(options.durationSeconds, 0);
+  const targetCategories = unsafeRuntimeTargetCategories(options);
+  const scripts = runtimeSubjectHasScripts(options.collection || options.performanceTest);
+  const fileBindings = mainOwnedFileBindings(workspace).length;
+  const vaultGrantCount = trustedVaultGrantCount({
+    ...(workspace.settings?.sandbox?.trustedCapabilities || {}),
+    vaultGrants: scriptTrustedCapabilitiesForWorkspace(workspace).vaultGrants
+  });
+  const reasons = [];
+  if (plannedRequests > HIGH_RISK_RUN_THRESHOLDS.plannedRequests) {
+    reasons.push('planned-requests');
+  }
+  if (concurrency > HIGH_RISK_RUN_THRESHOLDS.concurrency) {
+    reasons.push('concurrency');
+  }
+  if (durationSeconds > HIGH_RISK_RUN_THRESHOLDS.durationSeconds) {
+    reasons.push('duration');
+  }
+  if (targetCategories.length) {
+    reasons.push('private-target');
+  }
+  if (importedUntrusted) {
+    reasons.push('imported-untrusted-workspace');
+  }
+  if (scripts) {
+    reasons.push('scripts');
+  }
+  if (fileBindings > 0) {
+    reasons.push('file-bindings');
+  }
+  if (vaultGrantCount > 0) {
+    reasons.push('vault');
+  }
+  const highRisk = reasons.length > 0;
+  const locallyTrusted = security.trustedWorkspace === true
+    || security.allowHighRiskRuns === true
+    || importedUntrusted !== true;
+  return {
+    kind,
+    highRisk,
+    requiresConfirmation: highRisk && !locallyTrusted,
+    fields: {
+      kind,
+      plannedRequests,
+      concurrency,
+      durationSeconds,
+      importedUntrusted,
+      scripts,
+      fileBindings,
+      vaultGrants: vaultGrantCount,
+      targetCategories,
+      reasons
+    }
+  };
+}
+
+async function showHighRiskRunPrompt(options = {}, assessment = {}) {
+  if (!options.dialog || typeof options.dialog.showMessageBox !== 'function') {
+    return false;
+  }
+  const fields = assessment.fields || {};
+  const detailLines = [
+    `Run type: ${assessment.kind || 'runtime'}`,
+    `Planned requests: ${fields.plannedRequests || 0}`,
+    `Concurrency: ${fields.concurrency || 1}`,
+    `Duration: ${fields.durationSeconds || 0}s`,
+    `Reasons: ${(fields.reasons || []).join(', ') || 'none'}`
+  ];
+  if (Array.isArray(fields.targetCategories) && fields.targetCategories.length) {
+    detailLines.push(`Target categories: ${fields.targetCategories.join(', ')}`);
+  }
+  const result = await options.dialog.showMessageBox(options.getMainWindow?.(), {
+    type: 'warning',
+    buttons: ['Run Once', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    title: 'High-Risk Run',
+    message: 'Imported workspace wants to start a high-risk run.',
+    detail: detailLines.join('\n')
+  });
+  return result?.response === 0;
+}
+
+function unsafeRuntimeTargetCategories(options = {}) {
+  const urls = runtimeSubjectUrls(options.collection || options.performanceTest).slice(0, 50);
+  const categories = new Set();
+  for (const rawUrl of urls) {
+    try {
+      const url = new URL(String(rawUrl || ''));
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        continue;
+      }
+      const classification = classifyHostname(url.hostname);
+      if (classification.category !== 'public' && classification.category !== 'invalid') {
+        categories.add(classification.category);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return [...categories].sort();
+}
+
+function runtimeSubjectUrls(subject = {}) {
+  if (subject?.request) {
+    return [subject.request.url].filter(Boolean);
+  }
+  const urls = [];
+  const visit = (node = {}) => {
+    for (const request of node.requests || []) {
+      if (request?.url) {
+        urls.push(request.url);
+      }
+    }
+    for (const folder of node.folders || []) {
+      visit(folder);
+    }
+  };
+  visit(subject);
+  return urls;
+}
+
+function runtimeSubjectHasScripts(subject = {}) {
+  if (!subject || typeof subject !== 'object') {
+    return false;
+  }
+  if (scriptsPayloadHasText(subject.scripts)) {
+    return true;
+  }
+  if (subject.request && scriptsPayloadHasText(subject.request.scripts)) {
+    return true;
+  }
+  for (const request of subject.requests || []) {
+    if (scriptsPayloadHasText(request?.scripts)) {
+      return true;
+    }
+  }
+  for (const folder of subject.folders || []) {
+    if (runtimeSubjectHasScripts(folder)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function scriptsPayloadHasText(scripts = {}) {
+  if (!scripts || typeof scripts !== 'object') {
+    return false;
+  }
+  return ['preRequest', 'tests', 'preRequestScript', 'testScript'].some((key) => {
+    return String(scripts[key] || '').trim().length > 0;
+  });
+}
+
+function trustedVaultGrantCount(trustedCapabilities = {}) {
+  const grants = trustedCapabilities?.vaultGrants;
+  if (Array.isArray(grants)) {
+    return grants.length;
+  }
+  if (grants && typeof grants === 'object') {
+    return Object.keys(grants).length;
+  }
+  return trustedCapabilities?.vault === true ? 1 : 0;
+}
+
+function estimatePerformanceConcurrency(performanceTest = {}) {
+  const type = String(performanceTest.type || '').trim();
+  const config = performanceTest.config || {};
+  const safety = performanceTest.safetyLimits || {};
+  const maxConfigured = Math.max(
+    boundedRuntimeNumber(config.startConcurrency, 1),
+    boundedRuntimeNumber(config.concurrency, 1),
+    type === 'spike' || type === 'diagnosis'
+      ? boundedRuntimeNumber(config.concurrency, 1) * boundedRuntimeNumber(config.spikeMultiplier, 1)
+      : 1
+  );
+  const maxSafety = boundedRuntimeNumber(safety.maxConcurrency, maxConfigured);
+  return Math.min(maxConfigured, Math.max(1, maxSafety));
+}
+
+function estimatePerformanceDurationSeconds(performanceTest = {}) {
+  const config = performanceTest.config || {};
+  const safety = performanceTest.safetyLimits || {};
+  const configured = boundedRuntimeNumber(config.durationSeconds, 0);
+  if (configured > 0) {
+    return configured;
+  }
+  return boundedRuntimeNumber(safety.maxDurationSeconds, 0);
+}
+
+function boundedRuntimeNumber(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    return fallback;
+  }
+  return Math.floor(number);
+}
 
 async function runtimeResultStoreEstimate(options = {}) {
   const estimate = estimateRuntimeResultStoreSize(options);
@@ -1036,6 +1339,50 @@ function countRunnerRequests(runner = {}) {
     : 0;
 }
 
+function normalizeFileImportSource(source, label, env = process.env) {
+  if (source == null) {
+    return { filePath: '', text: null, fileName: '' };
+  }
+  if (typeof source === 'string') {
+    throw new Error(`${label} cannot be supplied by the renderer. Use the native file picker or provide bounded file contents.`);
+  }
+  const value = source && typeof source === 'object' ? source : {};
+  if (typeof value.text === 'string') {
+    if (value.text.length > IMPORT_TEXT_LIMIT) {
+      throw new Error(`${label} content must be ${IMPORT_TEXT_LIMIT} characters or fewer.`);
+    }
+    return {
+      filePath: '',
+      text: value.text,
+      fileName: safeFilename(value.fileName || value.name || 'import.json')
+    };
+  }
+  if (typeof value.filePath === 'string' && value.filePath.trim()) {
+    throw new Error(`${label} cannot be supplied by the renderer. Use the native file picker or provide bounded file contents.`);
+  }
+  return { filePath: '', text: null, fileName: '' };
+}
+
+async function readTextImportSource(source, label, chooseFilePath, options = {}) {
+  const normalized = normalizeFileImportSource(source, label, options.env);
+  if (normalized.text != null) {
+    return normalized;
+  }
+  const filePath = await chooseFilePath();
+  if (!filePath) {
+    return null;
+  }
+  const text = await fs.readFile(validateDialogFilePath(filePath, label), 'utf8');
+  if (text.length > IMPORT_TEXT_LIMIT) {
+    throw new Error(`${label} content must be ${IMPORT_TEXT_LIMIT} characters or fewer.`);
+  }
+  return {
+    filePath,
+    text,
+    fileName: path.basename(filePath)
+  };
+}
+
 function failureCodeFromError(error, fallback) {
   const text = String(error?.message || fallback || 'error').toLowerCase();
   if (/progress.*delivery/.test(text)) {
@@ -1057,6 +1404,29 @@ function failureCodeFromError(error, fallback) {
     return 'script_cookie_denied_or_failed';
   }
   return String(fallback || 'runtime_failed');
+}
+
+function mainOwnedFileBindings(workspace = {}) {
+  return mainOwnedFileBindingsForWorkspace(workspace);
+}
+
+function safeFileOperationExportResult(filePath) {
+  const displayPath = path.basename(String(filePath || '')) || 'export';
+  return {
+    cancelled: false,
+    path: displayPath,
+    displayPath
+  };
+}
+
+function scriptTrustedCapabilitiesForWorkspace(workspace = {}) {
+  const trusted = workspace.settings?.sandbox?.trustedCapabilities || {};
+  return {
+    sendRequest: trusted.sendRequest !== false,
+    cookies: trusted.cookies !== false,
+    vault: false,
+    vaultGrants: workspace.localsettings?.sandbox?.trustedCapabilities?.vaultGrants || {}
+  };
 }
 
 module.exports = {

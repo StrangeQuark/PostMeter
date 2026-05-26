@@ -1,4 +1,6 @@
 const fs = require('node:fs/promises');
+const crypto = require('node:crypto');
+const os = require('node:os');
 const path = require('node:path');
 const { fieldLimit } = require('../../src/core/contracts/payloadSchemas');
 const {
@@ -15,6 +17,13 @@ const {
 } = require('../../src/core/import-export/requestFormats');
 const { writeTextFileAtomic } = require('../../src/core/workspace/workspacePersistence');
 const { assertWorkspaceEncryptionKey } = require('../../src/core/workspace/workspaceEncryption');
+const {
+  MAX_ATTACHMENT_BYTES,
+  mainOwnedFileBindingsForWorkspace,
+  mergeRendererFileBindingMetadataWithMainPaths,
+  normalizeSandboxFileBindings,
+  sanitizeSandboxFileBindingsForRenderer
+} = require('../../src/core/http/fileAttachmentBindings');
 const {
   collectionExportExtension,
   collectionExportFilters,
@@ -58,6 +67,8 @@ const {
   findWorkspaceRequestContext
 } = require('../services/workspaceMutations');
 
+const IMPORT_TEXT_LIMIT = fieldLimit('body');
+
 function registerWorkspaceIpc(options = {}) {
   const {
     dialog,
@@ -69,6 +80,7 @@ function registerWorkspaceIpc(options = {}) {
     hasPendingWorkspaceOperations = () => false,
     hydrateWorkspace = (workspace) => workspace,
     ipcMain,
+    env = process.env,
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(getWorkspace());
       if (!nextWorkspace) {
@@ -102,6 +114,16 @@ function registerWorkspaceIpc(options = {}) {
     };
   }
 
+  function publicLoadResult(result) {
+    if (!result?.workspace) {
+      return result;
+    }
+    return {
+      ...result,
+      workspace: sanitizeWorkspaceForRenderer(result.workspace)
+    };
+  }
+
   ipcMain.handle('workspace:load', async () => {
     let workspace = getWorkspace();
     if (!workspace) {
@@ -110,39 +132,44 @@ function registerWorkspaceIpc(options = {}) {
       setWorkspace(workspace);
     }
     const result = await getWorkspaceStore().describeCurrent(workspace);
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:save', async (_event, nextWorkspace) => {
     assertWorkspacePayload(nextWorkspace);
-    const workspace = await mutateWorkspace(async () => nextWorkspace);
+    const safeWorkspace = sanitizeRendererWorkspaceForSave(nextWorkspace, getWorkspace());
+    assertWorkspacePayload(safeWorkspace);
+    const workspace = await mutateWorkspace(async () => safeWorkspace);
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(await getWorkspaceStore().describeCurrent(workspace));
-    return workspace;
+    assertWorkspaceLoadResultPayload(publicLoadResult(await getWorkspaceStore().describeCurrent(workspace)));
+    return sanitizeWorkspaceForRenderer(workspace);
   });
 
   ipcMain.handle('workspace:saveRequest', async (_event, payload) => {
     assertWorkspaceRequestSavePayload(payload);
-    const workspace = await mutateWorkspace(async (currentWorkspace) => applyRequestSaveToWorkspace(currentWorkspace, payload));
+    const safePayload = sanitizeWorkspaceRequestSavePayload(payload, getWorkspace());
+    assertWorkspaceRequestSavePayload(safePayload);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyRequestSaveToWorkspace(currentWorkspace, safePayload));
     refreshApplicationMenu();
-    const requestContext = payload.authRefreshOwnerType
+    const requestContext = safePayload.authRefreshOwnerType
       ? findWorkspaceAuthRefreshRequestContext(
           workspace,
-          payload.authRefreshOwnerType,
-          payload.authRefreshOwnerType === 'performance' ? payload.performanceTestId : payload.runnerId,
-          payload.requestId
+          safePayload.authRefreshOwnerType,
+          safePayload.authRefreshOwnerType === 'performance' ? safePayload.performanceTestId : safePayload.runnerId,
+          safePayload.requestId
         )
-      : payload.runnerId
-        ? findWorkspaceRunnerRequestContext(workspace, payload.runnerId, payload.requestId)
-        : findWorkspaceRequestContext(workspace, payload.requestId);
+      : safePayload.runnerId
+        ? findWorkspaceRunnerRequestContext(workspace, safePayload.runnerId, safePayload.requestId)
+        : findWorkspaceRequestContext(workspace, safePayload.requestId);
     const result = {
-      request: requestContext?.request || payload.request
+      request: requestContext?.request || safePayload.request
     };
-    if (Array.isArray(payload.collectionVariables)) {
+    if (Array.isArray(safePayload.collectionVariables)) {
       result.collectionVariables = requestContext?.collection?.variables || [];
     }
-    if (Array.isArray(payload.cookies)) {
+    if (Array.isArray(safePayload.cookies)) {
       result.cookies = workspace.cookies || [];
     }
     assertWorkspaceRequestSaveResultPayload(result);
@@ -182,40 +209,152 @@ function registerWorkspaceIpc(options = {}) {
 
   ipcMain.handle('workspace:saveSettings', async (_event, settings) => {
     assertWorkspaceSettingsSavePayload(settings);
+    const safeSettings = sanitizeRendererSettingsForSave(settings, getWorkspace());
+    assertWorkspaceSettingsSavePayload(safeSettings);
     const workspace = await queueWorkspaceOperation(async () => {
       const currentWorkspace = getWorkspace();
-      const workspaceWithSettings = applyWorkspaceSettingsSaveToWorkspace(currentWorkspace, settings);
+      const workspaceWithSettings = applyWorkspaceSettingsSaveToWorkspace(currentWorkspace, safeSettings);
       const nextWorkspace = await saveWorkspace(workspaceWithSettings);
       setWorkspace(nextWorkspace);
       return nextWorkspace;
     });
     refreshApplicationMenu();
     onSettingsSaved(workspace.settings || {});
-    const result = { settings: workspace.settings || {} };
+    const result = { settings: sanitizeSettingsForRenderer(workspace.settings || {}) };
     assertWorkspaceSettingsSaveResultPayload(result);
     return result;
   });
 
+  ipcMain.handle('file-binding:choose', async (_event, payload = {}) => {
+    const metadata = normalizeFileBindingPayload(payload);
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: 'Bind Local File',
+      properties: ['openFile'],
+      filters: [{ name: 'All Files', extensions: ['*'] }]
+    });
+    const filePath = selectedOpenFilePath(result);
+    if (!filePath) {
+      return { cancelled: true };
+    }
+    const binding = await persistMainOwnedFileBinding({
+      ...metadata,
+      localPath: validateDialogFilePath(filePath, 'file binding path'),
+      fileName: metadata.fileName || path.basename(filePath),
+      reviewedAt: new Date().toISOString()
+    });
+    return { cancelled: false, binding };
+  });
+
+  ipcMain.handle('file-binding:storeContent', async (_event, payload = {}) => {
+    const metadata = normalizeFileBindingPayload(payload);
+    const contentBase64 = String(payload?.contentBase64 || '');
+    const body = Buffer.from(contentBase64, 'base64');
+    if (body.length > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`File attachment ${metadata.source} cannot exceed ${MAX_ATTACHMENT_BYTES} bytes.`);
+    }
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-file-binding-'));
+    const filePath = path.join(directory, safeFilename(metadata.fileName || metadata.source || 'attachment.bin'));
+    await fs.writeFile(filePath, body);
+    const binding = await persistMainOwnedFileBinding({
+      ...metadata,
+      localPath: filePath,
+      reviewedAt: new Date().toISOString()
+    });
+    return { cancelled: false, binding };
+  });
+
+  ipcMain.handle('local-file:storeContent', async (_event, payload = {}) => {
+    const fileName = safeFilename(payload?.fileName || payload?.name || 'file');
+    const purpose = normalizeLocalFilePurpose(payload?.purpose || payload?.contentKind);
+    const contentBase64 = String(payload?.contentBase64 || '');
+    const body = Buffer.from(contentBase64, 'base64');
+    if (!body.length) {
+      throw new Error('Local file content is required.');
+    }
+    if (body.length > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`Local file ${fileName} cannot exceed ${MAX_ATTACHMENT_BYTES} bytes.`);
+    }
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), `postmeter-${purpose}-`));
+    const filePath = path.join(directory, fileName);
+    await fs.writeFile(filePath, body);
+    const source = `postmeter-local-file/${purpose}/${crypto.randomBytes(16).toString('hex')}/${fileName}`;
+    const binding = await persistMainOwnedFileBinding({
+      contentType: String(payload?.contentType || '').slice(0, fieldLimit('value')),
+      fileName,
+      key: purpose,
+      localPath: filePath,
+      mode: 'file',
+      reviewedAt: new Date().toISOString(),
+      source
+    });
+    return { cancelled: false, binding };
+  });
+
+  async function persistMainOwnedFileBinding(binding) {
+    const normalized = normalizeSandboxFileBindings([binding])[0];
+    if (!normalized?.source || !normalized.localPath) {
+      throw new Error('File binding requires a source and a main-selected local file.');
+    }
+    const workspace = await queueWorkspaceOperation(async () => {
+      const currentWorkspace = getWorkspace();
+      const currentLocalSettings = currentWorkspace?.localsettings || {};
+      const currentSettings = currentWorkspace?.settings || {};
+      const localFileBindings = [
+        ...normalizeSandboxFileBindings(currentLocalSettings.sandbox?.fileBindings || []).filter((item) => item.source !== normalized.source),
+        normalized
+      ];
+      const nextWorkspace = {
+        ...currentWorkspace,
+        localsettings: {
+          ...currentLocalSettings,
+          sandbox: {
+            ...(currentLocalSettings.sandbox || {}),
+            fileBindings: localFileBindings
+          }
+        },
+        settings: {
+          ...currentSettings,
+          sandbox: {
+            ...(currentSettings.sandbox || {}),
+            fileBindings: [
+              ...sanitizeSandboxFileBindingsForRenderer(currentSettings.sandbox?.fileBindings || []).filter((item) => item.source !== normalized.source),
+              sanitizeSandboxFileBindingsForRenderer([normalized])[0]
+            ]
+          }
+        }
+      };
+      const saved = await saveWorkspace(nextWorkspace);
+      setWorkspace(saved);
+      return saved;
+    });
+    refreshApplicationMenu();
+    onSettingsSaved(workspace.settings || {});
+    return sanitizeSandboxFileBindingsForRenderer([normalized])[0];
+  }
+
   ipcMain.on('workspace:saveSync', (event, nextWorkspace) => {
     assertWorkspacePayload(nextWorkspace);
+    const safeWorkspace = sanitizeRendererWorkspaceForSave(nextWorkspace, getWorkspace());
+    assertWorkspacePayload(safeWorkspace);
     if (hasPendingWorkspaceOperations()) {
-      event.returnValue = getWorkspace();
+      event.returnValue = sanitizeWorkspaceForRenderer(getWorkspace());
       return;
     }
     const workspace = typeof saveWorkspaceSync === 'function'
-      ? saveWorkspaceSync(nextWorkspace)
-      : nextWorkspace;
+      ? saveWorkspaceSync(safeWorkspace)
+      : safeWorkspace;
     setWorkspace(workspace);
     refreshApplicationMenu();
-    event.returnValue = workspace;
+    event.returnValue = sanitizeWorkspaceForRenderer(workspace);
   });
 
   ipcMain.handle('workspace:create', async () => {
     const createdWorkspaceId = await getWorkspaceStore().createWorkspace();
     refreshApplicationMenu();
     const result = await getWorkspaceStore().describeCurrent(getWorkspace(), { createdWorkspaceId });
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:rename', async (_event, workspaceId, nextName) => {
@@ -266,8 +405,9 @@ function registerWorkspaceIpc(options = {}) {
       return renamed;
     });
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:switch', async (_event, workspaceId) => {
@@ -280,8 +420,9 @@ function registerWorkspaceIpc(options = {}) {
       return switched;
     });
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:unlock', async (_event, workspaceId, encryptionKey) => {
@@ -293,8 +434,9 @@ function registerWorkspaceIpc(options = {}) {
       return unlocked;
     });
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:encrypt', async (_event, workspaceId, encryptionKey, nextWorkspace = null) => {
@@ -329,8 +471,9 @@ function registerWorkspaceIpc(options = {}) {
       return encrypted;
     });
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:removeEncryption', async (_event, workspaceId, encryptionKey) => {
@@ -350,8 +493,9 @@ function registerWorkspaceIpc(options = {}) {
       return decrypted;
     });
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:resetEncryptionKey', async (_event, workspaceId, currentEncryptionKey, newEncryptionKey) => {
@@ -404,8 +548,9 @@ function registerWorkspaceIpc(options = {}) {
       return reset;
     });
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:delete', async (_event, workspaceId) => {
@@ -447,8 +592,9 @@ function registerWorkspaceIpc(options = {}) {
       return deleted;
     });
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload(result);
-    return result;
+    const publicResult = publicLoadResult(result);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
   ipcMain.handle('workspace:duplicate', async (_event, workspaceId) => {
@@ -458,33 +604,38 @@ function registerWorkspaceIpc(options = {}) {
     const workspaceStore = getWorkspaceStore();
     const duplicatedWorkspaceId = await workspaceStore.duplicateWorkspace(workspaceId);
     const loaded = await workspaceStore.describeCurrent(getWorkspace(), { duplicatedWorkspaceId });
-    assertWorkspaceLoadResultPayload(loaded);
-    return loaded;
+    const publicResult = publicLoadResult(loaded);
+    assertWorkspaceLoadResultPayload(publicResult);
+    return publicResult;
   });
 
-  ipcMain.handle('workspace:import', async (_event, providedFilePath = null) => {
+  ipcMain.handle('workspace:import', async (_event, providedSource = null) => {
     try {
-      const filePath = providedFilePath == null
+      const importSource = normalizeFileImportSource(providedSource, 'workspace import path', env);
+      const filePath = importSource.text == null
         ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
           title: 'Import PostMeter Workspace',
           properties: ['openFile'],
           filters: jsonFilters()
         }))
-        : validateDialogFilePath(providedFilePath, 'workspace import path');
-      if (!filePath) {
+        : '';
+      if (!filePath && importSource.text == null) {
         return fileOperationResult({ cancelled: true });
       }
       const workspaceStore = getWorkspaceStore();
-      const createdWorkspaceId = await workspaceStore.importWorkspace(filePath);
+      const createdWorkspaceId = importSource.text == null
+        ? await workspaceStore.importWorkspace(filePath)
+        : await withTemporaryImportText(importSource, 'postmeter-workspace-import', (temporaryPath) => workspaceStore.importWorkspace(temporaryPath));
       const loaded = await workspaceStore.describeCurrent(getWorkspace(), { createdWorkspaceId });
-      assertWorkspaceLoadResultPayload(loaded);
+      const publicLoaded = publicLoadResult(loaded);
+      assertWorkspaceLoadResultPayload(publicLoaded);
       await recordDiagnosticEvent({
         type: 'workspace.import.completed',
         level: 'info',
         outcome: 'completed',
         fields: { importedWorkspace: true }
       });
-      return fileOperationResult({ cancelled: false, ...loaded });
+      return fileOperationResult({ cancelled: false, ...publicLoaded });
     } catch (error) {
       await recordDiagnosticEvent({
         type: 'workspace.import.failed',
@@ -517,22 +668,25 @@ function registerWorkspaceIpc(options = {}) {
     const exportedPath = workspaceId
       ? await getWorkspaceStore().exportWorkspaceById(workspaceId, filePath, { encryptionKey: exportEncryptionKey })
       : await getWorkspaceStore().exportWorkspace(nextWorkspace || getWorkspace(), filePath);
-    return fileOperationResult({ cancelled: false, path: exportedPath });
+    return fileOperationResult(safeFileOperationExportResult(exportedPath));
   });
 
-  ipcMain.handle('collection:import', async (_event, providedFilePath = null) => {
+  ipcMain.handle('collection:import', async (_event, providedSource = null) => {
     try {
-      const filePath = providedFilePath == null
+      const importSource = normalizeFileImportSource(providedSource, 'collection import path', env);
+      const filePath = importSource.text == null
         ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
           title: 'Import Collection',
           properties: ['openFile'],
           filters: collectionImportFilters()
         }))
-        : validateDialogFilePath(providedFilePath, 'collection import path');
-      if (!filePath) {
+        : '';
+      if (!filePath && importSource.text == null) {
         return fileOperationResult({ cancelled: true });
       }
-      const collection = await getWorkspaceStore().importCollection(filePath);
+      const collection = importSource.text == null
+        ? await getWorkspaceStore().importCollection(filePath)
+        : await withTemporaryImportText(importSource, 'postmeter-collection-import', (temporaryPath) => getWorkspaceStore().importCollection(temporaryPath));
       await recordDiagnosticEvent({
         type: 'collection.import.completed',
         level: 'info',
@@ -569,21 +723,19 @@ function registerWorkspaceIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     const exportedPath = await getWorkspaceStore().exportCollection(collection, filePath, { format });
-    return fileOperationResult({ cancelled: false, path: exportedPath });
+    return fileOperationResult(safeFileOperationExportResult(exportedPath));
   });
 
-  ipcMain.handle('environment:import', async (_event, providedFilePath = null) => {
-    const filePath = providedFilePath == null
-      ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
-        title: 'Import Environment',
-        properties: ['openFile'],
-        filters: jsonFilters()
-      }))
-      : validateDialogFilePath(providedFilePath, 'environment import path');
-    if (!filePath) {
+  ipcMain.handle('environment:import', async (_event, providedSource = null) => {
+    const importSource = await readTextImportSource(providedSource, 'environment import path', async () => selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+      title: 'Import Environment',
+      properties: ['openFile'],
+      filters: jsonFilters()
+    })), { dialog, env, getMainWindow });
+    if (!importSource) {
       return fileOperationResult({ cancelled: true });
     }
-    const environment = importEnvironmentFromText(await fs.readFile(filePath, 'utf8'));
+    const environment = importEnvironmentFromText(importSource.text);
     assertEnvironmentPayload(environment);
     return fileOperationResult({ cancelled: false, environment });
   });
@@ -605,21 +757,19 @@ function registerWorkspaceIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     await writeTextFileAtomic(filePath, exportEnvironmentToJson(environment, format), { prefix: 'postmeter-environment-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
+    return fileOperationResult(safeFileOperationExportResult(filePath));
   });
 
-  ipcMain.handle('runner:importDefinition', async (_event, providedFilePath = null) => {
-    const filePath = providedFilePath == null
-      ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
-        title: 'Import Runner',
-        properties: ['openFile'],
-        filters: jsonFilters()
-      }))
-      : validateDialogFilePath(providedFilePath, 'runner import path');
-    if (!filePath) {
+  ipcMain.handle('runner:importDefinition', async (_event, providedSource = null) => {
+    const importSource = await readTextImportSource(providedSource, 'runner import path', async () => selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+      title: 'Import Runner',
+      properties: ['openFile'],
+      filters: jsonFilters()
+    })), { dialog, env, getMainWindow });
+    if (!importSource) {
       return fileOperationResult({ cancelled: true });
     }
-    const runner = importRunnerFromText(await fs.readFile(filePath, 'utf8'));
+    const runner = importRunnerFromText(importSource.text);
     assertRunnerPayload(runner);
     return fileOperationResult({ cancelled: false, runner });
   });
@@ -642,14 +792,14 @@ function registerWorkspaceIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     await writeTextFileAtomic(filePath, exportRunnerToJson(runner), { prefix: 'postmeter-runner-definition-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
+    return fileOperationResult(safeFileOperationExportResult(filePath));
   });
 
   ipcMain.handle('request:import', async (_event, source = {}) => {
-    const normalizedSource = normalizeRequestImportSource(source);
+    const normalizedSource = normalizeRequestImportSource(source, env);
     let content = normalizedSource.text;
     if (!content) {
-      const filePath = normalizedSource.filePath || selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+      const filePath = selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
         title: 'Import Request',
         properties: ['openFile'],
         filters: requestImportFilters()
@@ -677,7 +827,7 @@ function registerWorkspaceIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     await writeTextFileAtomic(filePath, exportRequestByFormat(request, format), { prefix: 'postmeter-request-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
+    return fileOperationResult(safeFileOperationExportResult(filePath));
   });
 
   ipcMain.handle('request:exportText', async (_event, request, format = 'postmeter') => {
@@ -690,17 +840,103 @@ function registerWorkspaceIpc(options = {}) {
   });
 }
 
-function normalizeRequestImportSource(source = {}) {
+function sanitizeWorkspaceRequestSavePayload(payload = {}, currentWorkspace = {}) {
+  const next = cloneJson(payload) || {};
+  if (next.request && typeof next.request === 'object') {
+    next.request = sanitizeRendererRequestForSave(next.request, currentWorkspace);
+  }
+  return next;
+}
+
+function sanitizeRendererRequestForSave(request = {}, currentWorkspace = {}) {
+  const next = cloneJson(request) || {};
+  if (next.auth && typeof next.auth === 'object') {
+    next.auth = sanitizeRendererAuthFileReferences(next.auth, currentWorkspace);
+  }
+  return next;
+}
+
+function sanitizeRendererAuthFileReferences(auth = {}, currentWorkspace = {}) {
+  const next = cloneJson(auth) || {};
+  const allowedBindings = mainOwnedFileBindings(currentWorkspace);
+  next.caPath = sanitizeMainOwnedFileReference(next.caPath, allowedBindings);
+  next.certPath = sanitizeMainOwnedFileReference(next.certPath, allowedBindings);
+  next.keyPath = sanitizeMainOwnedFileReference(next.keyPath, allowedBindings);
+  next.pfxPath = sanitizeMainOwnedFileReference(next.pfxPath, allowedBindings);
+  return next;
+}
+
+function normalizeRequestImportSource(source = {}, env = process.env) {
   if (typeof source === 'string') {
-    return { filePath: validateDialogFilePath(source, 'request import path'), text: '' };
+    throw new Error('request import path cannot be supplied by the renderer. Use the native file picker or provide bounded file contents.');
   }
   const value = source && typeof source === 'object' ? source : {};
+  const text = typeof value.text === 'string' ? value.text : '';
+  if (text.length > IMPORT_TEXT_LIMIT) {
+    throw new Error(`request import content must be ${IMPORT_TEXT_LIMIT} characters or fewer.`);
+  }
+  if (typeof value.filePath === 'string' && value.filePath.trim()) {
+    throw new Error('request import path cannot be supplied by the renderer. Use the native file picker or provide bounded file contents.');
+  }
   return {
-    filePath: typeof value.filePath === 'string' && value.filePath.trim()
-      ? validateDialogFilePath(value.filePath, 'request import path')
-      : '',
-    text: typeof value.text === 'string' ? value.text : ''
+    filePath: '',
+    text
   };
+}
+
+function normalizeFileImportSource(source, label, env = process.env) {
+  if (source == null) {
+    return { filePath: '', text: null, fileName: '' };
+  }
+  if (typeof source === 'string') {
+    throw new Error(`${label} cannot be supplied by the renderer. Use the native file picker or provide bounded file contents.`);
+  }
+  const value = source && typeof source === 'object' ? source : {};
+  if (typeof value.text === 'string') {
+    if (value.text.length > IMPORT_TEXT_LIMIT) {
+      throw new Error(`${label} content must be ${IMPORT_TEXT_LIMIT} characters or fewer.`);
+    }
+    return {
+      filePath: '',
+      text: value.text,
+      fileName: safeFilename(value.fileName || value.name || 'import.json')
+    };
+  }
+  if (typeof value.filePath === 'string' && value.filePath.trim()) {
+    throw new Error(`${label} cannot be supplied by the renderer. Use the native file picker or provide bounded file contents.`);
+  }
+  return { filePath: '', text: null, fileName: '' };
+}
+
+async function readTextImportSource(source, label, chooseFilePath, options = {}) {
+  const normalized = normalizeFileImportSource(source, label, options.env);
+  if (normalized.text != null) {
+    return normalized;
+  }
+  const filePath = await chooseFilePath();
+  if (!filePath) {
+    return null;
+  }
+  const text = await fs.readFile(validateDialogFilePath(filePath, label), 'utf8');
+  if (text.length > IMPORT_TEXT_LIMIT) {
+    throw new Error(`${label} content must be ${IMPORT_TEXT_LIMIT} characters or fewer.`);
+  }
+  return {
+    filePath,
+    text,
+    fileName: path.basename(filePath)
+  };
+}
+
+async function withTemporaryImportText(importSource, prefix, callback) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
+  try {
+    const temporaryPath = path.join(directory, importSource.fileName || 'import.json');
+    await fs.writeFile(temporaryPath, importSource.text, 'utf8');
+    return await callback(temporaryPath);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 function validateWorkspaceId(workspaceId) {
@@ -774,6 +1010,170 @@ function attachRollbackFailure(error, rollbackError) {
   const wrapped = new Error(String(error || 'Workspace operation failed.'));
   wrapped.rollbackError = rollbackError;
   return wrapped;
+}
+
+function cloneJson(value) {
+  try {
+    return JSON.parse(JSON.stringify(value ?? null));
+  } catch {
+    return value;
+  }
+}
+
+function sanitizeWorkspaceForRenderer(workspace) {
+  if (!workspaceHasSensitiveFileBindingPaths(workspace)) {
+    return workspace;
+  }
+  const next = cloneJson(workspace);
+  if (!next || typeof next !== 'object') {
+    return next;
+  }
+  next.settings = sanitizeSettingsForRenderer(next.settings || {});
+  next.localsettings = sanitizeLocalSettingsForRenderer(next.localsettings || {});
+  return next;
+}
+
+function sanitizeSettingsForRenderer(settings = {}) {
+  const next = cloneJson(settings) || {};
+  if (next.sandbox && typeof next.sandbox === 'object') {
+    next.sandbox.fileBindings = sanitizeSandboxFileBindingsForRenderer(next.sandbox.fileBindings || []);
+  }
+  return next;
+}
+
+function sanitizeLocalSettingsForRenderer(localsettings = {}) {
+  const next = cloneJson(localsettings) || {};
+  if (next.sandbox && typeof next.sandbox === 'object') {
+    next.sandbox.fileBindings = sanitizeSandboxFileBindingsForRenderer(next.sandbox.fileBindings || []);
+  }
+  return next;
+}
+
+function sanitizeRendererWorkspaceForSave(workspace, currentWorkspace = {}) {
+  const next = cloneJson(workspace) || {};
+  next.settings = sanitizeRendererSettingsForSave(next.settings || {}, currentWorkspace);
+  next.localsettings = sanitizeRendererLocalSettingsForSave(next.localsettings || {}, currentWorkspace);
+  return next;
+}
+
+function sanitizeRendererSettingsForSave(settings = {}, currentWorkspace = {}) {
+  const next = cloneJson(settings) || {};
+  if (next.request && typeof next.request === 'object') {
+    next.request = sanitizeRendererRequestSettingsForSave(next.request, currentWorkspace);
+  }
+    if (next.sandbox && typeof next.sandbox === 'object') {
+      if (Object.hasOwn(next.sandbox, 'fileBindings')) {
+        const mainBindings = mainOwnedFileBindings(currentWorkspace);
+        next.sandbox.fileBindings = mergeRendererFileBindingMetadataWithMainPaths(next.sandbox.fileBindings || [], mainBindings);
+      }
+    if (next.sandbox.trustedCapabilities && typeof next.sandbox.trustedCapabilities === 'object') {
+      next.sandbox.trustedCapabilities = sanitizeRendererTrustedCapabilitiesForSave(
+        next.sandbox.trustedCapabilities,
+        currentWorkspace
+      );
+    }
+  }
+  return next;
+}
+
+function sanitizeRendererLocalSettingsForSave(localsettings = {}, currentWorkspace = {}) {
+  const next = cloneJson(localsettings) || {};
+  if (next.request && typeof next.request === 'object') {
+    next.request = sanitizeRendererRequestSettingsForSave(next.request, currentWorkspace);
+  }
+  if (next.sandbox && typeof next.sandbox === 'object') {
+    if (Object.hasOwn(next.sandbox, 'fileBindings')) {
+      next.sandbox.fileBindings = mergeRendererFileBindingMetadataWithMainPaths(next.sandbox.fileBindings || [], mainOwnedFileBindings(currentWorkspace));
+    }
+    next.sandbox.trustedCapabilities ||= {};
+    next.sandbox.trustedCapabilities.vaultGrants = cloneJson(currentWorkspace?.localsettings?.sandbox?.trustedCapabilities?.vaultGrants || {});
+  }
+  next.security = cloneJson(currentWorkspace?.localsettings?.security || {});
+  return next;
+}
+
+function sanitizeRendererRequestSettingsForSave(requestSettings = {}, currentWorkspace = {}) {
+  const next = cloneJson(requestSettings) || {};
+  const allowedBindings = mainOwnedFileBindings(currentWorkspace);
+  next.caCertificatePath = sanitizeMainOwnedFileReference(next.caCertificatePath, allowedBindings);
+  if (Array.isArray(next.clientCertificates)) {
+    next.clientCertificates = next.clientCertificates.map((certificate) => {
+      const safeCertificate = cloneJson(certificate) || {};
+      safeCertificate.caPath = sanitizeMainOwnedFileReference(safeCertificate.caPath, allowedBindings);
+      safeCertificate.certPath = sanitizeMainOwnedFileReference(safeCertificate.certPath, allowedBindings);
+      safeCertificate.keyPath = sanitizeMainOwnedFileReference(safeCertificate.keyPath, allowedBindings);
+      safeCertificate.pfxPath = sanitizeMainOwnedFileReference(safeCertificate.pfxPath, allowedBindings);
+      return safeCertificate;
+    });
+  }
+  return next;
+}
+
+function sanitizeMainOwnedFileReference(value, allowedBindings = []) {
+  const reference = String(value || '').trim();
+  if (!reference) {
+    return '';
+  }
+  const bindings = normalizeSandboxFileBindings(allowedBindings);
+  return bindings.some((binding) => binding.source === reference || binding.id === reference)
+    ? reference
+    : '';
+}
+
+function sanitizeRendererTrustedCapabilitiesForSave(trustedCapabilities = {}, currentWorkspace = {}) {
+  const next = cloneJson(trustedCapabilities) || {};
+  next.vaultGrants = cloneJson(currentWorkspace?.localsettings?.sandbox?.trustedCapabilities?.vaultGrants || {});
+  return next;
+}
+
+function mainOwnedFileBindings(workspace = {}) {
+  return mainOwnedFileBindingsForWorkspace(workspace);
+}
+
+function safeFileOperationExportResult(filePath) {
+  const displayPath = path.basename(String(filePath || '')) || 'export';
+  return {
+    cancelled: false,
+    path: displayPath,
+    displayPath
+  };
+}
+
+function workspaceHasSensitiveFileBindingPaths(workspace = {}) {
+  return hasSensitiveFileBindingPaths(workspace.settings?.sandbox?.fileBindings)
+    || hasSensitiveFileBindingPaths(workspace.localsettings?.sandbox?.fileBindings);
+}
+
+function hasSensitiveFileBindingPaths(bindings = []) {
+  return Array.isArray(bindings) && bindings.some((binding) => (
+    typeof binding?.localPath === 'string' && binding.localPath
+      || typeof binding?.path === 'string' && binding.path
+      || typeof binding?.filePath === 'string' && binding.filePath
+  ));
+}
+
+function normalizeFileBindingPayload(payload = {}) {
+  const source = String(payload?.source || payload?.src || '').trim().slice(0, fieldLimit('value'));
+  if (!source) {
+    throw new Error('File binding source is required.');
+  }
+  const mode = String(payload?.mode || 'file').trim().toLowerCase();
+  return {
+    source,
+    mode: ['file', 'binary', 'formdata'].includes(mode) ? mode : 'file',
+    key: String(payload?.key || '').slice(0, fieldLimit('key')),
+    contentType: String(payload?.contentType || '').slice(0, fieldLimit('value')),
+    fileName: String(payload?.fileName || payload?.name || path.basename(source) || 'file').slice(0, fieldLimit('name')),
+    enabled: payload?.enabled !== false
+  };
+}
+
+function normalizeLocalFilePurpose(value) {
+  const purpose = String(value || 'file').trim().toLowerCase();
+  if (purpose === 'certificate' || purpose === 'csv-variables') {
+    return purpose;
+  }
+  return 'file';
 }
 
 function findFolderInCollection(collection, folderId) {

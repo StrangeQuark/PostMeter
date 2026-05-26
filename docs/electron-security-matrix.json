@@ -299,7 +299,7 @@
     {
       "id": "ipc.channel.collection-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `collection:import`: Collection import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process picker constrained to supported collection formats.",
+      "target": "renderer-to-main channel `collection:import`: Collection import accepts bounded renderer-provided file contents from drag/drop or falls back to a main-process picker constrained to supported collection formats without trusting renderer-supplied paths.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/workspaceIpc.js",
@@ -350,7 +350,7 @@
     {
       "id": "ipc.channel.environment-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `environment:import`: Environment import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a JSON picker, then validates native or Postman environment payloads.",
+      "target": "renderer-to-main channel `environment:import`: Environment import accepts bounded renderer-provided file contents from drag/drop or falls back to a JSON picker, then validates native or Postman environment payloads without trusting renderer-supplied paths.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/workspaceIpc.js",
@@ -362,6 +362,38 @@
       "tests": [
         "test/electron/workspaceIpc.test.js",
         "test/electron/environmentFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.file-binding-choose",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `file-binding:choose`: File binding picker records local attachment paths through a main-process native file dialog and returns renderer-safe metadata only.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/http/fileAttachmentBindings.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/fileAttachmentBindings.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.file-binding-storecontent",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `file-binding:storeContent`: File binding content import stores bounded renderer-provided file bytes in a main-owned temporary binding and returns renderer-safe metadata only.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/http/fileAttachmentBindings.js"
+      ],
+      "tests": [
+        "test/electron/localFilePickerController.test.js",
+        "test/electron/fileAttachmentBindings.test.js"
       ],
       "notes": ""
     },
@@ -423,6 +455,22 @@
       ],
       "tests": [
         "test/electron/exportIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.local-file-storecontent",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `local-file:storeContent`: Local certificate and CSV selections store bounded renderer-provided file bytes in a main-owned temporary binding and return renderer-safe source metadata only.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/ipc/workspaceIpc.js",
+        "electron/app-shell/preload.js",
+        "src/core/http/fileAttachmentBindings.js"
+      ],
+      "tests": [
+        "test/electron/localFilePickerController.test.js",
+        "test/electron/workspaceIpc.test.js"
       ],
       "notes": ""
     },
@@ -632,7 +680,7 @@
     {
       "id": "ipc.channel.performance-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `performance:import`: Performance-test import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process picker constrained to native performance-test JSON files.",
+      "target": "renderer-to-main channel `performance:import`: Performance-test import accepts bounded renderer-provided file contents from drag/drop or falls back to a main-process picker constrained to native performance-test JSON files without trusting renderer-supplied paths.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/runtimeIpc.js",
@@ -757,7 +805,7 @@
     {
       "id": "ipc.channel.request-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `request:import`: Standalone request import accepts direct pasted text or a renderer-selected file path, then validates curl or native PostMeter request JSON before returning an unsaved request payload.",
+      "target": "renderer-to-main channel `request:import`: Standalone request import accepts direct pasted text, bounded renderer-provided file contents, or a main-process picker result, then validates curl or native PostMeter request JSON before returning an unsaved request payload.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/workspaceIpc.js",
@@ -881,7 +929,7 @@
     {
       "id": "ipc.channel.runner-importdefinition",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `runner:importDefinition`: Runner definition import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a JSON picker, then validates native runner payloads.",
+      "target": "renderer-to-main channel `runner:importDefinition`: Runner definition import accepts bounded renderer-provided file contents from drag/drop or falls back to a JSON picker, then validates native runner payloads without trusting renderer-supplied paths.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/workspaceIpc.js",
@@ -1210,7 +1258,7 @@
     {
       "id": "ipc.channel.workspace-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `workspace:import`: Workspace import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process JSON picker, then returns a validated file-operation result.",
+      "target": "renderer-to-main channel `workspace:import`: Workspace import accepts bounded renderer-provided file contents from drag/drop or falls back to a main-process JSON picker without trusting renderer-supplied paths.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/workspaceIpc.js",

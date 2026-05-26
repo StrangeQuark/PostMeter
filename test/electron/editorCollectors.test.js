@@ -34,8 +34,8 @@ test('editor collectors map request DOM controls to request model fields', () =>
   elements.get('cookieStore').checked = false;
   elements.get('autoToken').checked = true;
   elements.get('autoShow').checked = true;
-  elements.get('requestSslCertificateVerificationInput').checked = false;
-  elements.get('requestSslCertificateVerificationInput').dataset.verificationValue = 'enabled';
+  elements.get('requestSslCertificateVerificationInput').value = 'enabled';
+  elements.get('requestSslCertificateVerificationInput').dataset.verificationValue = 'inherit';
   elements.get('requestHttpVersionSelect').value = 'http2';
   elements.get('requestMaxRedirectsInput').value = '7';
   elements.set('params', table([
@@ -133,7 +133,8 @@ function loadEditorCollectors() {
     ['cookieStore', new FakeElement('input')],
     ['autoToken', new FakeElement('input')],
     ['autoShow', new FakeElement('input')],
-    ['requestSslCertificateVerificationInput', new FakeElement('input')],
+    ['requestSslCertificateVerificationInput', new FakeElement('select')],
+    ['requestSslCertificateVerificationInheritActions', new FakeElement('div')],
     ['requestHttpVersionSelect', new FakeElement('select')],
     ['requestFollowRedirectsInput', checkedElement(true)],
     ['requestFollowOriginalHttpMethodInput', checkedElement(false)],
@@ -175,6 +176,7 @@ function loadEditorCollectors() {
     normalizeRunnerRequestIterations: (value) => Math.min(50, Math.max(1, Number.parseInt(value, 10) || 1)),
     requestSettingsControlIds: () => ({
       sslCertificateVerification: 'requestSslCertificateVerificationInput',
+      sslCertificateVerificationInheritActions: 'requestSslCertificateVerificationInheritActions',
       httpVersion: 'requestHttpVersionSelect',
       followRedirects: 'requestFollowRedirectsInput',
       followOriginalHttpMethod: 'requestFollowOriginalHttpMethodInput',

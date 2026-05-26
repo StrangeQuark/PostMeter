@@ -2,6 +2,7 @@ const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { writeTextFileAtomic } = require('../../src/core/workspace/workspacePersistence');
 const { assertRuntimeId } = require('../../src/core/contracts/ipcValidation');
+const { defaultFileCapabilityStore } = require('../security/fileCapabilities');
 const {
   collectionExportExtension,
   collectionExportFilters,
@@ -11,8 +12,7 @@ const {
   requestExportExtension,
   requestExportFilters,
   safeFilename,
-  selectedSaveFilePath,
-  validateDialogFilePath
+  selectedSaveFilePath
 } = require('../app-shell/fileDialogs');
 
 const EXPORT_KINDS = new Set(['workspace', 'collection', 'request', 'environment', 'runner', 'performance']);
@@ -20,21 +20,37 @@ const EXPORT_KINDS = new Set(['workspace', 'collection', 'request', 'environment
 function registerExportIpc(options = {}) {
   const {
     dialog,
+    fileCapabilities = defaultFileCapabilityStore,
     fileOperationResult = (result) => result,
     getMainWindow = () => undefined,
+    getWorkspaceId = () => '',
     ipcMain
   } = options;
   const activePreparations = new Map();
   const preparedExports = new Map();
 
   ipcMain.handle('file-export:choosePath', async (_event, exportOptions = {}) => {
-    const options = exportDialogOptions(exportOptions);
-    const result = await dialog.showSaveDialog(getMainWindow(), options);
+    const dialogOptions = exportDialogOptions(exportOptions);
+    const result = await dialog.showSaveDialog(getMainWindow(), dialogOptions);
     const filePath = selectedSaveFilePath(result);
     if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
-    return fileOperationResult({ cancelled: false, path: filePath });
+    const workspaceId = requireWorkspaceId(getWorkspaceId());
+    const capability = fileCapabilities.issue({
+      path: filePath,
+      operation: 'export-write',
+      workspaceId,
+      oneTime: true,
+      extensions: exportPathExtensions(exportOptions)
+    });
+    return fileOperationResult({
+      cancelled: false,
+      displayPath: capability.displayPath,
+      fileName: capability.fileName,
+      capabilityToken: capability.token,
+      token: capability.token
+    });
   });
 
   ipcMain.handle('file-export:prepare', async (_event, exportRequest = {}) => {
@@ -91,16 +107,19 @@ function registerExportIpc(options = {}) {
     });
   });
 
-  ipcMain.handle('file-export:writePrepared', async (_event, exportIdValue, filePathValue) => {
+  ipcMain.handle('file-export:writePrepared', async (_event, exportIdValue, destinationValue) => {
     const exportId = assertExportId(exportIdValue);
-    const filePath = validateDialogFilePath(filePathValue, 'export path');
+    const filePath = consumeExportWritePath(destinationValue, {
+      fileCapabilities,
+      workspaceId: getWorkspaceId()
+    });
     const prepared = preparedExports.get(exportId);
     if (!prepared) {
       throw new Error('Prepared export was not found.');
     }
     preparedExports.delete(exportId);
     await writeTextFileAtomic(filePath, prepared.content, { prefix: prepared.prefix });
-    return fileOperationResult({ cancelled: false, path: filePath });
+    return fileOperationResult({ cancelled: false, path: path.basename(filePath), displayPath: path.basename(filePath) });
   });
 
   ipcMain.handle('file-export:cancelPrepared', async (_event, exportIdValue) => {
@@ -189,6 +208,54 @@ function exportDialogOptions(options = {}) {
   }
 }
 
+function exportPathExtensions(options = {}) {
+  const kind = assertExportKind(options.kind);
+  const format = String(options.format || 'postmeter');
+  switch (kind) {
+    case 'collection':
+      return [collectionExportExtension(format).split('.').at(-1)];
+    case 'request':
+      return [requestExportExtension(format).split('.').at(-1)];
+    case 'performance':
+      return [performanceExportExtension(format)];
+    case 'runner':
+    case 'environment':
+    case 'workspace':
+      return ['json'];
+    default:
+      return [];
+  }
+}
+
+function consumeExportWritePath(destinationValue, options = {}) {
+  const workspaceId = requireWorkspaceId(options.workspaceId);
+  if (destinationValue && typeof destinationValue === 'object') {
+    const token = destinationValue.capabilityToken || destinationValue.token;
+    if (token) {
+      return options.fileCapabilities.consume(token, {
+        operation: 'export-write',
+        workspaceId
+      }).path;
+    }
+  }
+  const token = String(destinationValue || '').trim();
+  if (/^[A-Za-z0-9_-]{32,}$/u.test(token)) {
+    return options.fileCapabilities.consume(token, {
+      operation: 'export-write',
+      workspaceId
+    }).path;
+  }
+  throw new Error('Export destination must be a file capability token.');
+}
+
+function requireWorkspaceId(value) {
+  const workspaceId = String(value || '').trim();
+  if (!workspaceId) {
+    throw new Error('An active workspace is required before exporting files.');
+  }
+  return workspaceId;
+}
+
 function assertExportId(value) {
   assertRuntimeId(value, 'exportId');
   return value;
@@ -253,6 +320,7 @@ function errorFromWorkerMessage(message = {}) {
 }
 
 module.exports = {
+  consumeExportWritePath,
   exportDialogOptions,
   registerExportIpc
 };

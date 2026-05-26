@@ -11,12 +11,9 @@ const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../s
 
 test('normalizes and persists metadata-only vault prompt grant decisions', async () => {
   const workspace = {
-    settings: {
+    localsettings: {
       sandbox: {
         trustedCapabilities: {
-          sendRequest: true,
-          cookies: true,
-          vault: false,
           vaultGrants: {
             workspace: false,
             collections: [],
@@ -36,8 +33,8 @@ test('normalizes and persists metadata-only vault prompt grant decisions', async
     granted: true,
     scope: 'request'
   });
-  assert.deepEqual(requestGrant.settings.sandbox.trustedCapabilities.vaultGrants.requests, ['request-1']);
-  assert.deepEqual(workspace.settings.sandbox.trustedCapabilities.vaultGrants.requests, []);
+  assert.deepEqual(requestGrant.localsettings.sandbox.trustedCapabilities.vaultGrants.requests, ['request-1']);
+  assert.deepEqual(workspace.localsettings.sandbox.trustedCapabilities.vaultGrants.requests, []);
 
   const collectionGrant = applyVaultPromptDecisionToWorkspace(workspace, {
     requestId: 'request-1',
@@ -46,16 +43,15 @@ test('normalizes and persists metadata-only vault prompt grant decisions', async
     granted: true,
     scope: 'collection'
   });
-  assert.deepEqual(collectionGrant.settings.sandbox.trustedCapabilities.vaultGrants.collections, ['collection-1']);
+  assert.deepEqual(collectionGrant.localsettings.sandbox.trustedCapabilities.vaultGrants.collections, ['collection-1']);
 
   const reset = applyVaultPromptDecisionToWorkspace(collectionGrant, {}, {
     granted: false,
     reset: true,
     scope: 'request'
   });
-  assert.equal(reset.settings.sandbox.trustedCapabilities.vault, false);
-  assert.deepEqual(reset.settings.sandbox.trustedCapabilities.vaultGrants.requests, []);
-  assert.deepEqual(reset.settings.sandbox.trustedCapabilities.vaultGrants.collections, []);
+  assert.deepEqual(reset.localsettings.sandbox.trustedCapabilities.vaultGrants.requests, []);
+  assert.deepEqual(reset.localsettings.sandbox.trustedCapabilities.vaultGrants.collections, []);
 });
 
 test('renderer vault prompt IPC resolves bounded decisions without exposing secrets', async () => {
@@ -237,6 +233,140 @@ test('vault prompt IPC ignores responses from non-prompting renderers', async ()
     { ok: true }
   );
   assert.deepEqual(await promptPromise, { granted: true, reset: false, scope: 'request' });
+});
+
+test('vault prompt IPC rejects forged, replayed, and expired prompt ids', async () => {
+  const handlers = new Map();
+  registerVaultPromptIpc({
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    }
+  });
+
+  assert.deepEqual(
+    await handlers.get('vault:prompt-response')({ sender: { id: 'renderer' } }, 'forged-prompt-id', {
+      granted: true,
+      scope: 'workspace'
+    }),
+    { ok: false }
+  );
+
+  const sentPayloads = [];
+  const webContents = {
+    send(_channel, payload) {
+      sentPayloads.push(payload);
+      queueMicrotask(() => {
+        void handlers.get('vault:prompt-response')({ sender: webContents }, payload.promptId, {
+          granted: true,
+          scope: 'request'
+        });
+      });
+    }
+  };
+  const prompt = createVaultPrompt({
+    getMainWindow: () => ({
+      isDestroyed: () => false,
+      webContents
+    }),
+    persistDecision: async () => {}
+  });
+  assert.deepEqual(await prompt({ key: 'apiToken', operation: 'get', requestId: 'request-1' }), {
+    granted: true,
+    reset: false,
+    scope: 'request'
+  });
+  assert.match(sentPayloads[0].promptId, /^[0-9a-f]{64}$/);
+  assert.deepEqual(
+    await handlers.get('vault:prompt-response')({ sender: webContents }, sentPayloads[0].promptId, {
+      granted: true,
+      scope: 'request'
+    }),
+    { ok: false }
+  );
+
+  const expiredPayloads = [];
+  const expiringWebContents = {
+    send(_channel, payload) {
+      expiredPayloads.push(payload);
+    }
+  };
+  const expiringPrompt = createVaultPrompt({
+    getMainWindow: () => ({
+      isDestroyed: () => false,
+      webContents: expiringWebContents
+    }),
+    persistDecision: async () => {},
+    promptTimeoutMillis: 5,
+    rateLimitMillis: 0
+  });
+  assert.deepEqual(await expiringPrompt({ key: 'shortLived', operation: 'get', requestId: 'request-2' }), {
+    granted: false,
+    reset: false,
+    scope: 'request'
+  });
+  assert.deepEqual(
+    await handlers.get('vault:prompt-response')({ sender: expiringWebContents }, expiredPayloads[0].promptId, {
+      granted: true,
+      scope: 'workspace'
+    }),
+    { ok: false }
+  );
+});
+
+test('vault prompt caps renderer grant scope and audits rate-limited repeated prompts', async () => {
+  const handlers = new Map();
+  registerVaultPromptIpc({
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    }
+  });
+  const events = [];
+  const webContents = {
+    send(_channel, payload) {
+      queueMicrotask(() => {
+        void handlers.get('vault:prompt-response')({ sender: webContents }, payload.promptId, {
+          granted: true,
+          scope: 'workspace'
+        });
+      });
+    }
+  };
+  const prompt = createVaultPrompt({
+    getMainWindow: () => ({
+      isDestroyed: () => false,
+      webContents
+    }),
+    persistDecision: async () => {},
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    }
+  });
+
+  const first = await prompt({
+    allowedScopes: ['request'],
+    key: 'apiToken',
+    operation: 'get',
+    requestId: 'request-1',
+    workspaceId: 'workspace-1'
+  });
+  const second = await prompt({
+    allowedScopes: ['request'],
+    key: 'apiToken',
+    operation: 'get',
+    requestId: 'request-1',
+    workspaceId: 'workspace-1'
+  });
+
+  assert.deepEqual(first, { granted: true, reset: false, scope: 'request' });
+  assert.deepEqual(second, { granted: false, reset: false, scope: 'request' });
+  assert.deepEqual(events.map((event) => [event.type, event.failureCode || '']), [
+    ['vault.prompt.granted', ''],
+    ['vault.prompt.denied', 'vault_prompt_rate_limited']
+  ]);
 });
 
 test('vault prompt decisions default to request-scoped denial', () => {

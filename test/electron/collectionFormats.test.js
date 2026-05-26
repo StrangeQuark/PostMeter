@@ -527,7 +527,11 @@ test('non-Postman importers reject malformed common inputs with clear errors', a
   const cases = [
     ['malformed-openapi.json', '{"openapi":"3.1.0",', /Failed to parse JSON collection file:/],
     ['malformed-openapi.yaml', 'openapi: 3.1.0\ninfo:\n  title: [unterminated', /Failed to parse OpenAPI YAML file:/],
+    ['yaml-alias-bomb.yaml', `openapi: 3.1.0\ninfo: &info\n  title: Alias\n  version: '1'\npaths:\n${Array.from({ length: 55 }, (_item, index) => `  /a${index}: *info`).join('\n')}\n`, /too many aliases or anchors/],
     ['empty-openapi.json', JSON.stringify({ openapi: '3.1.0', info: { title: 'Empty', version: '1' }, paths: {} }), /OpenAPI document does not contain importable requests/],
+    ['oversized-openapi.yaml', `openapi: 3.1.0\ninfo:\n  title: Oversized\n  version: '1'\npaths: {}\n# ${'x'.repeat(10 * 1024 * 1024)}`, /exceeds the 10 MB parse limit/],
+    ['external-entity.xml', '<!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>', /File is not a supported PostMeter, Postman, OpenAPI, or curl collection/],
+    ['billion-laughs.xml', '<!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol1 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">]><root>&lol1;</root>', /File is not a supported PostMeter, Postman, OpenAPI, or curl collection/],
     ['missing-url.sh', "curl -H 'X-Test: yes'", /curl command does not include a URL/],
     ['ambiguous.txt', 'this is not an API collection', /File is not a supported PostMeter, Postman, OpenAPI, or curl collection/]
   ];
@@ -537,6 +541,23 @@ test('non-Postman importers reject malformed common inputs with clear errors', a
     await fs.writeFile(importPath, content);
     await assert.rejects(() => store.importCollection(importPath), message);
   }
+  const pollutionPath = path.join(dir, 'prototype-pollution-openapi.json');
+  await fs.writeFile(pollutionPath, JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'Pollution', version: '1' },
+    paths: {
+      '/ok': {
+        get: {
+          __proto__: { polluted: true },
+          constructor: { prototype: { polluted: true } },
+          responses: { 200: { description: 'ok' } }
+        }
+      }
+    }
+  }));
+  const imported = await store.importCollection(pollutionPath);
+  assert.equal(imported.requests[0].name, 'GET /ok');
+  assert.equal({}.polluted, undefined);
 });
 
 async function tempStore() {

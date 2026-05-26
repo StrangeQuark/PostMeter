@@ -457,6 +457,7 @@ const FIELD_SCHEMAS = {
   fileOperationResult: {
     cancelled: { type: 'boolean' },
     path: { type: 'string', limit: 'value', optional: true },
+    displayPath: { type: 'string', limit: 'value', optional: true },
     backupPath: { type: 'string', limit: 'value', optional: true }
   },
   response: {

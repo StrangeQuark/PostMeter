@@ -19,7 +19,32 @@
     const target = optionElement(doc, options, id);
     if (target) {
       target.value = value;
+      syncSelectedFileLabelForOption(doc, target);
     }
+  }
+
+  function syncSelectedFileLabelForOption(doc, target) {
+    if (!target?.id || !/(?:authClient|AuthClient)(?:Pfx|Cert|Key|Ca)PathInput$/.test(target.id)) {
+      return;
+    }
+    let label = null;
+    try {
+      label = element(doc, target.id.replace(/Input$/, 'Label'));
+    } catch {
+      label = null;
+    }
+    if (!label) {
+      return;
+    }
+    const value = String(target.value || '').trim();
+    label.textContent = value ? fileNameFromOptionPath(value) : 'No file selected';
+    label.title = value;
+    label.classList?.toggle?.('is-empty', !value);
+  }
+
+  function fileNameFromOptionPath(filePath) {
+    const text = String(filePath || '');
+    return text.split(/[\\/]/).filter(Boolean).pop() || text || 'file';
   }
 
   function setOptionElementChecked(doc, options, id, value) {

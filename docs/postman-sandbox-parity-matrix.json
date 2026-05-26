@@ -5860,8 +5860,8 @@
       "area": "packages",
       "claimScope": "default-import",
       "kind": "desktop-workflow",
-      "target": "pm.require('npm:package') and pm.require('jsr:@scope/package') latest-version imports resolve through the reviewed package workflow.",
-      "status": "implemented",
+      "target": "Postman latest-version external imports such as pm.require('npm:package') and pm.require('jsr:@scope/package') are intentionally rejected; PostMeter requires exact npm/JSR versions before review.",
+      "status": "intentional-strict-gap",
       "sourceRefs": [
         "require"
       ],
@@ -5876,8 +5876,8 @@
         "desktopObservation": "required",
         "desktopEvidence": "row-specific-behavior"
       },
-      "securityDecision": "reviewed-cache",
-      "notes": "Postman supports omitting @version-number to use the app-selected latest package version. PostMeter resolves the current latest version parent-side during fetch/review, records the resolved packageVersion in the cache entry, and then executes only the reviewed cached package with no script-time registry access."
+      "securityDecision": "exact-version-required",
+      "notes": "Postman supports omitting @version-number to use the app-selected latest package version. PostMeter rejects unversioned npm/JSR specifiers in production because mutable latest resolution would break reviewed-code reproducibility. Users must review exact npm:package@version, npm:@scope/package@version, or jsr:@scope/package@version specifiers."
     },
     {
       "id": "require.pm.npm-package",
@@ -5950,7 +5950,7 @@
         "desktopEvidence": "row-specific-behavior"
       },
       "securityDecision": "reviewed-cache",
-      "notes": "Parent-side package fetch workflow resolves exact and latest-form npm/JSR package references plus reviewed HTTPS team-package source URLs into the same SHA-256 reviewed cache used by the script runtime. Scripts still cannot fetch, install, update, or resolve packages at runtime."
+      "notes": "Parent-side package fetch workflow resolves exact npm/JSR package references plus reviewed HTTPS team-package source URLs into the same SHA-256 reviewed cache used by the script runtime. Scripts still cannot fetch, install, update, resolve latest versions, or resolve packages at runtime."
     },
     {
       "id": "require.pm.team-package",

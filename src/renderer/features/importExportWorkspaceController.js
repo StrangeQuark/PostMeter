@@ -205,7 +205,8 @@ async function runPickerFirstExport({
     });
   try {
     const pathResult = await pathPromise;
-    if (pathResult?.cancelled || !pathResult?.path) {
+    const destinationToken = pathResult?.capabilityToken || pathResult?.token;
+    if (pathResult?.cancelled || !destinationToken) {
       cancelled = true;
       await exportApi.cancelPrepared(exportId).catch(() => false);
       await preparePromise;
@@ -215,7 +216,7 @@ async function runPickerFirstExport({
     if (prepareError) {
       throw prepareError;
     }
-    const result = await exportApi.writePrepared(exportId, pathResult.path);
+    const result = await exportApi.writePrepared(exportId, destinationToken);
     if (result?.path && successStatus) {
       setStatus(successStatus(result.path));
     }

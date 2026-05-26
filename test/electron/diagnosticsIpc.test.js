@@ -82,7 +82,8 @@ test('diagnostics IPC exports sanitized bundle to selected local JSON path', asy
   assert.deepEqual(seen.exportOptions.appInfo, { version: '0.2.0', releaseChannel: 'beta' });
   assert.deepEqual(result, {
     cancelled: false,
-    path: '/tmp/postmeter-diagnostics.json.written',
+    path: 'postmeter-diagnostics.json.written',
+    displayPath: 'postmeter-diagnostics.json.written',
     validated: true
   });
 });
@@ -116,7 +117,11 @@ test('diagnostics IPC ignores renderer-supplied export arguments and uses only t
 
   assert.equal(seen.exportOptions.targetPath, '/tmp/selected-diagnostics.json');
   assert.notEqual(seen.exportOptions.targetPath, '/tmp/attacker-controlled.json');
-  assert.equal(result.path, '/tmp/selected-diagnostics.json');
+  assert.deepEqual(result, {
+    cancelled: false,
+    path: 'selected-diagnostics.json',
+    displayPath: 'selected-diagnostics.json'
+  });
 });
 
 test('diagnostics IPC propagates local export write failures without reporting success', async () => {
@@ -211,5 +216,9 @@ test('diagnostics IPC waits for pending workspace operations before save dialog 
   const result = await exportPromise;
 
   assert.deepEqual(order, ['wait-start', 'wait-end', 'dialog', 'export']);
-  assert.equal(result.path, '/tmp/postmeter-diagnostics.json');
+  assert.deepEqual(result, {
+    cancelled: false,
+    path: 'postmeter-diagnostics.json',
+    displayPath: 'postmeter-diagnostics.json'
+  });
 });

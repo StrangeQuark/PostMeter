@@ -41,7 +41,9 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   const retainSamples = options.retainSamples !== false;
   const resultWriter = typeof options.resultWriter?.recordPerformanceSample === 'function' ? options.resultWriter : null;
   const useCsvVariables = csvVariablesEnabled(normalized.csvVariables);
-  const iterationRows = await csvVariableIterationRows(normalized.csvVariables, plan.totalRequests);
+  const iterationRows = await csvVariableIterationRows(normalized.csvVariables, plan.totalRequests, {
+    fileBindings: options.fileBindings || options.scriptOptions?.fileBindings
+  });
   let currentEnvironment = cloneJson(environment) || { id: 'runtime', name: 'Runtime', variables: [] };
   let currentCookies = Array.isArray(options.cookieJar) ? cloneJson(options.cookieJar) : [];
   const authRefreshManager = createAuthRefreshManager(normalized.authRefresh, {
@@ -59,6 +61,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
     fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
     sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
+    networkPolicy: options.networkPolicy || options.scriptOptions?.networkPolicy,
     vault: options.vault || options.scriptOptions?.vault,
     vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
     recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent

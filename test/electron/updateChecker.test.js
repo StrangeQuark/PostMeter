@@ -1,6 +1,13 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { checkForUpdates, compareVersions, normalizeVersion } = require('../../src/core/diagnostics-release/updateChecker');
+const {
+  checkForUpdates,
+  compareVersions,
+  normalizeVersion,
+  redactUpdateError,
+  resolveUpdateUrl,
+  validateUpdateUrl
+} = require('../../src/core/diagnostics-release/updateChecker');
 
 test('compares and normalizes release versions', () => {
   assert.equal(normalizeVersion('v1.2.3-beta+build'), '1.2.3');
@@ -12,6 +19,7 @@ test('compares and normalizes release versions', () => {
 test('checks GitHub release metadata for available updates', async () => {
   const result = await checkForUpdates({
     currentVersion: '0.2.0',
+    allowUpdateUrlOverride: true,
     releaseUrl: 'https://api.github.test/releases/latest',
     fetchImpl: async (url, options) => {
       assert.equal(url, 'https://api.github.test/releases/latest');
@@ -33,6 +41,31 @@ test('checks GitHub release metadata for available updates', async () => {
   assert.equal(result.currentVersion, '0.2.0');
   assert.equal(result.latestVersion, '0.3.0');
   assert.equal(result.releaseUrl, 'https://github.com/StrangeQuark/PostMeter/releases/tag/v0.3.0');
+});
+
+test('hardened update URL validation ignores packaged production overrides', () => {
+  assert.equal(
+    resolveUpdateUrl({
+      env: { POSTMETER_UPDATE_URL: 'https://evil.example.test/releases/latest' },
+      isPackaged: true
+    }),
+    'https://api.github.com/repos/StrangeQuark/PostMeter/releases/latest'
+  );
+  assert.equal(
+    resolveUpdateUrl({
+      allowUpdateUrlOverride: true,
+      env: { POSTMETER_UPDATE_URL: 'https://api.github.test/releases/latest?token=secret' }
+    }),
+    'https://api.github.test/releases/latest'
+  );
+  assert.throws(() => validateUpdateUrl('http://api.github.com/repos/StrangeQuark/PostMeter/releases/latest'), /HTTPS/);
+  assert.throws(() => validateUpdateUrl('https://token@api.github.com/repos/StrangeQuark/PostMeter/releases/latest'), /credentials/);
+  assert.throws(() => validateUpdateUrl('https://example.test/releases/latest'), /host is not allowed/);
+  assert.throws(() => validateUpdateUrl('https://api.github.com/repos/Other/PostMeter/releases/latest'), /path is not allowed/);
+  assert.equal(
+    redactUpdateError('failed https://token@example.test/path?access_token=secret#frag'),
+    'failed https://[redacted]@example.test/path?[redacted]#[redacted]'
+  );
 });
 
 test('reports no update when latest release is not newer', async () => {

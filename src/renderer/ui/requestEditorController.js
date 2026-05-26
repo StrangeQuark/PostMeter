@@ -166,6 +166,9 @@ function renderRequestBodyEditor(prefix, request) {
   renderBodyUrlencodedRows(prefix, request ? urlencodedRowsForRequest(request) : []);
   const binary = binaryBodyForRequest(request);
   setValue(bodyControlId(prefix, 'binaryBodySourceInput'), binary.source);
+  if (typeof syncSelectedFileLabel === 'function') {
+    syncSelectedFileLabel(bodyControlId(prefix, 'binaryBodySourceInput'));
+  }
   const graphql = graphqlBodyForRequestEditor(request);
   setValue(bodyControlId(prefix, 'graphqlQueryInput'), graphql.query);
   setValue(bodyControlId(prefix, 'graphqlVariablesInput'), graphql.variables);
@@ -334,6 +337,23 @@ function createBodyFormDataRow(prefix, row = {}) {
   const value = document.createElement('input');
   value.dataset.bodyFormDataField = 'value';
   value.value = row.value || '';
+  const valueCell = document.createElement('div');
+  valueCell.className = 'body-form-data-value-cell';
+  const fileControl = document.createElement('div');
+  fileControl.className = 'file-import-row';
+  const fileControlId = Math.random().toString(36).slice(2);
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'selected-file-label is-empty';
+  valueLabel.id = `bodyFormDataFileSource-${fileControlId}Label`;
+  value.id = `bodyFormDataFileSource-${fileControlId}Input`;
+  const importButton = document.createElement('button');
+  importButton.type = 'button';
+  importButton.textContent = 'Import';
+  const clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.textContent = 'Clear';
+  fileControl.append(valueLabel, importButton, clearButton);
+  valueCell.append(value, fileControl);
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'danger-button';
@@ -344,13 +364,30 @@ function createBodyFormDataRow(prefix, row = {}) {
   });
   const syncType = () => {
     const isFile = type.value === 'file';
-    value.placeholder = isFile ? 'File source' : 'Value';
+    value.type = isFile ? 'hidden' : 'text';
+    value.placeholder = isFile ? '' : 'Value';
+    fileControl.hidden = !isFile;
     updateLocalFileSourceInputState(value, { enabled: isFile, prefix, mode: 'formdata' });
+    if (typeof syncSelectedFileLabel === 'function') {
+      syncSelectedFileLabel(value);
+    }
     if (!isFile) {
       closeFileSourceMenu();
     }
   };
   configureLocalFileSourceInput(value, prefix, 'formdata');
+  importButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    void chooseFileForSourceInput(value, prefix, 'formdata');
+  });
+  if (typeof bindSelectedFileLabelTrigger === 'function') {
+    bindSelectedFileLabelTrigger(value, () => chooseFileForSourceInput(value, prefix, 'formdata'));
+  }
+  clearButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    setSelectedFileValue(value, '', { dispatch: true });
+    collectBodyEditorAndMarkDirty(prefix);
+  });
   for (const control of [enabled, type, key, value]) {
     const eventType = control.tagName === 'SELECT' || control.type === 'checkbox' ? 'change' : 'input';
     control.addEventListener(eventType, () => {
@@ -359,7 +396,7 @@ function createBodyFormDataRow(prefix, row = {}) {
     });
   }
   syncType();
-  wrapper.append(enabled, type, key, value, remove);
+  wrapper.append(enabled, type, key, valueCell, remove);
   return wrapper;
 }
 
@@ -1392,6 +1429,7 @@ function requestSettingsControlIds(scope = 'request') {
   const prefix = scope === 'performance' ? 'performanceRequest' : 'request';
   return {
     sslCertificateVerification: `${prefix}SslCertificateVerificationInput`,
+    sslCertificateVerificationInheritActions: `${prefix}SslCertificateVerificationInheritActions`,
     httpVersion: `${prefix}HttpVersionSelect`,
     followRedirects: `${prefix}FollowRedirectsInput`,
     maxRedirects: `${prefix}MaxRedirectsInput`,
@@ -1415,12 +1453,13 @@ function renderRequestSettingsControls(request, scope = 'request') {
   const ids = requestSettingsControlIds(scope);
   const verification = $(ids.sslCertificateVerification);
   if (verification) {
-    const workspaceVerification = workspace.settings?.request?.sslCertificateVerification !== false;
-    verification.checked = settings.sslCertificateVerification === 'inherit'
-      ? workspaceVerification
-      : settings.sslCertificateVerification === 'enabled';
+    verification.value = settings.sslCertificateVerification;
     verification.dataset.verificationValue = settings.sslCertificateVerification;
     verification.disabled = !request;
+  }
+  const inheritActions = $(ids.sslCertificateVerificationInheritActions);
+  if (inheritActions) {
+    inheritActions.hidden = !request || settings.sslCertificateVerification !== 'inherit';
   }
   setSelectValue(ids.httpVersion, settings.httpVersion, !request);
   setCheckboxValue(ids.followRedirects, settings.followRedirects, !request);

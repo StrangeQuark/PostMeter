@@ -16,7 +16,7 @@ const {
 } = require('../../src/core/contracts/keyboardShortcuts');
 
 function selectOptionValues(source, id) {
-  const match = source.match(new RegExp(`<select id="${id}">([\\s\\S]*?)</select>`));
+  const match = source.match(new RegExp(`<select\\b[^>]*\\bid="${id}"[^>]*>([\\s\\S]*?)</select>`));
   assert.ok(match, `Expected ${id} select to exist.`);
   return [...match[1].matchAll(/<option value="([^"]+)"/g)].map((optionMatch) => optionMatch[1]);
 }
@@ -815,9 +815,11 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="docsPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="collectionDescriptionPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestSslCertificateVerificationInput"/);
+  assert.deepEqual(selectOptionValues(indexSource, 'requestSslCertificateVerificationInput'), ['inherit', 'enabled', 'disabled']);
+  assert.match(indexSource, /id="requestSslCertificateVerificationInheritActions"[\s\S]*id="openRequestCertificatesSettingsButton"/);
   assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestCookieJarEnabledInput"/);
   assert.match(indexSource, /title="Adds a generated PostMeter-Token header with a new random value/);
-  assert.match(indexSource, /title="Verify SSL certificates when sending this request/);
+  assert.match(indexSource, /title="Choose SSL certificate verification behavior for this request/);
   assert.match(indexSource, /title="Choose the HTTP protocol version for this request/);
   assert.match(indexSource, /title="Automatically follow HTTP 3xx responses as redirects/);
   assert.match(indexSource, /title="Encode the URL path, query parameters, and authentication fields/);
@@ -837,6 +839,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.environment-table \.kv-row\s*\{[\s\S]*grid-template-columns:\s*28px minmax\(0, 1fr\) minmax\(0, 1\.35fr\) max-content;/);
   assert.doesNotMatch(indexSource, /id="requestCookiesTabButton"/);
   assert.match(indexSource, /id="performanceSettingsTab"[\s\S]*id="performanceRequestSslCertificateVerificationInput"/);
+  assert.deepEqual(selectOptionValues(indexSource, 'performanceRequestSslCertificateVerificationInput'), ['inherit', 'enabled', 'disabled']);
+  assert.match(indexSource, /id="performanceRequestSslCertificateVerificationInheritActions"[\s\S]*id="openPerformanceCertificatesSettingsButton"/);
   assert.match(indexSource, /id="performanceSettingsTab"[\s\S]*id="performanceRequestCookieJarEnabledInput"/);
   assert.match(indexSource, /<span>Test Type<\/span>\s*<select id="performanceTypeSelect"/);
   assert.doesNotMatch(indexSource, /<span>Type<\/span>\s*<select id="performanceTypeSelect"/);
@@ -1056,8 +1060,10 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
 test('renderer bootstrap binds request-local TLS setting controls', () => {
   const calls = [];
   const elements = new Map([
-    ['requestSslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
-    ['performanceRequestSslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
+    ['requestSslCertificateVerificationInput', createElement({ tagName: 'SELECT' })],
+    ['performanceRequestSslCertificateVerificationInput', createElement({ tagName: 'SELECT' })],
+    ['openRequestCertificatesSettingsButton', createElement({ tagName: 'BUTTON' })],
+    ['openPerformanceCertificatesSettingsButton', createElement({ tagName: 'BUTTON' })],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
   ]);
@@ -1080,15 +1086,20 @@ test('renderer bootstrap binds request-local TLS setting controls', () => {
     },
     windowObject: { addEventListener() {} },
     onRequestTlsSettingsChange: () => calls.push('request-tls'),
-    onPerformanceRequestTlsSettingsChange: () => calls.push('performance-request-tls')
+    onPerformanceRequestTlsSettingsChange: () => calls.push('performance-request-tls'),
+    onOpenCertificatesSettings: () => calls.push('certificates-settings')
   });
 
   elements.get('requestSslCertificateVerificationInput').dispatch('change');
   elements.get('performanceRequestSslCertificateVerificationInput').dispatch('change');
+  elements.get('openRequestCertificatesSettingsButton').dispatch('click');
+  elements.get('openPerformanceCertificatesSettingsButton').dispatch('click');
 
   assert.deepEqual(calls, [
     'request-tls',
-    'performance-request-tls'
+    'performance-request-tls',
+    'certificates-settings',
+    'certificates-settings'
   ]);
 });
 
@@ -2906,7 +2917,8 @@ test('renderer treats canceled certificate file pickers as cancellation', () => 
   const workspaceStart = rendererSource.indexOf('async function chooseWorkspaceCaCertificate');
   const workspaceSource = rendererSource.slice(workspaceStart, rendererSource.indexOf('async function clearWorkspaceCaCertificate', workspaceStart));
 
-  assert.match(workspaceSource, /if \(!selection\?\.path\) \{\s*return;\s*\}/);
+  assert.match(workspaceSource, /storeMainOwnedLocalFile\(selection/);
+  assert.match(workspaceSource, /if \(!binding\?\.source\) \{\s*return;\s*\}/);
   assert.doesNotMatch(workspaceSource, /promptTextInput/);
   assert.doesNotMatch(rendererSource, /chooseActiveRequestCaCertificate/);
   assert.doesNotMatch(rendererSource, /requestCaCertificatePathInput/);

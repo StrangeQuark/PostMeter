@@ -8,9 +8,11 @@ const {
   appProtocolHeaders,
   APP_RENDERER_CSP,
   APP_RENDERER_QUERY_KEYS,
+  APP_RENDERER_SMOKE_QUERY_KEYS,
   APP_PROTOCOL_SCHEME,
   createAppRendererUrl,
   isTrustedAppRendererUrl,
+  packagedRendererSmokeRequested,
   serveAppProtocolRequest
 } = require('../../electron/app-shell/appProtocol');
 const {
@@ -131,8 +133,10 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(rendererSource, /case 'export-request-curl':[\s\S]*exportRequestFromPicker\('curl'\)/);
   assert.match(rendererSource, /case 'export-performance-test':[\s\S]*exportPerformanceTestFromPicker\(\)/);
   assert.match(preloadSource, /contextBridge\.exposeInMainWorld\('postmeter',\s*postmeterApi\)/);
-  assert.match(preloadSource, /webUtils\.getPathForFile/);
-  assert.match(preloadSource, /files:\s*\{[\s\S]*pathForFile/);
+  assert.doesNotMatch(preloadSource, /webUtils\.getPathForFile/);
+  assert.doesNotMatch(preloadSource, /pathForFile/);
+  assert.match(preloadSource, /localFiles:\s*\{[\s\S]*storeContent/);
+  assert.match(preloadSource, /'local-file:storeContent'/);
   assert.match(preloadSource, /ipcRenderer\.on\('menu:action'/);
   assert.match(preloadSource, /'export-diagnostics'/);
   assert.match(preloadSource, /'set-prereleases'/);
@@ -148,10 +152,10 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(rendererSource, /chooseImportFilePath\('performance'\)/);
   assert.match(rendererSource, /upsertLocalFileAttachmentBinding/);
   assert.match(indexSource, /id="filePickerDropZone"/);
-  assert.match(indexSource, /id="filePickerManualPathInput"/);
-  assert.match(rendererSource, /function useManualPathFromFilePicker\(\)/);
+  assert.doesNotMatch(indexSource, /id="filePickerManualPathInput"/);
+  assert.doesNotMatch(rendererSource, /function useManualPathFromFilePicker\(\)/);
   assert.match(indexSource, /id="fileSourceMenu"/);
-  assert.match(indexSource, /Choose File\.\.\./);
+  assert.match(indexSource, /Import File/);
   assertSourceOrder(indexSource, [
     'id="newRequestButton"',
     'id="newCollectionButton"',
@@ -197,7 +201,8 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
 test('Electron BrowserWindow hardening denies renderer navigation, window-open, webview, and permissions', async () => {
   const root = path.join(__dirname, '..', '..');
   const mainWindowSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'mainWindow.js'), 'utf8');
-  const rendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' });
+  const rendererUrl = createAppRendererUrl();
+  const smokeRendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' }, { allowSmokeQuery: true });
 
   assert.match(mainWindowSource, /nodeIntegration:\s*false/);
   assert.match(mainWindowSource, /contextIsolation:\s*true/);
@@ -214,16 +219,27 @@ test('Electron BrowserWindow hardening denies renderer navigation, window-open, 
   assert.doesNotMatch(mainWindowSource, /loadFile\(/);
 
   assert.equal(isAllowedRendererNavigation(rendererUrl, rendererUrl), true);
-  assert.equal(isAllowedRendererNavigation(createAppRendererUrl({ uiSnapshotSmoke: '1' }), rendererUrl), false);
-  assert.equal(isAllowedRendererNavigation(createAppRendererUrl({ uiSnapshotSmoke: '1' }), createAppRendererUrl({ uiSnapshotSmoke: '1' })), true);
+  assert.equal(isAllowedRendererNavigation(smokeRendererUrl, rendererUrl), false);
+  assert.equal(isAllowedRendererNavigation(smokeRendererUrl, smokeRendererUrl), false);
+  assert.equal(isAllowedRendererNavigation(smokeRendererUrl, smokeRendererUrl, { allowSmokeQuery: true }), true);
   assert.equal(isAllowedRendererNavigation(`${rendererUrl}#fragment`, rendererUrl), true);
   assert.equal(isAllowedRendererNavigation(createAppRendererUrl({ unexpected: '1' }), rendererUrl), false);
   assert.equal(isAllowedRendererNavigation('https://example.test/'), false);
   assert.equal(isAllowedRendererNavigation('file:///tmp/evil.html'), false);
   assert.equal(isAllowedRendererNavigation(`${APP_PROTOCOL_SCHEME}://evil/src/renderer/index.html`), false);
   assert.equal(isAllowedRendererNavigation('https://example.test/', 'not-a-trusted-renderer-url'), false);
-  assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ uiWorkflowSmoke: '1', uiWorkflowBaseUrl: 'http://127.0.0.1:1' })), true);
+  assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ uiWorkflowSmoke: '1', uiWorkflowBaseUrl: 'http://127.0.0.1:1' }, { allowSmokeQuery: true })), false);
+  assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ uiWorkflowSmoke: '1', uiWorkflowBaseUrl: 'http://127.0.0.1:1' }, { allowSmokeQuery: true }), { allowSmokeQuery: true }), true);
   assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ unexpected: '1' })), false);
+  assert.equal(packagedRendererSmokeRequested({
+    POSTMETER_PACKAGED_SMOKE: '1',
+    POSTMETER_PACKAGED_UI_SMOKE: '1',
+    POSTMETER_UI_WORKFLOW_SMOKE: '1'
+  }), true);
+  assert.equal(packagedRendererSmokeRequested({
+    POSTMETER_PACKAGED_UI_SMOKE: '1',
+    POSTMETER_UI_WORKFLOW_SMOKE: '1'
+  }), false);
 });
 
 test('Electron startup smoke keeps software rasterization available for GPU-less CI runners', async () => {
@@ -250,7 +266,21 @@ test('Electron IPC sender hardening trusts only the packaged renderer URL', asyn
 
   trustedIpcMain.handle('app:versions', () => 'ok');
   assert.equal(await fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: indexUrl } }), 'ok');
-  assert.equal(await fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ uiWorkflowSmoke: '1' }) } }), 'ok');
+  await assert.rejects(
+    () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ uiWorkflowSmoke: '1' }, { allowSmokeQuery: true }) } }),
+    /IPC sender is not the trusted PostMeter renderer/
+  );
+  const smokeIpcMain = {
+    handlers: new Map(),
+    handle(channel, listener) {
+      this.handlers.set(channel, listener);
+    }
+  };
+  createTrustedIpcMain(smokeIpcMain, { allowSmokeQuery: true }).handle('app:versions', () => 'ok');
+  assert.equal(
+    await smokeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ uiWorkflowSmoke: '1' }, { allowSmokeQuery: true }) } }),
+    'ok'
+  );
   const mainFrame = { url: indexUrl, parent: null };
   const subFrame = { url: indexUrl, parent: mainFrame, top: mainFrame };
   assert.equal(isMainFrameSender({ senderFrame: mainFrame, sender: { mainFrame } }), true);
@@ -305,8 +335,8 @@ test('Electron IPC sender hardening trusts only the packaged renderer URL', asyn
   );
 
   assert.equal(isTrustedRendererUrl(indexUrl), true);
-  assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiSnapshotSmoke: '1' })), true);
-  assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiTypographySmoke: '1' })), true);
+  assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiSnapshotSmoke: '1' }, { allowSmokeQuery: true })), false);
+  assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiTypographySmoke: '1' }, { allowSmokeQuery: true }), { allowSmokeQuery: true }), true);
   assert.equal(isTrustedRendererUrl(createAppRendererUrl({ snapshot: '1' })), false);
   assert.equal(isTrustedRendererUrl('about:blank'), false);
 });
@@ -338,10 +368,13 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
   const root = path.join(__dirname, '..', '..');
   const appProtocolSource = await fs.readFile(path.join(root, 'electron', 'app-shell', 'appProtocol.js'), 'utf8');
   const rendererHtml = await fs.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
-  const rendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' });
+  const rendererUrl = createAppRendererUrl();
+  const smokeRendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' }, { allowSmokeQuery: true });
 
-  assert.equal(rendererUrl, `${APP_PROTOCOL_SCHEME}://bundle/src/renderer/index.html?uiWorkflowSmoke=1`);
-  assert.deepEqual([...APP_RENDERER_QUERY_KEYS].sort(), [
+  assert.equal(rendererUrl, `${APP_PROTOCOL_SCHEME}://bundle/src/renderer/index.html`);
+  assert.equal(smokeRendererUrl, `${APP_PROTOCOL_SCHEME}://bundle/src/renderer/index.html?uiWorkflowSmoke=1`);
+  assert.deepEqual([...APP_RENDERER_QUERY_KEYS].sort(), []);
+  assert.deepEqual([...APP_RENDERER_SMOKE_QUERY_KEYS].sort(), [
     'uiA11ySmoke',
     'uiAuthBaseUrl',
     'uiAuthMatrixSmoke',
@@ -369,8 +402,41 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
       `script ${scriptSrc[1]} should be served by the app protocol allowlist`
     );
   }
+  for (const href of rendererHtml.matchAll(/<link[^>]+href="([^"]+)"/g)) {
+    const assetUrl = new URL(href[1], rendererUrl).toString();
+    assert.doesNotThrow(
+      () => appProtocolFilePath(assetUrl, root),
+      `asset ${href[1]} should be served by the app protocol allowlist`
+    );
+  }
+  const stylesheetUrls = await collectRendererStylesheetUrls(root, rendererUrl, rendererHtml);
+  assert.ok(
+    stylesheetUrls.some((url) => url.endsWith('/src/renderer/styles/chrome.css')),
+    'renderer stylesheet imports should include chrome.css'
+  );
+  for (const stylesheetUrl of stylesheetUrls) {
+    assert.doesNotThrow(
+      () => appProtocolFilePath(stylesheetUrl, root),
+      `stylesheet dependency ${stylesheetUrl} should be served by the app protocol allowlist`
+    );
+    const stylesheetResponse = await serveAppProtocolRequest({ method: 'GET', url: stylesheetUrl }, { rootPath: root });
+    assert.equal(stylesheetResponse.status, 200, `stylesheet dependency ${stylesheetUrl} should return 200`);
+    assert.equal(stylesheetResponse.headers.get('content-type'), 'text/css; charset=utf-8');
+  }
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://evil/src/renderer/index.html`, root), /Invalid PostMeter app protocol URL/);
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/package.json`, root), /not allowlisted/);
+  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/renderer/foo.js`, root), /not allowlisted/);
+  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/renderer/smoke/uiSmoke.js`, root), /not allowlisted/);
+  assert.throws(() => appProtocolFilePath(smokeRendererUrl, root), /query is not allowlisted/);
+  assert.equal(
+    appProtocolFilePath(smokeRendererUrl, root, { allowSmokeAssets: true }),
+    path.join(root, 'src', 'renderer', 'index.html')
+  );
+  assert.equal(
+    appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/renderer/smoke/uiSmoke.js`, root, { allowSmokeAssets: true }),
+    path.join(root, 'src', 'renderer', 'smoke', 'uiSmoke.js')
+  );
+  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/renderer/renderer.js.map`, root), /not allowlisted/);
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/sandbox/scriptRuntime.js`, root), /not allowlisted/);
   assert.throws(() => appProtocolFilePath(`file://${path.join(root, 'src', 'renderer', 'index.html')}`, root), /Invalid PostMeter app protocol URL/);
   assert.doesNotMatch(appProtocolSource, /supportFetchAPI:\s*true/);
@@ -469,4 +535,28 @@ async function readRendererBundleSource(root) {
     sources.push(await fs.readFile(path.join(rendererRoot, scriptSrc), 'utf8'));
   }
   return sources.join('\n');
+}
+
+async function collectRendererStylesheetUrls(root, rendererUrl, rendererHtml) {
+  const queue = [...rendererHtml.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)]
+    .map((match) => new URL(match[1], rendererUrl).toString());
+  const seen = new Set();
+  for (let index = 0; index < queue.length; index += 1) {
+    const stylesheetUrl = queue[index];
+    if (seen.has(stylesheetUrl)) {
+      continue;
+    }
+    seen.add(stylesheetUrl);
+    const filePath = appProtocolFilePath(stylesheetUrl, root);
+    const source = await fs.readFile(filePath, 'utf8');
+    for (const importHref of stylesheetImportHrefs(source)) {
+      queue.push(new URL(importHref, stylesheetUrl).toString());
+    }
+  }
+  return [...seen];
+}
+
+function stylesheetImportHrefs(source) {
+  return [...String(source || '').matchAll(/@import\s+(?:url\(\s*)?["']?([^"')\s;]+)["']?\s*\)?/g)]
+    .map((match) => match[1]);
 }

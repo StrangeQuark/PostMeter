@@ -644,20 +644,40 @@
 
             <div class="auth-section" data-auth-section="clientCertificate">
               <label class="field">
-                <span>PFX/P12 Bundle Path</span>
-                <input id="authClientPfxPathInput" autocomplete="off">
+                <span>PFX/P12 Bundle</span>
+                <div class="file-import-row">
+                  <input id="authClientPfxPathInput" type="hidden">
+                  <span id="authClientPfxPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientPfxPathImportButton" type="button">Import</button>
+                  <button id="authClientPfxPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
-                <span>PEM Certificate Path</span>
-                <input id="authClientCertPathInput" autocomplete="off">
+                <span>PEM Certificate</span>
+                <div class="file-import-row">
+                  <input id="authClientCertPathInput" type="hidden">
+                  <span id="authClientCertPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientCertPathImportButton" type="button">Import</button>
+                  <button id="authClientCertPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
-                <span>PEM Key Path</span>
-                <input id="authClientKeyPathInput" autocomplete="off">
+                <span>PEM Key</span>
+                <div class="file-import-row">
+                  <input id="authClientKeyPathInput" type="hidden">
+                  <span id="authClientKeyPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientKeyPathImportButton" type="button">Import</button>
+                  <button id="authClientKeyPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
-                <span>CA Certificate Path</span>
-                <input id="authClientCaPathInput" autocomplete="off">
+                <span>CA Certificate</span>
+                <div class="file-import-row">
+                  <input id="authClientCaPathInput" type="hidden">
+                  <span id="authClientCaPathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="authClientCaPathImportButton" type="button">Import</button>
+                  <button id="authClientCaPathClearButton" type="button">Clear</button>
+                </div>
               </label>
               <label class="field">
                 <span>Passphrase</span>
@@ -1031,7 +1051,12 @@
             <div class="binary-body-grid">
               <label class="field">
                 <span>File Source</span>
-                <input id="binaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
+                <div class="file-import-row">
+                  <input id="binaryBodySourceInput" type="hidden">
+                  <span id="binaryBodySourceLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="binaryBodySourceImportButton" type="button">Import</button>
+                  <button id="binaryBodySourceClearButton" type="button">Clear</button>
+                </div>
               </label>
             </div>
           </div>
@@ -1074,10 +1099,17 @@
           <div class="request-settings-grid">
             <section class="request-settings-section" aria-labelledby="requestCertificatesSettingsTitle">
               <h3 id="requestCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-              <label id="requestSslCertificateVerificationField" class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                <input id="requestSslCertificateVerificationInput" type="checkbox" data-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                <span>Enable SSL certificate verification</span>
+              <label id="requestSslCertificateVerificationField" class="field" title="Choose SSL certificate verification behavior for this request.">
+                <span>SSL certificate verification</span>
+                <select id="requestSslCertificateVerificationInput" data-request-setting title="Choose SSL certificate verification behavior for this request.">
+                  <option value="inherit">Inherit workspace default</option>
+                  <option value="enabled">Enable</option>
+                  <option value="disabled">Disable</option>
+                </select>
               </label>
+              <div id="requestSslCertificateVerificationInheritActions" class="request-settings-action-row" hidden>
+                <button id="openRequestCertificatesSettingsButton" type="button">Workspace Certificates</button>
+              </div>
             </section>
             <section class="request-settings-section" aria-labelledby="requestCookiesSettingsTitle">
               <h3 id="requestCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
@@ -2057,20 +2089,40 @@
 
                 <div class="auth-section" data-auth-section="clientCertificate">
                   <label class="field">
-                    <span>PFX/P12 Bundle Path</span>
-                    <input id="performanceAuthClientPfxPathInput" autocomplete="off">
+                    <span>PFX/P12 Bundle</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientPfxPathInput" type="hidden">
+                      <span id="performanceAuthClientPfxPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientPfxPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientPfxPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
-                    <span>PEM Certificate Path</span>
-                    <input id="performanceAuthClientCertPathInput" autocomplete="off">
+                    <span>PEM Certificate</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientCertPathInput" type="hidden">
+                      <span id="performanceAuthClientCertPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientCertPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientCertPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
-                    <span>PEM Key Path</span>
-                    <input id="performanceAuthClientKeyPathInput" autocomplete="off">
+                    <span>PEM Key</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientKeyPathInput" type="hidden">
+                      <span id="performanceAuthClientKeyPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientKeyPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientKeyPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
-                    <span>CA Certificate Path</span>
-                    <input id="performanceAuthClientCaPathInput" autocomplete="off">
+                    <span>CA Certificate</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientCaPathInput" type="hidden">
+                      <span id="performanceAuthClientCaPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientCaPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientCaPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
                     <span>Passphrase</span>
@@ -2444,7 +2496,12 @@
                 <div class="binary-body-grid">
                   <label class="field">
                     <span>File Source</span>
-                    <input id="performanceBinaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
+                    <div class="file-import-row">
+                      <input id="performanceBinaryBodySourceInput" type="hidden">
+                      <span id="performanceBinaryBodySourceLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceBinaryBodySourceImportButton" type="button">Import</button>
+                      <button id="performanceBinaryBodySourceClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                 </div>
               </div>
@@ -2487,10 +2544,17 @@
               <div class="request-settings-grid">
                 <section class="request-settings-section" aria-labelledby="performanceCertificatesSettingsTitle">
                   <h3 id="performanceCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-                  <label id="performanceRequestSslCertificateVerificationField" class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox" data-performance-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                    <span>Enable SSL certificate verification</span>
+                  <label id="performanceRequestSslCertificateVerificationField" class="field" title="Choose SSL certificate verification behavior for this request.">
+                    <span>SSL certificate verification</span>
+                    <select id="performanceRequestSslCertificateVerificationInput" data-performance-request-setting title="Choose SSL certificate verification behavior for this request.">
+                      <option value="inherit">Inherit workspace default</option>
+                      <option value="enabled">Enable</option>
+                      <option value="disabled">Disable</option>
+                    </select>
                   </label>
+                  <div id="performanceRequestSslCertificateVerificationInheritActions" class="request-settings-action-row" hidden>
+                    <button id="openPerformanceCertificatesSettingsButton" type="button">Workspace Certificates</button>
+                  </div>
                 </section>
                 <section class="request-settings-section" aria-labelledby="performanceCookiesSettingsTitle">
                   <h3 id="performanceCookiesSettingsTitle" class="request-settings-title">Cookies</h3>
@@ -2850,8 +2914,9 @@
               <label class="settings-field">
                 <span>CA PEM file</span>
                 <div class="settings-path-row">
-                  <input id="caCertificatePathInput" autocomplete="off" placeholder="/path/to/ca.pem">
-                  <button id="chooseCaCertificateButton" type="button">Choose</button>
+                  <input id="caCertificatePathInput" type="hidden">
+                  <span id="caCertificatePathLabel" class="selected-file-label is-empty">No file selected</span>
+                  <button id="chooseCaCertificateButton" type="button">Import</button>
                   <button id="clearCaCertificateButton" type="button">Clear</button>
                 </div>
               </label>
@@ -3025,7 +3090,6 @@
         <button id="closeSettingsModalFooterButton" type="button" class="primary">Close</button>
       </div>
     </section>
-
     <section id="tutorialsModal" class="modal tutorials-modal" role="dialog" aria-modal="true" aria-labelledby="tutorialsModalTitle" aria-describedby="tutorialsModalMessage" hidden>
       <div class="modal-title-row">
         <h2 id="tutorialsModalTitle">Tutorials</h2>
@@ -3188,7 +3252,7 @@
       <input id="requestImportFileInput" type="file" accept=".json,.sh,.txt,application/json,text/plain" hidden>
       <div class="modal-actions">
         <button id="cancelRequestImportButton" type="button">Cancel</button>
-        <button id="requestImportBrowseButton" type="button">Choose File</button>
+        <button id="requestImportBrowseButton" type="button">Import File</button>
         <button id="confirmRequestImportButton" type="button" class="primary" disabled>Import</button>
       </div>
     </section>
@@ -3210,7 +3274,6 @@
         <button id="fileRequestExportButton" type="button" class="primary">Export File</button>
       </div>
     </section>
-
     <section id="textInputModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="textInputModalTitle" aria-describedby="textInputModalMessage" hidden>
       <h2 id="textInputModalTitle">Provide value</h2>
       <p id="textInputModalMessage">Enter a value to continue.</p>
@@ -3277,22 +3340,28 @@
         <div class="field client-certificate-pem-field">
           <span>CRT file</span>
           <div class="client-certificate-path-row">
-            <input id="clientCertificateCertPathInput" autocomplete="off" placeholder="/path/to/client.crt">
-            <button id="chooseClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathInput" aria-label="Choose CRT file">Choose</button>
+            <input id="clientCertificateCertPathInput" type="hidden">
+            <span id="clientCertificateCertPathLabel" class="selected-file-label is-empty">No file selected</span>
+            <button id="chooseClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathLabel" aria-label="Import CRT file">Import</button>
+            <button id="clearClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathLabel" aria-label="Clear CRT file">Clear</button>
           </div>
         </div>
         <div class="field client-certificate-pem-field">
           <span>KEY file</span>
           <div class="client-certificate-path-row">
-            <input id="clientCertificateKeyPathInput" autocomplete="off" placeholder="/path/to/client.key">
-            <button id="chooseClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathInput" aria-label="Choose KEY file">Choose</button>
+            <input id="clientCertificateKeyPathInput" type="hidden">
+            <span id="clientCertificateKeyPathLabel" class="selected-file-label is-empty">No file selected</span>
+            <button id="chooseClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathLabel" aria-label="Import KEY file">Import</button>
+            <button id="clearClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathLabel" aria-label="Clear KEY file">Clear</button>
           </div>
         </div>
         <div class="field client-certificate-pfx-field">
           <span>PFX/P12 file</span>
           <div class="client-certificate-path-row">
-            <input id="clientCertificatePfxPathInput" autocomplete="off" placeholder="/path/to/client.p12">
-            <button id="chooseClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathInput" aria-label="Choose PFX or P12 file">Choose</button>
+            <input id="clientCertificatePfxPathInput" type="hidden">
+            <span id="clientCertificatePfxPathLabel" class="selected-file-label is-empty">No file selected</span>
+            <button id="chooseClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathLabel" aria-label="Import PFX or P12 file">Import</button>
+            <button id="clearClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathLabel" aria-label="Clear PFX or P12 file">Clear</button>
           </div>
         </div>
         <div class="field client-certificate-passphrase-field">
@@ -3456,16 +3525,11 @@
         <strong>Drop file here</strong>
         <span>or choose a file from this computer.</span>
       </div>
-      <label id="filePickerManualPathField" class="field file-picker-manual-field">
-        <span>Manual path</span>
-        <input id="filePickerManualPathInput" autocomplete="off" spellcheck="false" placeholder="/path/to/file">
-      </label>
       <p id="filePickerError" class="file-picker-error" role="alert" hidden></p>
       <input id="filePickerInput" type="file" hidden>
       <div class="modal-actions">
         <button id="filePickerCancelButton" type="button">Cancel</button>
-        <button id="filePickerUsePathButton" type="button">Use Path</button>
-        <button id="filePickerBrowseButton" type="button" class="primary">Choose File</button>
+        <button id="filePickerBrowseButton" type="button" class="primary">Import File</button>
       </div>
     </section>
 
@@ -3506,7 +3570,7 @@
   </div>
   <div id="contextMenu" class="context-menu" role="menu" aria-label="Item actions" hidden></div>
   <div id="fileSourceMenu" class="context-menu file-source-menu" role="menu" aria-label="File source actions" hidden>
-    <button id="fileSourceChooseButton" type="button" role="menuitem">Choose File...</button>
+    <button id="fileSourceChooseButton" type="button" role="menuitem">Import File</button>
   </div>
 
   <div id="tutorialOverlay" class="tutorial-overlay" hidden>
@@ -3573,17 +3637,5 @@
   <script src="features/importExportWorkspaceController.js"></script>
   <script src="app/editorCollectors.js"></script>
   <script src="renderer.js"></script>
-  <script src="smoke/uiSmokeCommon.js"></script>
-  <script src="smoke/uiSnapshotManifest.js"></script>
-  <script src="smoke/uiWorkflowSmoke.js"></script>
-  <script src="smoke/uiRegressionSmoke.js"></script>
-  <script src="smoke/uiSnapshotSmoke.js"></script>
-  <script src="smoke/uiTypographySmoke.js"></script>
-  <script src="smoke/uiOauthSmoke.js"></script>
-  <script src="smoke/uiHawkSmoke.js"></script>
-  <script src="smoke/uiAwsSmoke.js"></script>
-  <script src="smoke/uiA11ySmoke.js"></script>
-  <script src="smoke/uiAuthMatrixSmoke.js"></script>
-  <script src="smoke/uiSmoke.js"></script>
 </body>
 </html>

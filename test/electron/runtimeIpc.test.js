@@ -96,7 +96,7 @@ test('runtime IPC estimates temp result store size before runs', async () => {
   }
 });
 
-test('runtime IPC imports renderer-selected performance test files without reopening native dialogs', async () => {
+test('runtime IPC imports native-dialog performance test files without renderer path authority', async () => {
   const handlers = new Map();
   let openDialogCalls = 0;
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-performance-import-'));
@@ -117,7 +117,7 @@ test('runtime IPC imports renderer-selected performance test files without reope
       dialog: {
         showOpenDialog: async () => {
           openDialogCalls += 1;
-          return { canceled: true, filePaths: [] };
+          return { canceled: false, filePaths: [filePath] };
         },
         showSaveDialog: async () => ({ canceled: true })
       },
@@ -133,14 +133,74 @@ test('runtime IPC imports renderer-selected performance test files without reope
       setWorkspace: () => {}
     });
 
-    const result = await handlers.get('performance:import')({}, filePath);
-    assert.equal(openDialogCalls, 0);
+    const result = await handlers.get('performance:import')({});
+    const textResult = await handlers.get('performance:import')({}, {
+      fileName: 'latency-test.postmeter-performance.json',
+      text: JSON.stringify({
+        format: 'postmeter.performance.v1',
+        performanceTest: { ...performanceTest, id: 'performance-2', name: 'Imported From Text' }
+      })
+    });
+    assert.equal(openDialogCalls, 1);
     assert.equal(result.cancelled, false);
     assert.equal(result.performanceTest.name, 'Imported Latency');
+    assert.equal(textResult.cancelled, false);
+    assert.equal(textResult.performanceTest.name, 'Imported From Text');
     await assert.rejects(
       () => handlers.get('performance:import')({}, 'bad\0path.json'),
-      /performance import path must not contain null bytes/
+      /performance import path cannot be supplied by the renderer/
     );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runtime IPC rejects renderer-supplied manual performance import paths without prompting', async () => {
+  const handlers = new Map();
+  const prompts = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-performance-manual-import-'));
+  try {
+    const filePath = path.join(tempDir, 'latency-test.postmeter-performance.json');
+    const performanceTest = defaultPerformanceTest({
+      id: 'performance-1',
+      name: 'Manual Path Performance',
+      type: 'latency',
+      request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' }
+    });
+    await fs.writeFile(filePath, JSON.stringify({
+      format: 'postmeter.performance.v1',
+      performanceTest
+    }), 'utf8');
+
+    registerRuntimeIpc({
+      dialog: {
+        showMessageBox: async (_window, options) => {
+          prompts.push(options);
+          return { response: 1 };
+        },
+        showOpenDialog: async () => {
+          throw new Error('manual path import should not reopen the picker');
+        },
+        showSaveDialog: async () => ({ canceled: true })
+      },
+      env: { POSTMETER_PACKAGED_PRODUCTION: '1' },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => ({ cookies: [] }),
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      saveWorkspace: async (workspace) => workspace,
+      setWorkspace: () => {}
+    });
+
+    await assert.rejects(
+      () => handlers.get('performance:import')({}, filePath),
+      /performance import path cannot be supplied by the renderer/
+    );
+    assert.equal(prompts.length, 0);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
@@ -521,6 +581,383 @@ test('runtime IPC keeps performance environment mutations temporary unless the r
   assert.equal(result.environment.variables[0].value, 'temporary');
   assert.equal(result.mutatedEnvironment, undefined);
   assert.equal(workspace.environments[0].variables[0].value, 'base');
+});
+
+test('runtime IPC denies imported high-risk performance runs without native confirmation', async () => {
+  const handlers = new Map();
+  const events = [];
+  let promptCalls = 0;
+  let runCalls = 0;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-high-risk-denied-'));
+  const workspace = {
+    cookies: [],
+    globals: [],
+    localsettings: { security: { importedUntrusted: true } },
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  let controller;
+  try {
+    controller = registerRuntimeIpc({
+      dialog: {
+        showSaveDialog: async () => ({ canceled: true }),
+        showMessageBox: async () => {
+          promptCalls += 1;
+          return { response: 1 };
+        }
+      },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      getWorkspaceId: () => 'workspace-imported',
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => mutator(workspace),
+      recordDiagnosticEvent: async (event) => {
+        events.push(event);
+      },
+      resultStorePath: path.join(tempDir, 'current.sqlite'),
+      runPerformanceTest: async () => {
+        runCalls += 1;
+        return {};
+      },
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+
+    const performanceTest = defaultPerformanceTest({
+      id: 'perf-high-risk-denied',
+      name: 'Imported High Risk',
+      type: 'throughput',
+      request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+      config: { iterations: 1001, concurrency: 1 },
+      safetyLimits: { maxTotalRequests: 1001, maxConcurrency: 1, maxDurationSeconds: 60 }
+    });
+
+    await assert.rejects(
+      () => handlers.get('performance:start')({ sender: { isDestroyed: () => false, send() {} } }, 'performance-denied', performanceTest, null),
+      /High-risk performance run was cancelled/
+    );
+
+    assert.equal(promptCalls, 1);
+    assert.equal(runCalls, 0);
+    assert.deepEqual(events.map((event) => event.type), [
+      'runtime.high-risk-run.prompted',
+      'runtime.high-risk-run.denied',
+      'performance.start.failed'
+    ]);
+  } finally {
+    await controller?.cleanupResultStore?.();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runtime IPC accepted native confirmation allows imported high-risk performance runs', async () => {
+  const handlers = new Map();
+  const events = [];
+  let promptCalls = 0;
+  let runCalls = 0;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-high-risk-accepted-'));
+  const workspace = {
+    cookies: [],
+    globals: [],
+    localsettings: { security: { importedUntrusted: true } },
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  let controller;
+  try {
+    controller = registerRuntimeIpc({
+      dialog: {
+        showSaveDialog: async () => ({ canceled: true }),
+        showMessageBox: async () => {
+          promptCalls += 1;
+          return { response: 0 };
+        }
+      },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      getWorkspaceId: () => 'workspace-imported',
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => mutator(workspace),
+      recordDiagnosticEvent: async (event) => {
+        events.push(event);
+      },
+      resultStorePath: path.join(tempDir, 'current.sqlite'),
+      runPerformanceTest: async (performanceTest) => {
+        runCalls += 1;
+        return {
+          id: 'perf-high-risk-result',
+          performanceTestId: performanceTest.id,
+          performanceTestName: performanceTest.name,
+          type: performanceTest.type,
+          environmentId: 'none',
+          environmentMutationAllowed: false,
+          totalRequests: 1001,
+          completedRequests: 1001,
+          successfulRequests: 1001,
+          failedRequests: 0,
+          passed: true,
+          cancelled: false,
+          startedAt: '2026-05-06T00:00:00.000Z',
+          completedAt: '2026-05-06T00:00:01.000Z',
+          durationMillis: 1000,
+          config: performanceTest.config,
+          safetyLimits: performanceTest.safetyLimits,
+          summary: { requestsPerSecond: 1001, statusCodes: { 200: 1001 } },
+          samples: [],
+          environment: { id: 'runtime', name: 'Runtime', variables: [] },
+          cookies: []
+        };
+      },
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+
+    const performanceTest = defaultPerformanceTest({
+      id: 'perf-high-risk-accepted',
+      name: 'Imported High Risk Accepted',
+      type: 'throughput',
+      request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+      config: { iterations: 1001, concurrency: 1 },
+      safetyLimits: { maxTotalRequests: 1001, maxConcurrency: 1, maxDurationSeconds: 60 }
+    });
+
+    const result = await handlers.get('performance:start')({ sender: { isDestroyed: () => false, send() {} } }, 'performance-accepted', performanceTest, null);
+
+    assert.equal(promptCalls, 1);
+    assert.equal(runCalls, 1);
+    assert.equal(result.passed, true);
+    assert.deepEqual(events.map((event) => event.type), [
+      'runtime.high-risk-run.prompted',
+      'runtime.high-risk-run.accepted',
+      'runtime.high-risk-run.started',
+      'performance.start.completed'
+    ]);
+  } finally {
+    await controller?.cleanupResultStore?.();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runtime IPC high-risk assessment includes local vault grants and file bindings', async () => {
+  const handlers = new Map();
+  const events = [];
+  const workspace = {
+    cookies: [],
+    globals: [],
+    localsettings: {
+      security: { importedUntrusted: true },
+      sandbox: {
+        fileBindings: [{
+          source: 'fixture-data.csv',
+          localPath: path.join(os.tmpdir(), 'fixture-data.csv'),
+          fileName: 'fixture-data.csv',
+          reviewedAt: '2026-05-06T00:00:00.000Z'
+        }],
+        trustedCapabilities: {
+          vaultGrants: { workspace: true }
+        }
+      }
+    },
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: { vault: false } } },
+    environments: []
+  };
+  registerRuntimeIpc({
+    dialog: {
+      showSaveDialog: async () => ({ canceled: true }),
+      showMessageBox: async () => ({ response: 1 })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-local-authority-risk',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    runPerformanceTest: async () => {
+      throw new Error('run should not start after denied confirmation');
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const performanceTest = defaultPerformanceTest({
+    id: 'perf-local-authority-risk',
+    name: 'Local Authority Risk',
+    type: 'latency',
+    request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+    config: { iterations: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 60 }
+  });
+
+  await assert.rejects(
+    () => handlers.get('performance:start')({ sender: { isDestroyed: () => false, send() {} } }, 'performance-local-authority-risk', performanceTest, null),
+    /High-risk performance run was cancelled/
+  );
+
+  const prompted = events.find((event) => event.type === 'runtime.high-risk-run.prompted');
+  assert.equal(prompted.fields.fileBindings, 1);
+  assert.equal(prompted.fields.vaultGrants, 1);
+  assert.ok(prompted.fields.reasons.includes('file-bindings'));
+  assert.ok(prompted.fields.reasons.includes('vault'));
+});
+
+test('runtime IPC normal trusted performance runs do not show high-risk confirmation', async () => {
+  const handlers = new Map();
+  let promptCalls = 0;
+  let runCalls = 0;
+  const workspace = {
+    cookies: [],
+    globals: [],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  registerRuntimeIpc({
+    dialog: {
+      showSaveDialog: async () => ({ canceled: true }),
+      showMessageBox: async () => {
+        promptCalls += 1;
+        return { response: 1 };
+      }
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-local',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    runPerformanceTest: async (performanceTest) => {
+      runCalls += 1;
+      return {
+        id: 'perf-normal-result',
+        performanceTestId: performanceTest.id,
+        performanceTestName: performanceTest.name,
+        type: performanceTest.type,
+        environmentId: 'none',
+        environmentMutationAllowed: false,
+        totalRequests: 1,
+        completedRequests: 1,
+        successfulRequests: 1,
+        failedRequests: 0,
+        passed: true,
+        cancelled: false,
+        startedAt: '2026-05-06T00:00:00.000Z',
+        completedAt: '2026-05-06T00:00:01.000Z',
+        durationMillis: 1,
+        config: performanceTest.config,
+        safetyLimits: performanceTest.safetyLimits,
+        summary: { requestsPerSecond: 1, statusCodes: { 200: 1 } },
+        samples: [],
+        environment: { id: 'runtime', name: 'Runtime', variables: [] },
+        cookies: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const performanceTest = defaultPerformanceTest({
+    id: 'perf-normal',
+    name: 'Normal',
+    type: 'latency',
+    request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+    config: { iterations: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 60 }
+  });
+  await handlers.get('performance:start')({ sender: { isDestroyed: () => false, send() {} } }, 'performance-normal', performanceTest, null);
+
+  assert.equal(promptCalls, 0);
+  assert.equal(runCalls, 1);
+});
+
+test('runtime IPC gates imported runner execution with main-process confirmation', async () => {
+  const handlers = new Map();
+  const events = [];
+  let promptCalls = 0;
+  let runCalls = 0;
+  const workspace = {
+    cookies: [],
+    globals: [],
+    localsettings: { security: { importedUntrusted: true } },
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  registerRuntimeIpc({
+    dialog: {
+      showSaveDialog: async () => ({ canceled: true }),
+      showMessageBox: async () => {
+        promptCalls += 1;
+        return { response: 0 };
+      }
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-runner-imported',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    runCollection: async () => {
+      runCalls += 1;
+      return {
+        collectionId: 'collection-1',
+        collectionName: 'Imported Runner',
+        totalRequests: 1,
+        passedRequests: 1,
+        failedRequests: 0,
+        passed: true,
+        cancelled: false,
+        results: [],
+        environment: { id: 'runtime', name: 'Runtime', variables: [] },
+        cookies: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const result = await handlers.get('runner:start')({ sender: { send() {} } }, 'runner-imported', {
+    id: 'collection-1',
+    name: 'Imported Runner',
+    variables: [],
+    folders: [],
+    requests: [{ id: 'request-1', name: 'Request', method: 'GET', url: 'https://example.test' }]
+  }, null, {});
+
+  assert.equal(promptCalls, 1);
+  assert.equal(runCalls, 1);
+  assert.equal(result.passed, true);
+  assert.deepEqual(events.map((event) => event.type), [
+    'runtime.high-risk-run.prompted',
+    'runtime.high-risk-run.accepted',
+    'runtime.high-risk-run.started',
+    'runner.start.completed'
+  ]);
 });
 
 test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and diagnostic CSV export', async () => {

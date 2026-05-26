@@ -478,13 +478,14 @@
 
 .client-certificate-path-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
   min-width: 0;
 }
 
-.client-certificate-path-row input {
+.client-certificate-path-row input,
+.settings-path-row input {
   min-width: 0;
   width: 100%;
 }
@@ -502,6 +503,26 @@
 .client-certificate-passphrase-row button {
   min-width: 64px;
   white-space: nowrap;
+}
+
+.selected-file-label {
+  display: block;
+  min-width: 0;
+  min-height: 34px;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--text);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-file-label.is-empty {
+  color: var(--muted);
+  font-style: italic;
 }
 
 .client-certificate-pfx-field[hidden],
@@ -699,6 +720,10 @@
   inset: 0;
   z-index: 1200;
   pointer-events: auto;
+}
+
+.tutorial-overlay.is-coach-only {
+  background: color-mix(in srgb, black 58%, transparent);
 }
 
 .tutorial-overlay[hidden] {
@@ -1471,19 +1496,6 @@
 
 .file-picker-dropzone span {
   font-size: var(--ui-font-size-sm);
-}
-
-.file-picker-manual-field {
-  margin-top: 12px;
-}
-
-.file-picker-manual-field[hidden] {
-  display: none;
-}
-
-.file-picker-manual-field input {
-  min-width: 0;
-  width: 100%;
 }
 
 .file-picker-error {

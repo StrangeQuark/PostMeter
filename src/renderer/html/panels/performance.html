@@ -606,20 +606,40 @@
 
                 <div class="auth-section" data-auth-section="clientCertificate">
                   <label class="field">
-                    <span>PFX/P12 Bundle Path</span>
-                    <input id="performanceAuthClientPfxPathInput" autocomplete="off">
+                    <span>PFX/P12 Bundle</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientPfxPathInput" type="hidden">
+                      <span id="performanceAuthClientPfxPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientPfxPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientPfxPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
-                    <span>PEM Certificate Path</span>
-                    <input id="performanceAuthClientCertPathInput" autocomplete="off">
+                    <span>PEM Certificate</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientCertPathInput" type="hidden">
+                      <span id="performanceAuthClientCertPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientCertPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientCertPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
-                    <span>PEM Key Path</span>
-                    <input id="performanceAuthClientKeyPathInput" autocomplete="off">
+                    <span>PEM Key</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientKeyPathInput" type="hidden">
+                      <span id="performanceAuthClientKeyPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientKeyPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientKeyPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
-                    <span>CA Certificate Path</span>
-                    <input id="performanceAuthClientCaPathInput" autocomplete="off">
+                    <span>CA Certificate</span>
+                    <div class="file-import-row">
+                      <input id="performanceAuthClientCaPathInput" type="hidden">
+                      <span id="performanceAuthClientCaPathLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceAuthClientCaPathImportButton" type="button">Import</button>
+                      <button id="performanceAuthClientCaPathClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                   <label class="field">
                     <span>Passphrase</span>
@@ -993,7 +1013,12 @@
                 <div class="binary-body-grid">
                   <label class="field">
                     <span>File Source</span>
-                    <input id="performanceBinaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
+                    <div class="file-import-row">
+                      <input id="performanceBinaryBodySourceInput" type="hidden">
+                      <span id="performanceBinaryBodySourceLabel" class="selected-file-label is-empty">No file selected</span>
+                      <button id="performanceBinaryBodySourceImportButton" type="button">Import</button>
+                      <button id="performanceBinaryBodySourceClearButton" type="button">Clear</button>
+                    </div>
                   </label>
                 </div>
               </div>
@@ -1036,10 +1061,17 @@
               <div class="request-settings-grid">
                 <section class="request-settings-section" aria-labelledby="performanceCertificatesSettingsTitle">
                   <h3 id="performanceCertificatesSettingsTitle" class="request-settings-title">Certificates</h3>
-                  <label id="performanceRequestSslCertificateVerificationField" class="settings-toggle" title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                    <input id="performanceRequestSslCertificateVerificationInput" type="checkbox" data-performance-request-setting title="Verify SSL certificates when sending this request. Verification failures abort the request.">
-                    <span>Enable SSL certificate verification</span>
+                  <label id="performanceRequestSslCertificateVerificationField" class="field" title="Choose SSL certificate verification behavior for this request.">
+                    <span>SSL certificate verification</span>
+                    <select id="performanceRequestSslCertificateVerificationInput" data-performance-request-setting title="Choose SSL certificate verification behavior for this request.">
+                      <option value="inherit">Inherit workspace default</option>
+                      <option value="enabled">Enable</option>
+                      <option value="disabled">Disable</option>
+                    </select>
                   </label>
+                  <div id="performanceRequestSslCertificateVerificationInheritActions" class="request-settings-action-row" hidden>
+                    <button id="openPerformanceCertificatesSettingsButton" type="button">Workspace Certificates</button>
+                  </div>
                 </section>
                 <section class="request-settings-section" aria-labelledby="performanceCookiesSettingsTitle">
                   <h3 id="performanceCookiesSettingsTitle" class="request-settings-title">Cookies</h3>

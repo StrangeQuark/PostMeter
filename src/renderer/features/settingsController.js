@@ -137,6 +137,7 @@ function renderKeyboardShortcutControls() {
       </div>
     `);
   }
+  // postmeter-security-allow-html: keyboard shortcut rows escape all dynamic labels and values before assigning controlled settings markup.
   list.innerHTML = rows.join('');
 }
 
@@ -572,21 +573,29 @@ function normalizeSandboxFileBindings(value) {
   for (const item of value) {
     const source = String(item?.source || item?.src || '').trim().slice(0, 32768);
     const localPath = String(item?.localPath || item?.path || item?.filePath || '').trim().slice(0, 32768);
-    if (!source || !localPath || seen.has(source)) {
+    const bound = item?.bound === true || Boolean(localPath);
+    if (!source || !bound || seen.has(source)) {
       continue;
     }
     seen.add(source);
-    output.push({
+    const binding = {
       id: String(item?.id || `file-binding-${seen.size}`).slice(0, 256),
       source,
-      localPath,
       mode: normalizeSandboxFileMode(item?.mode),
       key: item?.key == null ? '' : String(item.key).slice(0, 512),
       contentType: item?.contentType == null ? '' : String(item.contentType).slice(0, 32768),
       fileName: item?.fileName == null ? '' : String(item.fileName).slice(0, 256),
+      bound,
       enabled: item?.enabled !== false,
       reviewedAt: item?.reviewedAt == null ? '' : String(item.reviewedAt).slice(0, 256)
-    });
+    };
+    const displayName = item?.displayName == null ? '' : String(item.displayName).slice(0, 256);
+    if (displayName) {
+      binding.displayName = displayName;
+    } else if (localPath) {
+      binding.displayName = displayLocalFilePath(localPath);
+    }
+    output.push(binding);
     if (output.length >= 1000) {
       break;
     }
@@ -599,7 +608,7 @@ function normalizeSandboxFileMode(value) {
   return ['file', 'binary', 'formdata'].includes(mode) ? mode : 'file';
 }
 
-const SANDBOX_REVIEWED_PACKAGE_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@\d[\w.+-]*)?|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+(?:@\d[\w.+-]*)?|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const SANDBOX_REVIEWED_PACKAGE_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)@\d[\w.+-]*|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const SANDBOX_PACKAGE_REQUIRE_PATTERN = /\b(?:pm\.)?require\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
 const SANDBOX_SCRIPT_SOURCE_FIELDS = [
   'preRequest',
@@ -657,7 +666,7 @@ function sandboxPackageStatusRows() {
       ...reference,
       cached: Boolean(cached),
       status: !reference.pinned
-        ? 'Use @team/package, npm:package[@version], or jsr:@scope/package[@version]'
+        ? 'Use @team/package, npm:package@version, or jsr:@scope/package@version'
         : cached
           ? 'Reviewed'
           : 'Missing reviewed package'
@@ -719,11 +728,13 @@ function sandboxFileBindingStatusRows() {
   const bindings = new Map((workspace.settings.sandbox.fileBindings || []).map((binding) => [binding.source, binding]));
   return sandboxFileReferencesForWorkspace().map((reference) => {
     const binding = bindings.get(String(reference.source || ''));
+    const bindingDisplayName = binding?.displayName || binding?.fileName || binding?.source || '';
+    const bound = binding?.bound === true;
     return {
       ...reference,
       binding,
-      bound: Boolean(binding?.localPath),
-      status: binding?.localPath ? `Bound to ${displayLocalFilePath(binding.localPath)}` : 'Needs local file binding'
+      bound,
+      status: bound ? `Bound to ${bindingDisplayName || 'selected file'}` : 'Needs local file binding'
     };
   });
 }
@@ -1236,9 +1247,27 @@ function renderTlsSettingsControls() {
   }
   const caInput = $('caCertificatePathInput');
   if (caInput && document.activeElement !== caInput) {
-    caInput.value = requestSettings.caCertificatePath || '';
+    setCertificateFileInputValue('caCertificatePathInput', requestSettings.caCertificatePath || '');
+  }
+  if (typeof bindSelectedFileLabelTrigger === 'function') {
+    bindSelectedFileLabelTrigger('caCertificatePathInput', chooseWorkspaceCaCertificate);
   }
   renderClientCertificateList();
+}
+
+function setCertificateFileInputValue(inputOrId, value, options = {}) {
+  if (typeof setSelectedFileValue === 'function') {
+    setSelectedFileValue(inputOrId, value, options);
+    return;
+  }
+  const input = typeof inputOrId === 'string' ? $(inputOrId) : inputOrId;
+  if (!input) {
+    return;
+  }
+  input.value = String(value || '').trim();
+  if (typeof syncSelectedFileLabel === 'function') {
+    syncSelectedFileLabel(input);
+  }
 }
 
 function renderClientCertificateList() {
@@ -1303,17 +1332,20 @@ async function setTlsSettingsFromInputs() {
 
 async function chooseWorkspaceCaCertificate() {
   const selection = await chooseCertificateFile('Choose CA PEM file', '.pem,.crt,.cer');
-  if (!selection?.path) {
+  const binding = await storeMainOwnedLocalFile(selection, {
+    contentKind: 'certificate',
+    fileName: selection?.fileName || selection?.name || '',
+    purpose: 'certificate'
+  });
+  if (!binding?.source) {
     return;
   }
-  $('caCertificatePathInput').value = selection.path;
+  setCertificateFileInputValue('caCertificatePathInput', binding.source);
   await setTlsSettingsFromInputs();
 }
 
 async function clearWorkspaceCaCertificate() {
-  if ($('caCertificatePathInput')) {
-    $('caCertificatePathInput').value = '';
-  }
+  setCertificateFileInputValue('caCertificatePathInput', '');
   await setTlsSettingsFromInputs();
 }
 
@@ -1395,9 +1427,14 @@ function configureClientCertificateModal(existing = null, certificateId = '') {
   $('clientCertificateHostInput').value = existing?.host || existing?.matches?.[0] || '';
   $('clientCertificatePortInput').value = existing?.port || '';
   $('clientCertificateFormatSelect').value = existing?.pfxPath ? 'pfx' : 'pem';
-  $('clientCertificateCertPathInput').value = existing?.certPath || '';
-  $('clientCertificateKeyPathInput').value = existing?.keyPath || '';
-  $('clientCertificatePfxPathInput').value = existing?.pfxPath || '';
+  setCertificateFileInputValue('clientCertificateCertPathInput', existing?.certPath || '');
+  setCertificateFileInputValue('clientCertificateKeyPathInput', existing?.keyPath || '');
+  setCertificateFileInputValue('clientCertificatePfxPathInput', existing?.pfxPath || '');
+  if (typeof bindSelectedFileLabelTrigger === 'function') {
+    bindSelectedFileLabelTrigger('clientCertificateCertPathInput', () => chooseClientCertificatePath('cert'));
+    bindSelectedFileLabelTrigger('clientCertificateKeyPathInput', () => chooseClientCertificatePath('key'));
+    bindSelectedFileLabelTrigger('clientCertificatePfxPathInput', () => chooseClientCertificatePath('pfx'));
+  }
   $('clientCertificatePassphraseInput').value = '';
   $('clientCertificatePassphraseInput').placeholder = existing ? 'Leave blank to keep current passphrase' : 'Optional';
   setClientCertificatePassphraseVisible(false);
@@ -1412,15 +1449,15 @@ function resetClientCertificateModal() {
     'clientCertificateNameInput',
     'clientCertificateHostInput',
     'clientCertificatePortInput',
-    'clientCertificateCertPathInput',
-    'clientCertificateKeyPathInput',
-    'clientCertificatePfxPathInput',
     'clientCertificatePassphraseInput'
   ]) {
     if ($(id)) {
       $(id).value = '';
     }
   }
+  setCertificateFileInputValue('clientCertificateCertPathInput', '');
+  setCertificateFileInputValue('clientCertificateKeyPathInput', '');
+  setCertificateFileInputValue('clientCertificatePfxPathInput', '');
   setClientCertificatePassphraseVisible(false);
   renderClientCertificateModalError('');
 }
@@ -1458,14 +1495,31 @@ async function chooseClientCertificatePath(kind) {
     return;
   }
   const selection = await chooseCertificateFile(config.title, config.accept);
-  if (!selection?.path) {
+  const binding = await storeMainOwnedLocalFile(selection, {
+    contentKind: 'certificate',
+    fileName: selection?.fileName || selection?.name || '',
+    purpose: 'certificate'
+  });
+  if (!binding?.source) {
     return;
   }
   const input = $(config.inputId);
   if (input) {
-    input.value = selection.path;
-    input.focus?.();
+    setCertificateFileInputValue(input, binding.source);
   }
+  renderClientCertificateModalError('');
+}
+
+function clearClientCertificatePath(kind) {
+  const inputs = {
+    cert: 'clientCertificateCertPathInput',
+    key: 'clientCertificateKeyPathInput',
+    pfx: 'clientCertificatePfxPathInput'
+  };
+  if (!inputs[kind]) {
+    return;
+  }
+  setCertificateFileInputValue(inputs[kind], '');
   renderClientCertificateModalError('');
 }
 
@@ -1543,10 +1597,11 @@ function renderClientCertificateModalError(message) {
 async function chooseCertificateFile(title, accept) {
   return showLocalFilePicker({
     accept,
+    fileBinding: true,
     dropDetail: 'or choose a certificate file from this computer.',
     dropTitle: 'Drop certificate file here',
     kind: 'certificate',
-    message: 'Choose a local certificate file path.',
+    message: 'Drop a certificate file here or choose one from this computer.',
     title
   });
 }
@@ -2037,11 +2092,11 @@ function csvVariablesFileSelected() {
     return;
   }
   pendingCsvVariablesFile = file;
-  pendingCsvVariablesFilePath = localPathForFile(file);
+  pendingCsvVariablesFilePath = '';
   const choice = $('csvVariablesImportChoice');
   const message = $('csvVariablesImportChoiceMessage');
   if (message) {
-    const name = file.name || fileNameFromLocalPath(pendingCsvVariablesFilePath) || 'CSV file';
+    const name = file.name || 'CSV file';
     message.textContent = `Load "${name}" into the CSV values editor? Keep a file reference for large files.`;
   }
   if (choice) {
@@ -2080,18 +2135,29 @@ async function loadPendingCsvVariablesFile() {
   }
 }
 
-function keepPendingCsvVariablesFile() {
+async function keepPendingCsvVariablesFile() {
   const file = pendingCsvVariablesFile;
   if (!file) {
     return;
   }
-  if (!pendingCsvVariablesFilePath) {
-    renderCsvVariablesError('PostMeter could not read a local path for that CSV file. Load it into the editor instead.');
+  const contentBase64 = typeof fileToBase64 === 'function' ? await fileToBase64(file) : '';
+  const binding = await storeMainOwnedLocalFile({
+    contentBase64,
+    fileName: file.name || 'variables.csv',
+    name: file.name || 'variables.csv'
+  }, {
+    contentKind: 'csv',
+    contentType: 'text/csv',
+    fileName: file.name || 'variables.csv',
+    purpose: 'csv-variables'
+  });
+  if (!binding?.source) {
+    renderCsvVariablesError('PostMeter could not store that CSV file reference. Load it into the editor instead.');
     return;
   }
   const modal = $('csvVariablesModal');
-  modal.dataset.filePath = pendingCsvVariablesFilePath;
-  modal.dataset.sourceName = file.name || fileNameFromLocalPath(pendingCsvVariablesFilePath);
+  modal.dataset.filePath = binding.source;
+  modal.dataset.sourceName = binding.fileName || file.name || fileNameFromLocalPath(binding.source);
   modal.dataset.activeSource = 'file';
   pendingCsvVariablesFile = null;
   pendingCsvVariablesFilePath = '';
@@ -2192,7 +2258,7 @@ function updateCsvVariablesFileStatus(message = '') {
     return;
   }
   if (hasPendingFile) {
-    const name = pendingCsvVariablesFile.name || fileNameFromLocalPath(pendingCsvVariablesFilePath) || 'CSV file';
+    const name = pendingCsvVariablesFile.name || 'CSV file';
     status.textContent = `Pending import: ${name}`;
     return;
   }
@@ -2315,7 +2381,7 @@ async function addSandboxPackageFromPrompt(defaultSpecifier = '') {
     return;
   }
   if (!SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier)) {
-    setStatus('Package review requires @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].');
+    setStatus('Package review requires @team/package, npm:package@version, npm:@scope/package@version, or jsr:@scope/package@version.');
     return;
   }
   const source = String(await promptTextInput({
@@ -2364,7 +2430,7 @@ async function fetchSandboxPackageFromPrompt(defaultSpecifier = '') {
     return;
   }
   if (!SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier)) {
-    setStatus('Package fetch requires @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].');
+    setStatus('Package fetch requires @team/package, npm:package@version, npm:@scope/package@version, or jsr:@scope/package@version.');
     return;
   }
   const fetchOptions = {};
@@ -2499,26 +2565,29 @@ async function bindSandboxFileFromPrompt(defaultSource = '') {
     return;
   }
   const reference = sandboxFileReferencesForWorkspace().find((item) => item.source === source) || { source, mode: 'file' };
-  const localPath = String(await promptTextInput({
-    title: 'Bind local file path',
-    message: `Enter the local file path to use for "${source}". The file is only available to scripts through this reviewed binding.`,
-    label: 'Local file path',
-    defaultValue: ''
-  }) || '').trim();
-  if (!localPath) {
+  const chooseFileBinding = window.__postmeterChooseFileBinding || window.postmeter?.fileBindings?.choose;
+  if (!chooseFileBinding) {
+    setStatus('Imported file binding is unavailable in this runtime.');
+    return;
+  }
+  const result = await chooseFileBinding({
+      contentType: reference.contentType || '',
+      key: reference.key || '',
+      mode: reference.mode || 'file',
+      source
+  });
+  if (result?.cancelled) {
+    return;
+  }
+  const binding = result?.binding;
+  if (!binding?.source) {
+    setStatus('Imported file binding save failed: no binding was returned.');
     return;
   }
   const previousSettings = cloneWorkspaceSettings();
   const next = normalizeSandboxFileBindings([
     ...workspace.settings.sandbox.fileBindings.filter((item) => item.source !== source),
-    {
-      contentType: reference.contentType || '',
-      key: reference.key || '',
-      localPath,
-      mode: reference.mode || 'file',
-      reviewedAt: new Date().toISOString(),
-      source
-    }
+    binding
   ]);
   workspace.settings.sandbox.fileBindings = next;
   await saveWorkspaceSettingsWithRollback(

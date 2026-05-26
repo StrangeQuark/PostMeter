@@ -7,7 +7,8 @@ const {
   collectionImportFilters,
   selectedOpenFilePath,
   selectedSaveFilePath,
-  validateDialogFilePath
+  validateDialogFilePath,
+  validateRendererProvidedFilePath
 } = require('../../electron/app-shell/fileDialogs');
 const { registerWorkspaceIpc } = require('../../electron/ipc/workspaceIpc');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics-release/diagnostics');
@@ -30,6 +31,10 @@ test('file dialog helpers validate selected paths before IPC file operations', (
   assert.throws(() => selectedOpenFilePath({ canceled: false, filePaths: [42] }), /open dialog selected path must be a non-empty string/);
   assert.throws(() => selectedSaveFilePath({ canceled: false, filePath: 'bad\0path.json' }), /save dialog selected path must not contain null bytes/);
   assert.throws(() => validateDialogFilePath('', 'custom path'), /custom path must be a non-empty string/);
+  assert.throws(
+    () => validateRendererProvidedFilePath('/tmp/workspace.json', 'custom path', { POSTMETER_PACKAGED_PRODUCTION: '1' }),
+    /cannot be supplied by the renderer/
+  );
 });
 
 test('workspace IPC registers stable workspace, collection, and request channels', async () => {
@@ -128,6 +133,9 @@ test('workspace IPC registers stable workspace, collection, and request channels
     'collection:import',
     'environment:export',
     'environment:import',
+    'file-binding:choose',
+    'file-binding:storeContent',
+    'local-file:storeContent',
     'request:export',
     'request:exportText',
     'request:import',
@@ -163,16 +171,15 @@ test('workspace IPC registers stable workspace, collection, and request channels
   assert.deepEqual(await handlers.get('collection:import')(), { cancelled: true });
 });
 
-test('workspace IPC imports renderer-selected files without reopening native dialogs', async () => {
+test('workspace IPC imports native-dialog files without renderer path authority', async () => {
   const handlers = new Map();
   const importedPaths = [];
-  let openDialogCalls = 0;
+  const dialogPaths = ['/tmp/imported-workspace.json', '/tmp/imported-collection.json'];
   const workspace = { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } };
   registerWorkspaceIpc({
     dialog: {
       showOpenDialog: async () => {
-        openDialogCalls += 1;
-        return { canceled: true, filePaths: [] };
+        return { canceled: false, filePaths: [dialogPaths.shift()] };
       },
       showSaveDialog: async () => ({ canceled: true })
     },
@@ -209,10 +216,9 @@ test('workspace IPC imports renderer-selected files without reopening native dia
     setWorkspace: () => {}
   });
 
-  const workspaceResult = await handlers.get('workspace:import')({}, '/tmp/imported-workspace.json');
-  const collectionResult = await handlers.get('collection:import')({}, '/tmp/imported-collection.json');
+  const workspaceResult = await handlers.get('workspace:import')({});
+  const collectionResult = await handlers.get('collection:import')({});
 
-  assert.equal(openDialogCalls, 0);
   assert.deepEqual(importedPaths, [
     ['workspace', '/tmp/imported-workspace.json'],
     ['collection', '/tmp/imported-collection.json']
@@ -223,12 +229,207 @@ test('workspace IPC imports renderer-selected files without reopening native dia
   assert.equal(collectionResult.collection.id, 'collection-1');
   await assert.rejects(
     () => handlers.get('workspace:import')({}, 'bad\0path.json'),
-    /workspace import path must not contain null bytes/
+    /workspace import path cannot be supplied by the renderer/
   );
   await assert.rejects(
     () => handlers.get('collection:import')({}, 'bad\0path.json'),
-    /collection import path must not contain null bytes/
+    /collection import path cannot be supplied by the renderer/
   );
+});
+
+test('workspace IPC rejects renderer-supplied manual import paths without prompting', async () => {
+  const handlers = new Map();
+  const importedPaths = [];
+  const prompts = [];
+  const workspace = { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } };
+  registerWorkspaceIpc({
+    dialog: {
+      showMessageBox: async (_window, options) => {
+        prompts.push(options);
+        return { response: 1 };
+      },
+      showOpenDialog: async () => {
+        throw new Error('manual path import should not reopen the picker');
+      },
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    env: { POSTMETER_PACKAGED_PRODUCTION: '1' },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (currentWorkspace, extras = {}) => ({
+        workspace: currentWorkspace,
+        path: '/tmp/Local Workspace.json',
+        activeWorkspaceId: 'Local Workspace.json',
+        workspaces: [],
+        ...extras
+      }),
+      importCollection: async (filePath) => {
+        importedPaths.push(filePath);
+        return { id: 'collection-1', name: 'Collection', requests: [], folders: [] };
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    recordDiagnosticEvent: async () => {},
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await assert.rejects(
+    () => handlers.get('collection:import')({}, '/tmp/manual-collection.json'),
+    /collection import path cannot be supplied by the renderer/
+  );
+  assert.deepEqual(importedPaths, []);
+  assert.equal(prompts.length, 0);
+});
+
+test('workspace IPC imports renderer-provided file contents without trusting renderer paths', async () => {
+  const handlers = new Map();
+  const importedContents = [];
+  let openDialogCalls = 0;
+  const workspace = { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } };
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => {
+        openDialogCalls += 1;
+        return { canceled: true, filePaths: [] };
+      },
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceStore: () => ({
+      importWorkspace: async (filePath) => {
+        importedContents.push(['workspace', await fs.readFile(filePath, 'utf8')]);
+        return 'Imported From Text.json';
+      },
+      describeCurrent: async (currentWorkspace, extras = {}) => ({
+        workspace: currentWorkspace,
+        path: '/tmp/Local Workspace.json',
+        activeWorkspaceId: 'Local Workspace.json',
+        workspaces: [{ id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }],
+        ...extras
+      }),
+      importCollection: async (filePath) => {
+        importedContents.push(['collection', await fs.readFile(filePath, 'utf8')]);
+        return { id: 'collection-1', name: 'Collection From Text', requests: [], folders: [] };
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    recordDiagnosticEvent: async () => {},
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const workspaceText = '{"schemaVersion":11,"collections":[]}';
+  const collectionText = '{"info":{"name":"Collection"},"item":[]}';
+  const workspaceResult = await handlers.get('workspace:import')({}, { fileName: 'workspace.json', text: workspaceText });
+  const collectionResult = await handlers.get('collection:import')({}, { fileName: 'collection.json', text: collectionText });
+
+  assert.equal(openDialogCalls, 0);
+  assert.deepEqual(importedContents, [
+    ['workspace', workspaceText],
+    ['collection', collectionText]
+  ]);
+  assert.equal(workspaceResult.cancelled, false);
+  assert.equal(workspaceResult.createdWorkspaceId, 'Imported From Text.json');
+  assert.equal(collectionResult.cancelled, false);
+  assert.equal(collectionResult.collection.name, 'Collection From Text');
+});
+
+test('workspace IPC strips renderer-supplied file binding paths and preserves main-owned local paths', async () => {
+  const handlers = new Map();
+  let savedWorkspace = null;
+  const workspace = {
+    schemaVersion: 11,
+    collections: [],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: {
+      sandbox: {
+        fileBindings: [{
+          source: 'fixtures/upload.txt',
+          fileName: 'upload.txt',
+          localPath: '/safe/main-owned/upload.txt',
+          mode: 'file',
+          reviewedAt: '2026-05-25T00:00:00.000Z'
+        }]
+      }
+    },
+    localsettings: {
+      sandbox: {
+        fileBindings: [{
+          source: 'fixtures/upload.txt',
+          fileName: 'upload.txt',
+          localPath: '/safe/main-owned/upload.txt',
+          mode: 'file',
+          reviewedAt: '2026-05-25T00:00:00.000Z'
+        }],
+        trustedCapabilities: { vaultGrants: { workspace: false, collections: [], requests: [] } }
+      },
+      security: { importedUntrusted: true, allowPrivateNetworkRequests: false }
+    }
+  };
+  registerWorkspaceIpc({
+    dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (currentWorkspace) => ({
+        workspace: currentWorkspace,
+        path: '/tmp/Local Workspace.json',
+        activeWorkspaceId: 'Local Workspace.json',
+        workspaces: []
+      })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (nextWorkspace) => {
+      savedWorkspace = nextWorkspace;
+      return nextWorkspace;
+    },
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const result = await handlers.get('workspace:saveSettings')({}, {
+    sandbox: {
+      fileBindings: [{
+        source: 'fixtures/upload.txt',
+        localPath: '/etc/passwd',
+        fileName: 'upload.txt',
+        mode: 'file',
+        bound: true
+      }]
+    }
+  });
+
+  assert.equal(savedWorkspace.settings.sandbox.fileBindings[0].localPath, '/safe/main-owned/upload.txt');
+  assert.equal(result.settings.sandbox.fileBindings[0].localPath, undefined);
+  assert.equal(result.settings.sandbox.fileBindings[0].bound, true);
 });
 
 test('workspace IPC resets active workspace encryption keys and saves local settings first', async () => {
@@ -420,7 +621,10 @@ test('workspace IPC imports and exports standalone requests', async (t) => {
   assert.equal(pastedCurl.request.queryParams[0].key, 'ready');
   assert.equal(pastedCurl.request.headers[0].key, 'X-Test');
 
-  const fileImport = await handlers.get('request:import')({}, { filePath: requestImportPath });
+  const fileImport = await handlers.get('request:import')({}, {
+    fileName: path.basename(requestImportPath),
+    text: await fs.readFile(requestImportPath, 'utf8')
+  });
   assert.equal(fileImport.cancelled, false);
   assert.equal(fileImport.request.name, 'Imported Request');
   assert.notEqual(fileImport.request.id, 'request-1');
@@ -443,13 +647,14 @@ test('workspace IPC imports and exports standalone requests', async (t) => {
     { name: 'curl Request', extensions: ['sh'] },
     { name: 'All Files', extensions: ['*'] }
   ]);
-  const exported = await fs.readFile(exportResult.path, 'utf8');
+  assert.deepEqual(exportResult, { cancelled: false, path: 'Imported-Request.sh', displayPath: 'Imported-Request.sh' });
+  const exported = await fs.readFile(path.join(tempDir, saveDialogOptions.defaultPath), 'utf8');
   assert.match(exported, /^# Request: Imported Request/m);
   assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets\?trace=yes'/);
 
   await assert.rejects(
     () => handlers.get('request:import')({}, { filePath: 'bad\0path.json' }),
-    /request import path must not contain null bytes/
+    /request import path cannot be supplied by the renderer/
   );
   await assert.rejects(
     () => handlers.get('request:export')({}, fileImport.request, 'openapi'),
@@ -580,7 +785,25 @@ test('workspace IPC load falls back to the workspace store when no cached worksp
     environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
     history: [],
     cookies: [],
-    settings: { updates: { includePrereleases: false } }
+    settings: {
+      updates: { includePrereleases: false },
+      sandbox: {
+        fileBindings: [
+          { source: 'postmeter-local-file/certificate/test/settings-ca.pem', localPath: '/tmp/settings-ca.pem', fileName: 'settings-ca.pem' },
+          { source: 'postmeter-local-file/certificate/test/client.crt', localPath: '/tmp/client.crt', fileName: 'client.crt' },
+          { source: 'postmeter-local-file/certificate/test/client.key', localPath: '/tmp/client.key', fileName: 'client.key' }
+        ]
+      }
+    },
+    localsettings: {
+      sandbox: {
+        fileBindings: [
+          { source: 'postmeter-local-file/certificate/test/settings-ca.pem', localPath: '/tmp/settings-ca.pem', fileName: 'settings-ca.pem' },
+          { source: 'postmeter-local-file/certificate/test/client.crt', localPath: '/tmp/client.crt', fileName: 'client.crt' },
+          { source: 'postmeter-local-file/certificate/test/client.key', localPath: '/tmp/client.key', fileName: 'client.key' }
+        ]
+      }
+    }
   };
   let loadCalls = 0;
   let describeWorkspace = null;
@@ -630,7 +853,10 @@ test('workspace IPC load falls back to the workspace store when no cached worksp
   assert.equal(loadCalls, 1);
   assert.equal(describeWorkspace, loadedWorkspace);
   assert.equal(cachedWorkspace, loadedWorkspace);
-  assert.equal(result.workspace, loadedWorkspace);
+  assert.notEqual(result.workspace, loadedWorkspace);
+  assert.equal(result.workspace.settings.sandbox.fileBindings[0].source, 'postmeter-local-file/certificate/test/settings-ca.pem');
+  assert.equal(result.workspace.settings.sandbox.fileBindings[0].fileName, 'settings-ca.pem');
+  assert.equal(result.workspace.settings.sandbox.fileBindings[0].localPath, undefined);
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
@@ -812,7 +1038,7 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
 
   assert.equal(exportedWorkspaceId, 'Workspace.json');
   assert.deepEqual(exportedOptions, { encryptionKey: '' });
-  assert.deepEqual(result, { cancelled: false, path: '/tmp/export.json' });
+  assert.deepEqual(result, { cancelled: false, path: 'export.json', displayPath: 'export.json' });
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
@@ -857,7 +1083,7 @@ test('workspace IPC passes export-only keys for locked encrypted workspace expor
 
   assert.equal(exportedWorkspaceId, 'Locked Workspace.json');
   assert.deepEqual(exportedOptions, { encryptionKey: 'secret1' });
-  assert.deepEqual(result, { cancelled: false, path: '/tmp/export.json' });
+  assert.deepEqual(result, { cancelled: false, path: 'export.json', displayPath: 'export.json' });
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
@@ -917,7 +1143,7 @@ test('workspace IPC suggests collection filenames, filters, and formats for ever
     ]);
     assert.equal(exportedCollection, collection);
     assert.equal(exportedFormat, format);
-    assert.deepEqual(result, { cancelled: false, path: `/tmp/${defaultPath}` });
+    assert.deepEqual(result, { cancelled: false, path: defaultPath, displayPath: defaultPath });
   }
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
@@ -977,24 +1203,32 @@ test('workspace IPC imports and exports environments and runner definitions', as
     setWorkspace: () => {}
   });
 
-  const environmentImport = await handlers.get('environment:import')({}, environmentImportPath);
+  const environmentImport = await handlers.get('environment:import')({}, {
+    fileName: path.basename(environmentImportPath),
+    text: await fs.readFile(environmentImportPath, 'utf8')
+  });
   assert.equal(environmentImport.cancelled, false);
   assert.equal(environmentImport.environment.name, 'Postman Env');
   assert.deepEqual(environmentImport.environment.variables, [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }]);
 
   const environmentExport = await handlers.get('environment:export')({}, environmentImport.environment, 'postman');
   assert.equal(environmentExport.cancelled, false);
-  const exportedEnvironment = JSON.parse(await fs.readFile(environmentExport.path, 'utf8'));
+  assert.deepEqual(environmentExport, { cancelled: false, path: 'Postman-Env.postman_environment.json', displayPath: 'Postman-Env.postman_environment.json' });
+  const exportedEnvironment = JSON.parse(await fs.readFile(savedPaths[0], 'utf8'));
   assert.equal(exportedEnvironment._postman_variable_scope, 'environment');
   assert.equal(exportedEnvironment.values[0].key, 'baseUrl');
 
-  const runnerImport = await handlers.get('runner:importDefinition')({}, runnerImportPath);
+  const runnerImport = await handlers.get('runner:importDefinition')({}, {
+    fileName: path.basename(runnerImportPath),
+    text: await fs.readFile(runnerImportPath, 'utf8')
+  });
   assert.equal(runnerImport.cancelled, false);
   assert.equal(runnerImport.runner.name, 'Smoke Runner');
 
   const runnerExport = await handlers.get('runner:exportDefinition')({}, runnerImport.runner, 'postmeter');
   assert.equal(runnerExport.cancelled, false);
-  const exportedRunner = JSON.parse(await fs.readFile(runnerExport.path, 'utf8'));
+  assert.deepEqual(runnerExport, { cancelled: false, path: 'Smoke-Runner.postmeter-runner.json', displayPath: 'Smoke-Runner.postmeter-runner.json' });
+  const exportedRunner = JSON.parse(await fs.readFile(savedPaths[1], 'utf8'));
   assert.equal(exportedRunner.format, 'postmeter.runner.v1');
   assert.equal(exportedRunner.runner.name, 'Smoke Runner');
   assert.equal(savedPaths.length, 2);
@@ -1801,7 +2035,25 @@ test('workspace IPC saves only workspace settings through targeted settings save
     environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
     history: [],
     cookies: [],
-    settings: { updates: { includePrereleases: false } }
+    settings: {
+      updates: { includePrereleases: false },
+      sandbox: {
+        fileBindings: [
+          { source: 'postmeter-local-file/certificate/test/settings-ca.pem', localPath: '/tmp/settings-ca.pem', fileName: 'settings-ca.pem' },
+          { source: 'postmeter-local-file/certificate/test/client.crt', localPath: '/tmp/client.crt', fileName: 'client.crt' },
+          { source: 'postmeter-local-file/certificate/test/client.key', localPath: '/tmp/client.key', fileName: 'client.key' }
+        ]
+      }
+    },
+    localsettings: {
+      sandbox: {
+        fileBindings: [
+          { source: 'postmeter-local-file/certificate/test/settings-ca.pem', localPath: '/tmp/settings-ca.pem', fileName: 'settings-ca.pem' },
+          { source: 'postmeter-local-file/certificate/test/client.crt', localPath: '/tmp/client.crt', fileName: 'client.crt' },
+          { source: 'postmeter-local-file/certificate/test/client.key', localPath: '/tmp/client.key', fileName: 'client.key' }
+        ]
+      }
+    }
   };
   let savedSettings = null;
   let appliedWorkspace = null;
@@ -1858,14 +2110,14 @@ test('workspace IPC saves only workspace settings through targeted settings save
     shortcuts: { 'new-environment': 'CmdOrCtrl+8' },
     request: {
       sslCertificateVerification: false,
-      caCertificatePath: '/tmp/settings-ca.pem',
+      caCertificatePath: 'postmeter-local-file/certificate/test/settings-ca.pem',
       clientCertificates: [{
         id: 'settings-cert',
         name: 'Settings Cert',
         enabled: true,
         host: 'api.example.test',
-        certPath: '/tmp/client.crt',
-        keyPath: '/tmp/client.key'
+        certPath: 'postmeter-local-file/certificate/test/client.crt',
+        keyPath: 'postmeter-local-file/certificate/test/client.key'
       }]
     },
     updates: { includePrereleases: true }
@@ -1879,7 +2131,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
   assert.equal(savedSettings.editor.variableTooltipHints, false);
   assert.equal(savedSettings.shortcuts['new-environment'], 'CmdOrCtrl+8');
   assert.equal(savedSettings.request.sslCertificateVerification, false);
-  assert.equal(savedSettings.request.caCertificatePath, '/tmp/settings-ca.pem');
+  assert.equal(savedSettings.request.caCertificatePath, 'postmeter-local-file/certificate/test/settings-ca.pem');
   assert.equal(savedSettings.request.clientCertificates[0].id, 'settings-cert');
   assert.equal(savedSettings.updates.includePrereleases, true);
   assert.equal(appliedWorkspace.collections[0].id, 'collection-1');
@@ -1887,12 +2139,13 @@ test('workspace IPC saves only workspace settings through targeted settings save
   assert.deepEqual(appliedWorkspace.localsettings, savedLocalSettings);
   assert.equal(appliedWorkspace.localsettings.diagnostics.requestResponseLogging.urls, true);
   assert.equal(appliedWorkspace.localsettings.request.sslCertificateVerification, false);
-  assert.equal(appliedWorkspace.localsettings.request.caCertificatePath, '/tmp/settings-ca.pem');
+  assert.equal(appliedWorkspace.localsettings.request.caCertificatePath, 'postmeter-local-file/certificate/test/settings-ca.pem');
   assert.equal(saveCalls, 1);
   assert.equal(refreshCalls, 1);
-  assert.deepEqual(result, {
-    settings: appliedWorkspace.settings
-  });
+  assert.notEqual(result.settings, appliedWorkspace.settings);
+  assert.equal(appliedWorkspace.settings.sandbox.fileBindings[0].localPath, '/tmp/settings-ca.pem');
+  assert.equal(result.settings.sandbox.fileBindings[0].source, 'postmeter-local-file/certificate/test/settings-ca.pem');
+  assert.equal(result.settings.sandbox.fileBindings[0].localPath, undefined);
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
@@ -1931,6 +2184,13 @@ test('workspace IPC partial settings saves preserve diagnostics privacy choices'
       },
       editor: { lineNumbers: false, variableTooltipHints: false },
       updates: { includePrereleases: true }
+    },
+    localsettings: {
+      sandbox: {
+        trustedCapabilities: { sendRequest: false, cookies: false, vault: true },
+        fileBindings: [{ source: 'upload.bin', localPath: '/tmp/upload.bin' }],
+        packageCache: []
+      }
     }
   };
 
@@ -1979,7 +2239,9 @@ test('workspace IPC partial settings saves preserve diagnostics privacy choices'
   assert.equal(currentWorkspace.settings.editor.lineNumbers, false);
   assert.equal(currentWorkspace.settings.editor.variableTooltipHints, false);
   assert.equal(currentWorkspace.settings.updates.includePrereleases, true);
-  assert.deepEqual(result, { settings: currentWorkspace.settings });
+  assert.equal(currentWorkspace.settings.sandbox.fileBindings[0].localPath, '/tmp/upload.bin');
+  assert.equal(result.settings.sandbox.fileBindings[0].localPath, undefined);
+  assert.equal(result.settings.sandbox.fileBindings[0].bound, true);
 
   await handlers.get('workspace:saveEnvironment')(null, {
     environmentId: 'environment-1',
@@ -2048,7 +2310,7 @@ test('workspace IPC rejects malformed sandbox settings before persistence', asyn
   );
   await assert.rejects(
     () => handlers.get('workspace:saveSettings')(null, {
-      sandbox: { fileBindings: [{ source: 'fixtures/upload.txt' }] }
+      sandbox: { fileBindings: [{ source: 'fixtures/upload.txt', localPath: 42 }] }
     }),
     /settings.sandbox.fileBindings\[0\].localPath must be a string/
   );

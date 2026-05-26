@@ -155,6 +155,10 @@ const LEGACY_VARIABLE_ROW_MAP = Object.freeze({
 
 const EXCLUDED_TOKEN_PATTERNS = Object.freeze([
   {
+    pattern: /^pm\.datasets$/,
+    reason: 'Postman datasets are a newly documented data-source management surface outside the current imported script parity contract; PostMeter continues to cover run data through pm.iterationData.'
+  },
+  {
     pattern: /^require\(['"](?:\.{1,2}\/|\/|[A-Za-z]:\\)/,
     reason: 'Host-side Newman example code can require local files, but imported Postman sandbox scripts cannot require local filesystem paths.'
   },
@@ -619,7 +623,7 @@ function requireCoverage(token, rowById) {
     rowIds.push('require.pm.npm-package', 'require.pm.latest-package');
   } else if (/^jsr:/.test(specifier)) {
     rowIds.push('require.pm.jsr-package');
-    if (!/@\d/.test(specifier.replace(/^jsr:/, ''))) {
+    if (!packageSpecifierHasVersion(specifier.replace(/^jsr:/, ''))) {
       rowIds.push('require.pm.latest-package');
     }
     rowIds.push('require.pm.jsr-esm-module-semantics');
@@ -635,6 +639,12 @@ function requireCoverage(token, rowById) {
       ? 'Postman package import token maps to the reviewed package workflow rows.'
       : 'Built-in require token maps to the pinned Postman sandbox bundled library rows.'
   };
+}
+
+function packageSpecifierHasVersion(specifier) {
+  const value = String(specifier || '');
+  const versionSeparator = value.lastIndexOf('@');
+  return versionSeparator > 0 && versionSeparator < value.length - 1;
 }
 
 function fuzzyCoverage(token, matrix) {

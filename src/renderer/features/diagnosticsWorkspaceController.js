@@ -126,7 +126,7 @@ function renderSandboxFileBindingsPanel() {
       key: binding.key || '',
       mode: binding.mode || 'file',
       source: binding.source,
-      status: `Bound to ${displayLocalFilePath(binding.localPath)}`
+      status: `Bound to ${displayFileBindingNameForDiagnostics(binding)}`
     }));
   }
 }
@@ -159,7 +159,7 @@ function fileBindingRow(item) {
   const title = document.createElement('strong');
   title.textContent = binding.source || item.source;
   const detail = document.createElement('span');
-  detail.textContent = `${item.mode || binding.mode || 'file'} - ${binding.localPath || item.status || ''}`;
+  detail.textContent = `${item.mode || binding.mode || 'file'} - ${displayFileBindingNameForDiagnostics(binding) || item.status || ''}`;
   text.append(title, document.createElement('br'), detail);
   const remove = document.createElement('button');
   remove.type = 'button';
@@ -171,6 +171,14 @@ function fileBindingRow(item) {
   });
   row.append(text, remove);
   return row;
+}
+
+function displayFileBindingNameForDiagnostics(binding = {}) {
+  return binding.displayName
+    || binding.fileName
+    || displayLocalFilePath(binding.localPath)
+    || binding.source
+    || '';
 }
 
 function packageStatusRow(specifier, status) {

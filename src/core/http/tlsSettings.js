@@ -7,6 +7,9 @@ const {
   normalizeRequestSettings,
   requestTransportTlsOptions
 } = require('./requestSettings');
+const {
+  normalizeSandboxFileBindings
+} = require('./fileAttachmentBindings');
 
 const DEFAULT_HTTPS_PORT = '443';
 
@@ -120,6 +123,7 @@ async function resolveTlsSettingsSecrets(settings = {}, vault = null) {
 
 async function resolveHttpTlsPolicy(request = {}, environment, url, options = {}) {
   const tlsSettings = normalizeTlsSettings(options.tlsSettings || {});
+  const fileBindings = Array.isArray(options.fileBindings) ? options.fileBindings : null;
   const clientCertificates = [
     ...(options.clientCertificates || []),
     ...(tlsSettings.clientCertificates || [])
@@ -140,7 +144,7 @@ async function resolveHttpTlsPolicy(request = {}, environment, url, options = {}
   const caParts = [];
   const globalCaPath = resolveEnvironmentValue(tlsSettings.caCertificatePath, environment).trim();
   if (globalCaPath) {
-    caParts.push(await readCertificateFile(globalCaPath, 'CA certificate'));
+    caParts.push(await readCertificateFile(globalCaPath, 'CA certificate', fileBindings));
   }
   const requestAuth = normalizeAuth(request.auth);
   const explicitCertificateId = requestAuth.type === 'clientCertificate'
@@ -150,11 +154,11 @@ async function resolveHttpTlsPolicy(request = {}, environment, url, options = {}
     ? clientCertificates.find((certificate) => certificate?.enabled !== false && String(certificate?.id || '') === explicitCertificateId)
     : null;
   const explicitClientCertificate = requestAuth.type === 'clientCertificate'
-    ? await loadClientCertificateOptions(requestAuth, environment, url, clientCertificates)
+    ? await loadClientCertificateOptions(requestAuth, environment, url, clientCertificates, fileBindings)
     : null;
   const matchedClientCertificate = explicitClientCertificate
     ? null
-    : await loadMatchedClientCertificateOptions(url, environment, clientCertificates);
+    : await loadMatchedClientCertificateOptions(url, environment, clientCertificates, fileBindings);
   const clientCertificateOptions = explicitClientCertificate || matchedClientCertificate?.tlsOptions || null;
   const requestTransportOptions = requestTransportTlsOptions(requestTlsSettings);
   if (clientCertificateOptions?.ca) {
@@ -198,7 +202,7 @@ async function resolveHttpTlsPolicy(request = {}, environment, url, options = {}
   };
 }
 
-async function loadMatchedClientCertificateOptions(url, environment, clientCertificates = []) {
+async function loadMatchedClientCertificateOptions(url, environment, clientCertificates = [], fileBindings = null) {
   const certificate = findMatchingClientCertificate(clientCertificates, url);
   if (!certificate) {
     return null;
@@ -212,7 +216,7 @@ async function loadMatchedClientCertificateOptions(url, environment, clientCerti
       pfxPath: certificate.pfxPath || '',
       caPath: certificate.caPath || '',
       passphrase: certificate.passphrase || ''
-    }, environment, url, [])
+    }, environment, url, [], fileBindings)
   };
 }
 
@@ -226,7 +230,7 @@ function findMatchingClientCertificate(clientCertificates = [], url) {
   return null;
 }
 
-async function loadClientCertificateOptions(auth = {}, environment, url, clientCertificates = []) {
+async function loadClientCertificateOptions(auth = {}, environment, url, clientCertificates = [], fileBindings = null) {
   const normalized = normalizeAuth(auth);
   if (normalized.type !== 'clientCertificate') {
     return null;
@@ -247,15 +251,15 @@ async function loadClientCertificateOptions(auth = {}, environment, url, clientC
       pfxPath: certificate.pfxPath || '',
       caPath: certificate.caPath || '',
       passphrase: certificate.passphrase || ''
-    }, environment, url, []);
+    }, environment, url, [], fileBindings);
   }
 
   const passphrase = resolveEnvironmentValue(normalized.passphrase, environment);
   const caPath = resolveEnvironmentValue(normalized.caPath, environment).trim();
-  const ca = caPath ? await readCertificateFile(caPath, 'CA certificate') : undefined;
+  const ca = caPath ? await readCertificateFile(caPath, 'CA certificate', fileBindings) : undefined;
   const pfxPath = resolveEnvironmentValue(normalized.pfxPath, environment).trim();
   if (pfxPath) {
-    const extracted = await extractPfxToPem(pfxPath, passphrase, {
+    const extracted = await extractPfxToPem(resolveMainOwnedFilePath(pfxPath, fileBindings, 'PFX/P12 bundle'), passphrase, {
       bundleLabel: 'client certificate PFX/P12 bundle'
     });
     return {
@@ -268,8 +272,8 @@ async function loadClientCertificateOptions(auth = {}, environment, url, clientC
   const certPath = resolveEnvironmentValue(normalized.certPath, environment).trim();
   const keyPath = resolveEnvironmentValue(normalized.keyPath, environment).trim();
   return {
-    cert: await readCertificateFile(certPath, 'PEM certificate'),
-    key: await readCertificateFile(keyPath, 'PEM key'),
+    cert: await readCertificateFile(certPath, 'PEM certificate', fileBindings),
+    key: await readCertificateFile(keyPath, 'PEM key', fileBindings),
     ca,
     passphrase: passphrase || undefined
   };
@@ -359,8 +363,28 @@ function grpcRootCertificatesWithSystemRoots(caParts = []) {
   return parts.length ? Buffer.from(parts.join('\n'), 'utf8') : null;
 }
 
-async function readCertificateFile(filePath, label) {
-  return readRegularFileBounded(path.resolve(filePath), `client certificate ${label}`);
+async function readCertificateFile(filePath, label, fileBindings = null) {
+  return readRegularFileBounded(resolveMainOwnedFilePath(filePath, fileBindings, label), `client certificate ${label}`);
+}
+
+function resolveMainOwnedFilePath(value, fileBindings = null, label = 'file') {
+  const reference = String(value || '').trim();
+  if (!reference) {
+    return '';
+  }
+  if (Array.isArray(fileBindings)) {
+    const bindings = normalizeSandboxFileBindings(fileBindings);
+    const binding = bindings.find((candidate) => (
+      candidate.enabled !== false
+      && candidate.localPath
+      && (candidate.source === reference || candidate.id === reference)
+    ));
+    if (binding?.localPath) {
+      return path.resolve(binding.localPath);
+    }
+    throw new Error(`Client certificate ${label} requires a main-owned local file binding.`);
+  }
+  return path.resolve(reference);
 }
 
 module.exports = {

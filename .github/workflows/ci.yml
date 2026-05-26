@@ -10,17 +10,35 @@ on:
       - reopened
       - ready_for_review
 
+permissions:
+  contents: read
+
 jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # actions/checkout@v4
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # actions/dependency-review-action@v4.9.0
+        with:
+          fail-on-severity: high
+
   node:
     runs-on: ubuntu-latest
     env:
       POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -33,6 +51,18 @@ jobs:
 
       - name: Renderer HTML check
         run: npm run renderer:html:check
+
+      - name: Renderer security sink validation
+        run: npm run renderer:security:validate
+
+      - name: GitHub workflow security validation
+        run: npm run github:workflows:validate
+
+      - name: Secret scanning validation
+        run: npm run secrets:validate
+
+      - name: Release governance checklist validation
+        run: npm run release:governance:validate
 
       - name: Refactor structure validation
         run: npm run refactor:structure:validate
@@ -151,7 +181,7 @@ jobs:
 
       - name: Upload Linux validation logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-ci-linux-validation-logs
           path: validation-artifacts/**
@@ -198,10 +228,10 @@ jobs:
             ci_no_sandbox: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -214,6 +244,18 @@ jobs:
 
       - name: Renderer HTML check
         run: npm run renderer:html:check
+
+      - name: Renderer security sink validation
+        run: npm run renderer:security:validate
+
+      - name: GitHub workflow security validation
+        run: npm run github:workflows:validate
+
+      - name: Secret scanning validation
+        run: npm run secrets:validate
+
+      - name: Release governance checklist validation
+        run: npm run release:governance:validate
 
       - name: Refactor structure validation
         run: npm run refactor:structure:validate
@@ -265,7 +307,7 @@ jobs:
 
       - name: Upload native package artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-ci-${{ matrix.platform }}-artifacts
           path: |
@@ -281,7 +323,7 @@ jobs:
 
       - name: Upload native validation logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
         with:
           name: postmeter-ci-${{ matrix.platform }}-validation-logs
           path: validation-artifacts/**

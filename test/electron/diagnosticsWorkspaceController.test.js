@@ -42,7 +42,7 @@ test('diagnostics workspace controller renders sandbox package, file binding, an
   }];
   sandbox.sandboxPackageStatusRows = () => [
     { specifier: 'npm:missing@1.0.0', pinned: true, cached: false, status: 'Missing reviewed package' },
-    { specifier: 'unversioned', pinned: false, cached: false, status: 'Use @team/package, npm:package[@version], or jsr:@scope/package[@version]' }
+    { specifier: 'unversioned', pinned: false, cached: false, status: 'Use @team/package, npm:package@version, or jsr:@scope/package@version' }
   ];
   sandbox.sandboxFileBindingStatusRows = () => [
     { source: 'fixture.bin', mode: 'binary', key: '', bound: false, status: 'Needs local file binding' },
@@ -65,7 +65,7 @@ test('diagnostics workspace controller renders sandbox package, file binding, an
   );
   assert.deepEqual(rowTexts(elements.get('sandboxPackageMissingList')), [
     'npm:missing@1.0.0|Missing reviewed package|Review|Fetch',
-    'unversioned|Use @team/package, npm:package[@version], or jsr:@scope/package[@version]|Review|Fetch'
+    'unversioned|Use @team/package, npm:package@version, or jsr:@scope/package@version|Review|Fetch'
   ]);
   assert.equal(elements.get('sandboxPackageMissingList').children[1].children[1].children[1].disabled, true);
   assert.deepEqual(rowTexts(elements.get('sandboxPackageCacheList')), [
@@ -81,8 +81,8 @@ test('diagnostics workspace controller renders sandbox package, file binding, an
     'fixture.bin|binary - Needs local file binding|Bind'
   ]);
   assert.deepEqual(rowTexts(elements.get('sandboxFileBindingList')), [
-    'bound.csv|formdata - /tmp/bound.csv|Remove',
-    'orphan.txt|file - /tmp/orphan.txt|Remove'
+    'bound.csv|formdata - bound.csv|Remove',
+    'orphan.txt|file - orphan.txt|Remove'
   ]);
 
   sandbox.renderVaultMetadataPanel();
@@ -107,7 +107,7 @@ function loadDiagnosticsWorkspaceController(options = {}) {
   };
   const sandbox = {
     CodeEditor: { refreshEditor() {} },
-    SANDBOX_REVIEWED_PACKAGE_PATTERN: /^(?:npm:.+@\d|jsr:@.+|@.+\/.+)$/i,
+    SANDBOX_REVIEWED_PACKAGE_PATTERN: /^(?:npm:.+@\d|jsr:@.+@\d|@.+\/.+)$/i,
     activeWorkspaceId: 'workspace-1',
     activeWorkspaceItem: () => options.workspaceItem || { current: true },
     addSandboxPackageFromPrompt() {},
