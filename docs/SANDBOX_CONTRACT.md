@@ -10,18 +10,16 @@ Status: Postman-import compatibility contract and claim-gated implementation rec
 - Provide a Postman-compatible sandbox for single-request sends, collection runs, CLI collection runs, and every Postman script surface that can be represented in imported data, prioritizing direct execution of imported Postman scripts.
 - Treat the official Postman Sandbox API reference, related official Postman scripting/protocol/import documentation, official Postman Collection SDK references, and the latest Newman release targeted by the compatibility corpus as the minimum compatibility surface. Full import parity means the same observable request mutations, HTTP traffic, response parsing, variable/cookie/vault side effects, visualizer output, test names/order/results, console output shape, and script errors for the supported imported artifact.
 - The current audited parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces. Advancing either target requires updating the generated matrix target, docs coverage audit, differential evidence, and Desktop evidence artifacts.
-- Keep future scripted high-volume execution out of the production sandbox v1 contract unless a separate contract is written.
 - Make every privileged script capability available only through a brokered, validated message protocol.
 - Preserve deterministic completion, cancellation, side-effect, and error-reporting behavior across desktop and CLI execution.
-- Prefer Postman parity implemented through explicit brokers, validators, stores, and isolated renderers over compatibility gaps. When parity is not yet implemented, the unsupported behavior must be documented as a compatibility gap and tracked toward implementation.
+- Prefer Postman parity implemented through explicit brokers, validators, stores, and isolated renderers over compatibility gaps. Unsupported behavior must be documented as a compatibility gap and tracked with an explicit implementation status.
 
 ## Non-Goals
 
 - Do not loosen the worker's direct OS, Node, Electron, renderer, shell, or filesystem privileges to achieve compatibility.
-- Do not add a PostMeter account, cloud login, or account gate.
+- Do not add a PostMeter account, application login, or account gate.
 - Do not let scripts read arbitrary local files, process environment variables, workspace files, Electron APIs, renderer DOM APIs, or Node modules.
 - Do not let scripts spawn processes, open native dialogs, register protocol handlers, load native modules, or modify app settings directly.
-- Do not run request scripts in any future high-volume executor until that contract exists.
 - Do not claim complete Postman script import parity unless `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep are green for the generated default-import matrix and official-docs token inventory.
 
 ## Threat Model
@@ -50,7 +48,7 @@ Primary risks:
 - Secret leakage through logs, visualizer output, result exports, or error messages.
 - Denial of service through infinite loops, unbounded async scheduling, log flooding, large payloads, nested requests, or worker crashes.
 - Workspace corruption through ambiguous variable, cookie, or request mutation commits.
-- Races from overlapping request sends, collection runs, or future scripted high-volume execution.
+- Races from overlapping request sends, collection runs, or Performance runs.
 
 Security rule: a script is never trusted because it came from a local file. Imported and local scripts use the same sandbox boundary. Postman-compatible APIs may be enabled by default, but they must remain brokered and bounded; no setting may widen the worker's process privileges.
 
@@ -75,7 +73,7 @@ Compatibility controls:
 - Workspace settings may disable specific Postman-compatible brokered APIs such as script network requests or script cookie access for stricter environments.
 - Disabling a compatibility API must fail closed with a clear script error.
 - The settings UI must describe the concrete risk: scripts may read workspace variables/tokens/cookies visible to the sandbox and send data to arbitrary HTTP(S) endpoints allowed by the broker.
-- Future per-collection/request/script-digest trust can be added for stricter environments, but the default import path should remain Postman-compatible.
+- Compatibility controls must preserve the default Postman-compatible import path.
 
 No trust setting may grant direct filesystem, Node, Electron, renderer, shell, or process access.
 
@@ -91,9 +89,9 @@ The production runtime must provide these properties:
 - Host-created bridge objects, functions, arrays, errors, and async results exposed to scripts are hardened so scripts cannot reach the worker's host constructors through `constructor`, prototype, caught-error, or promise paths.
 - Any worker file-read allowlist is the minimum runtime bundle needed for script execution, not the whole repository or all of `src/core`.
 - Packaged Electron script workers require Node permission flags and fail closed when the pinned runtime cannot enforce them. CLI runs require the same on the supported Node 22+ baseline. The read allowlist is limited to the script worker, script runtime, dynamic-variable helper, variable-scope helper, reviewed-package cache/integrity helper, VM-only Postman built-in package loader, and generated pinned Postman sandbox bootcode bundle.
-- On Linux, script workers require a functional `bubblewrap` backend. Backend selection probes the installed launcher before use, and script execution fails closed if the backend is missing or cannot launch the expected worker shape. The backend clears the environment, unshares user, PID, IPC, network, UTS, cgroup, and mount namespaces, disables nested user namespaces, drops capabilities, exposes only private `/tmp` and `/run` writable filesystems, bind-mounts required runtime/app/library paths read-only, and installs a seccomp cBPF policy that denies high-risk kernel surfaces such as `bpf`, `ptrace`, keyring calls, module loading, mount APIs, `process_vm_*`, `perf_event_open`, `io_uring`, and nested namespace/mount syscalls including `unshare`, `setns`, and `clone3`. The maintainer has accepted this Linux namespace plus dangerous-syscall policy as sufficient for the current Linux public claim; a stricter deny-by-default allowlist is optional future hardening.
+- On Linux, script workers require a functional `bubblewrap` backend. Backend selection probes the installed launcher before use, and script execution fails closed if the backend is missing or cannot launch the expected worker shape. The backend clears the environment, unshares user, PID, IPC, network, UTS, cgroup, and mount namespaces, disables nested user namespaces, drops capabilities, exposes only private `/tmp` and `/run` writable filesystems, bind-mounts required runtime/app/library paths read-only, and installs a seccomp cBPF policy that denies high-risk kernel surfaces such as `bpf`, `ptrace`, keyring calls, module loading, mount APIs, `process_vm_*`, `perf_event_open`, `io_uring`, and nested namespace/mount syscalls including `unshare`, `setns`, and `clone3`. The maintainer has accepted this Linux namespace plus dangerous-syscall policy as sufficient for the current Linux public claim; a stricter deny-by-default allowlist is optional hardening, not a v1 release requirement.
 - Linux script workers do not receive host network namespace access. All HTTP(S) script traffic must continue to go through the parent-owned broker.
-- Windows script workers launch through the release-owned AppContainer helper built from `native/windows-sandbox-helper/PostMeterWindowsSandboxHelper.cpp`. The helper uses a stable AppContainer profile, no declared network capabilities, explicit runtime/app read grants, a private temp directory, a minimal child environment, inherited stdio handles only, and a kill-on-close single-process job object. macOS script workers launch through `sandbox-exec` with a deny-default seatbelt profile, denied network access, explicit process-exec/process-fork denial, no broad process allowance, read-only runtime/app/library access, and a private writable temp directory. Native helper binaries or native Node addons remain acceptable for future backend revisions when they are owned by the release process and covered by packaged validation.
+- Windows script workers launch through the release-owned AppContainer helper built from `native/windows-sandbox-helper/PostMeterWindowsSandboxHelper.cpp`. The helper uses a stable AppContainer profile, no declared network capabilities, explicit runtime/app read grants, a private temp directory, a minimal child environment, inherited stdio handles only, and a kill-on-close single-process job object. macOS script workers launch through `sandbox-exec` with a deny-default seatbelt profile, denied network access, explicit process-exec/process-fork denial, no broad process allowance, read-only runtime/app/library access, and a private writable temp directory. Native helper binaries or native Node addons remain acceptable for backend revisions when they are owned by the release process and covered by packaged validation.
 - Platform OS sandbox implementation is tracked separately from Postman API parity in `docs/os-sandbox-platform-matrix.json`, generated by `src/core/sandbox/osSandboxPlatformMatrix.js`. `npm run sandbox:platform:validate` proves the matrix is current; `npm run sandbox:platform:claim` must pass before claiming the tier-one OS sandbox backends and packaged-validation hooks are implemented. Stable production readiness still requires native-runner/manual validation evidence in `docs/production-readiness-matrix.json`.
 - If required isolation primitives are unavailable on a platform or packaged runtime, the app must disable production sandbox scripting or downgrade the compatibility claim. It must not silently run with weaker privileges.
 
@@ -182,7 +180,7 @@ Scope behavior:
 - `pm.globals` is a real workspace-level persisted scope. It must not alias collection variables.
 - Disabled variables are invisible to reads and replacements.
 - Missing variables return `undefined`; unresolved `{{name}}` placeholders remain unchanged.
-- CLI runs may report mutated environment, collection, local, and global scopes in the run result, but must not rewrite input files unless a future explicit CLI persistence flag is added.
+- CLI runs may report mutated environment, collection, local, and global scopes in the run result, but must not rewrite input files.
 
 Workspace schema implication: production `pm.globals` requires a new explicit workspace field such as `globals`, plus migrations, validation, IPC payload support, import/export behavior, and UI affordances.
 
@@ -229,7 +227,7 @@ Security restrictions:
 - No arbitrary filesystem reads for request bodies or TLS material; file/binary body references and certificate files must come from explicit imported/user-configured bindings handled by the parent request broker.
 - Client-certificate auth is brokered through configured certificate paths; scripts never receive file handles or file contents.
 - No persisted OAuth refresh side effects from brokered requests in sandbox v1.
-- No implicit inheritance of the active request's auth helper unless a future contract explicitly allows it.
+- No implicit inheritance of the active request's auth helper.
 - No access to Node `fetch`; all network access goes through the broker.
 - Current implementation status: `pm.sendRequest` normalizes URL strings, plain objects, SDK `Request` JSON, header object/array/list-like inputs, raw/urlencoded/form-data-text/GraphQL/inline file body forms, user-granted file/binary/form-data attachment bindings, common bearer/basic/API-key/OAuth2 auth helpers, brokered Digest challenge retry, Hawk, AWS Signature v4, OAuth 1.0 signing, NTLM challenge/response, Akamai EdgeGrid signing, JWT Bearer token generation, ASAP signing, configured client-certificate bindings, brokered HTTP(S) proxy options, manual redirect mode, timeout/cancellation signals, callback/promise completion, response final URL, and shared cookie-jar side effects. Script-provided certificate/key/PFX paths, TLS validation disable switches, and arbitrary unbound local file/binary bodies fail closed with explicit errors.
 
@@ -298,7 +296,7 @@ Security restrictions:
 
 - Workspace import/export does not include vault ciphertext or plaintext.
 - Scripts cannot enumerate vault secret values, access vault storage paths, or bypass the broker with Node filesystem/process APIs.
-- Newman/Postman CLI compatibility is not expected for `pm.vault`; this is treated as Postman desktop sandbox parity. Local binding is PostMeter's desktop import-time substitute for external vault provider integrations unless a future provider-specific contract is added.
+- Newman/Postman CLI compatibility is not expected for `pm.vault`; this is treated as Postman desktop sandbox parity. Local binding is PostMeter's desktop import-time substitute for external vault provider integrations.
 
 ## Package Loading Contract
 
@@ -312,7 +310,7 @@ Required behavior:
 - Requires every reviewed package-cache entry to include source and matching `sha256-...` integrity metadata before scripts can load it.
 - Imports and scans Postman script package references across HTTP, GraphQL, gRPC, and mock script surfaces into a workspace-visible review flow so missing or invalid team/external package references are visible before execution.
 - Provides a parent-side fetch-and-review workflow for exact public npm packages, exact public JSR packages, and team Package Library-style packages whose source is provided through a reviewed HTTPS source URL. The fetch workflow runs through Electron IPC in the parent process, enforces HTTPS, registry/source host policy, redirect limits, size limits, exact npm version metadata, exact JSR version metadata, npm tarball entrypoint selection, JSR checksum verification, and SHA-256 cache integrity before any package can be saved.
-- Direct first-party Postman account/provider integration for fetching team Package Library `@team/package` sources is deferred. The reviewed HTTPS source-URL flow remains the active compatibility path until a future provider-specific auth, consent, cache, and secret-storage contract is approved.
+- Team Package Library-style packages are supported through reviewed HTTPS source URLs.
 - Enforces package count, source byte size, dependency count, dependency depth, and export key limits. Duplicate package entries, missing reviewed dependencies, circular dependencies, and attempts to override bundled packages fail closed.
 - Allows cached packages to synchronously require only bundled packages/facades or dependencies declared in their reviewed package manifest.
 - Provides global `CryptoJS` and `_` aliases for legacy Postman scripts.
@@ -483,7 +481,7 @@ Verification required for the full claim:
 - Golden corpus for every API category above, including obscure methods and failure paths, not only happy-path examples.
 - Differential harness that runs the same fixtures in Postman Desktop where automatable, latest Newman where supported, and PostMeter, then compares observable output. The checked-in HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential fixtures run through `npm run postman:parity:diff`, with optional live Newman comparison through `npm run postman:parity:diff -- --newman --download-newman`. `npm run postman:newman-reports:refresh -- --download-newman` runs the approved live Newman differential and rewrites the checked-in evidence in one explicit network-using step; checked-in raw Newman, raw PostMeter, and normalized `newman@6.2.2` JSON evidence for those fixtures lives under `test/fixtures/postman/newman-reports/` and is validated offline by `npm run postman:newman-reports:validate`, which requires exact suite coverage, no unexpected checked-in JSON files, clean comparison metadata, required generation metadata on every normalized report, fresh normalized Newman and PostMeter output, passing PostMeter evidence, no Newman assertion failures, preserved response-shape/body-digest evidence and console output when present, and no concrete localhost ports, local filesystem paths, generated request IDs, generated Postman request tokens, generated multipart boundaries, time-derived request signatures, machine names, or machine-specific metadata in normalized evidence. The evidence write path accepts only clean source summaries targeting `newman@6.2.2`, Postman Runtime 7.39.1, and the exact approved suite list.
 - Protocol fixtures now include `test/fixtures/postman/protocol-script-hooks.collection.json` for GraphQL and gRPC hooks, plus `test/fixtures/postman/desktop-observations/websocket-script-support-audit.json` for the current WebSocket no-script source audit. Local mock coverage lives in `test/fixtures/postman/local-mock-scripts.collection.json`.
-- Real-world import corpus from public and user-provided collections covering auth, package imports, dynamic variables, runRequest workflows, cookies, visualizers, vault prompts, GraphQL, gRPC streaming, and local mocks. The first broad representative corpus is checked in at `test/fixtures/postman/real-world-import-corpus.collection.json`; a larger maintainer-provided sanitized corpus folder remains deferred until the maintainer supplies enough collections to make it representative.
+- Real-world import corpus from public and user-provided collections covering auth, package imports, dynamic variables, runRequest workflows, cookies, visualizers, vault prompts, GraphQL, gRPC streaming, and local mocks. The representative corpus is checked in at `test/fixtures/postman/real-world-import-corpus.collection.json`.
 - Fuzz/adversarial corpus for prototype escape, constructor escape, dynamic code generation, package loader abuse, broker payload mutation, oversized output, infinite async work, hostile visualizer HTML/scripts, mock state abuse, and protocol-stream floods. The first checked-in adversarial tranche is `test/electron/postmanSandboxAdversarial.test.js`.
 - Platform matrix for Linux, Windows, and macOS packaged apps, including OS sandbox validation, Node permission validation, and packaged asset/path behavior. The current matrix is committed at `docs/os-sandbox-platform-matrix.json` and is intentionally separate from `docs/postman-sandbox-parity-matrix.json`.
 
@@ -520,21 +518,6 @@ This matrix is the full Postman import parity target. Rows marked as desktop-onl
 | Local mock scripts | Support mock-editor-only `pm.mock`, `pm.state`, saved examples, path variables, exact request/response helper behavior, persistent state, and desktop-only availability. |
 | Raw host access | Keep direct filesystem, process, shell, Electron, renderer DOM, native modules, and raw networking unavailable. All privileged behavior remains brokered, validated, and bounded. |
 
-## Future High-Volume Execution Decision
-
-Sandbox v1 does not cover scripted high-volume execution.
-
-Rationale:
-
-- Per-sample script execution changes high-volume execution resource, timing, and result semantics.
-- Scripted high-volume execution needs separate budgets for worker processes, script workers, broker requests, cookie merging, variable mutation aggregation, and result sampling.
-- Silent partial support would make high-volume results misleading.
-
-Required product behavior before claiming Postman-compatible production sandbox readiness:
-
-- Documentation must state that high-volume scripted execution is out of scope until a dedicated contract exists.
-- A future scripted high-volume feature must get its own contract before implementation.
-
 ## Error Reporting
 
 Script results must report:
@@ -556,9 +539,9 @@ Contract compliance requires:
 - A generated official-docs parity matrix for every Postman sandbox page and every imported protocol surface, with an implementation status, security decision, and fixture link for each row.
 - `npm run postman:parity:validate` must pass, proving `docs/postman-sandbox-parity-matrix.json` is current with `src/core/diagnostics-release/postmanParityMatrix.js` and structurally complete enough to track every API/method/property/global/module/protocol row.
 - `npm run postman:docs:validate` must pass, proving `docs/postman-docs-coverage-audit.json` maps the committed official-docs token inventory to matrix rows or explicit exclusions. `npm run postman:docs:live` must pass when checking against current upstream Postman/Newman docs.
-- `npm run postman:parity:claim` must pass before any full 1:1 Postman script compatibility claim. It is intentionally separate from normal validation so future claim blockers remain visible if a regression or new uncovered row is introduced.
+- `npm run postman:parity:claim` must pass before any full 1:1 Postman script compatibility claim. It is intentionally separate from normal validation so new claim blockers remain visible if a regression or uncovered row is introduced.
 - `npm run postman:parity:diff` must pass for the local HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential fixtures; `npm run postman:parity:diff -- --newman --download-newman` is the optional live comparison against the targeted `newman@6.2.2` release when network access is available.
-- `npm run sandbox:platform:validate` must pass, proving `docs/os-sandbox-platform-matrix.json` is current with `src/core/sandbox/osSandboxPlatformMatrix.js` and structurally tracks Linux, Windows, macOS, Postman-parity separation, and future high-volume scripting separation.
+- `npm run sandbox:platform:validate` must pass, proving `docs/os-sandbox-platform-matrix.json` is current with `src/core/sandbox/osSandboxPlatformMatrix.js` and structurally tracks Linux, Windows, macOS, and Postman-parity separation.
 - `npm run sandbox:platform:claim` must pass before any claim that the tier-one OS sandbox backends and packaged-validation hooks are implemented. It is intentionally separate from `npm run postman:parity:claim` and now covers implemented Linux `bubblewrap`/seccomp, Windows AppContainer helper, macOS seatbelt, and packaged-validation rows. Linux is no longer blocked on a deny-by-default seccomp decision because the maintainer accepted the current `bubblewrap` plus dangerous-syscall seccomp policy for the current Linux implementation claim; stable production release still depends on native-runner/manual validation evidence tracked by production readiness.
 - Differential fixtures run against current Postman Desktop where automatable, latest targeted Newman where supported, and PostMeter. Differences must be classified as fixed, accepted extra support, or documented intentional security exception.
 - Compatibility fixtures for async ordering, promises, timers, intervals, microtasks, callback completion, failed async callbacks, skipped tests, `pm.test.index`, nested `pm.sendRequest`, `pm.execution.runRequest`, variable precedence, dynamic variables, globals, iteration data, cookie scope, request mutation, cancellation, and mixed assertion failures.
@@ -571,7 +554,7 @@ Contract compliance requires:
 - The checked-in Postman/Newman-style sandbox corpus lives under `test/fixtures/postman` and must continue to run through the normal Postman importer and collection runner.
 - Adversarial tests for constructor/prototype escape attempts, dynamic code generation, Node/global access, package-loader abuse, filesystem/process access, raw networking, log flooding, large payloads, recursive scheduling, malformed broker messages, duplicate final results, late messages, worker crashes, oversized results, hostile visualizer documents, mock-state abuse, and protocol-stream floods.
 - Desktop single-send, desktop collection-run, CLI, and packaged-runtime coverage.
-- Real-world import corpus coverage from public and user-provided Postman collections, including auth-heavy workflows, package-heavy workflows, runRequest workflows, dynamic variables, cookies, visualizers, vault prompts, GraphQL, gRPC, and local mocks. The larger maintainer-provided corpus is deferred until a sanitized fixture folder is available.
+- Real-world import corpus coverage from public and user-provided Postman collections, including auth-heavy workflows, package-heavy workflows, runRequest workflows, dynamic variables, cookies, visualizers, vault prompts, GraphQL, gRPC, and local mocks.
 - `npm run sandbox:validate` must pass against the pinned Electron runtime, including permission-model probes, Linux OS-sandbox filesystem/network-denial and seccomp-policy launch probes where applicable, and adversarial bridge-escape checks.
 - `npm run sandbox:validate:packaged` must pass against built desktop executables before release, including packaged path and ASAR behavior.
 - `npm run release:gate` must pass, proving the package scripts and CI/release workflows still include sandbox runtime validation, OS-sandbox platform-matrix validation, packaged validation, parity validation, aggregate `npm run check`, packaged Linux validation, and native Windows/macOS validation hooks.

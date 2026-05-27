@@ -4,7 +4,7 @@
   "deterministic": true,
   "target": {
     "claim": "Implemented tier-one OS sandbox backend coverage for script workers",
-    "separation": "This matrix is separate from Postman API parity and from future scripted high-volume execution support.",
+    "separation": "This matrix is separate from Postman API parity.",
     "postmanParityCommand": "npm run postman:parity:claim",
     "postmanDocsCommand": "npm run postman:docs:validate",
     "platformClaimCommand": "npm run sandbox:platform:claim"
@@ -12,12 +12,11 @@
   "claimSurfaces": {
     "platform-os-sandbox": "Implemented native OS sandbox backends and packaged validation wiring across tier-one desktop platforms. Stable production readiness still requires native-runner evidence in the production readiness matrix.",
     "postman-api-parity": "Postman script API behavior and imported-script observable output.",
-    "high-volume-scripting": "Future scripted high-volume execution contract; currently out of scope.",
     "release-gate": "Validation plumbing required to keep the matrix current."
   },
   "statuses": {
     "implemented": "Implemented and covered by automated validation or source-owned contract checks.",
-    "blocked-native-backend": "Reserved for future platform rows that lack a native OS sandbox backend or packaged validation.",
+    "blocked-native-backend": "Platform row lacks a native OS sandbox backend or packaged validation.",
     "out-of-scope": "Explicitly outside the current claim surface.",
     "validation-hook": "Validation plumbing exists and must stay release-gated."
   },
@@ -56,24 +55,6 @@
     }
   },
   "rows": [
-    {
-      "id": "high-volume.scripted-sandbox-contract",
-      "platform": "all",
-      "area": "claim-boundary",
-      "target": "Future scripted high-volume execution remains outside the Postman scripting parity claim unless a separate contract is written and implemented.",
-      "status": "out-of-scope",
-      "claimSurface": "high-volume-scripting",
-      "claimBlocking": false,
-      "securityDecision": "Do not imply partial scripted high-volume execution compatibility until the future feature has its own sandbox contract.",
-      "sourceRefs": [
-        "sandboxContract"
-      ],
-      "verificationRefs": [
-        "docs/SANDBOX_CONTRACT.md high-volume execution decision",
-        "docs/SANDBOX_CONTRACT.md future high-volume execution decision"
-      ],
-      "notes": ""
-    },
     {
       "id": "linux.namespace-bubblewrap",
       "platform": "linux",
@@ -145,7 +126,7 @@
       "status": "implemented",
       "claimSurface": "platform-os-sandbox",
       "claimBlocking": false,
-      "securityDecision": "Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; track a deny-by-default allowlist only as optional future hardening.",
+      "securityDecision": "Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; a deny-by-default allowlist remains optional hardening, not a v1 release requirement.",
       "sourceRefs": [
         "sandboxContract",
         "seccompPolicy"

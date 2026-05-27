@@ -52,6 +52,8 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /platform:\s*linux/);
   assert.match(workflow, /Prepare native helpers/);
   assert.match(workflow, /npm run native:windows-sandbox:build/);
+  assert.match(workflow, /Ensure Electron runtime/);
+  assert.match(workflow, /node scripts\/ensureElectronRuntime\.js --repair/);
   assert.match(workflow, /Source-tree sandbox runtime validation/);
   assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /npm run sandbox:platform:validate/);

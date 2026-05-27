@@ -4,6 +4,8 @@ const {
   normalizeWorkspaceLocalSettings
 } = require('./models');
 
+const RETIRED_EXECUTION_POLICY_FIELD = 'loadTestPolicy';
+
 function migrate(workspace) {
   if (!workspace || typeof workspace !== 'object') {
     throw new Error('Workspace data is required.');
@@ -76,7 +78,7 @@ function migrate(workspace) {
   }
   if (schemaVersion < 10) {
     workspace.settings ||= { updates: { includePrereleases: false } };
-    delete workspace.settings.loadTestPolicy;
+    delete workspace.settings[RETIRED_EXECUTION_POLICY_FIELD];
     workspace.schemaVersion = 10;
     migrated = true;
   }
@@ -111,7 +113,7 @@ function migrate(workspace) {
     workspace.schemaVersion = 15;
     migrated = true;
   }
-  removeWorkspaceLoadTestPolicyFields(workspace);
+  removeRetiredExecutionPolicyFields(workspace);
   return migrated;
 }
 
@@ -195,35 +197,35 @@ function ensureFolderRequestScripts(folders = []) {
   }
 }
 
-function removeWorkspaceLoadTestPolicyFields(workspace) {
+function removeRetiredExecutionPolicyFields(workspace) {
   if (workspace?.settings) {
-    delete workspace.settings.loadTestPolicy;
+    delete workspace.settings[RETIRED_EXECUTION_POLICY_FIELD];
   }
   for (const collection of workspace?.collections || []) {
-    removeCollectionLoadTestPolicyFields(collection);
+    removeCollectionRetiredExecutionPolicyFields(collection);
   }
   for (const runner of workspace?.runners || []) {
-    removeRequestLoadTestPolicyFields(runner.requests);
+    removeRequestRetiredExecutionPolicyFields(runner.requests);
   }
 }
 
-function removeCollectionLoadTestPolicyFields(collection) {
-  removeRequestLoadTestPolicyFields(collection.requests);
+function removeCollectionRetiredExecutionPolicyFields(collection) {
+  removeRequestRetiredExecutionPolicyFields(collection.requests);
   for (const folder of collection.folders || []) {
-    removeFolderLoadTestPolicyFields(folder);
+    removeFolderRetiredExecutionPolicyFields(folder);
   }
 }
 
-function removeFolderLoadTestPolicyFields(folder) {
-  removeRequestLoadTestPolicyFields(folder.requests);
+function removeFolderRetiredExecutionPolicyFields(folder) {
+  removeRequestRetiredExecutionPolicyFields(folder.requests);
   for (const child of folder.folders || []) {
-    removeFolderLoadTestPolicyFields(child);
+    removeFolderRetiredExecutionPolicyFields(child);
   }
 }
 
-function removeRequestLoadTestPolicyFields(requests = []) {
+function removeRequestRetiredExecutionPolicyFields(requests = []) {
   for (const request of requests || []) {
-    delete request.loadTestPolicy;
+    delete request[RETIRED_EXECUTION_POLICY_FIELD];
   }
 }
 

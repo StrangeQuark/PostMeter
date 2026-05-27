@@ -9,7 +9,6 @@ const MATRIX_BUILDERS = Object.freeze({
 const SUPPORT_MATRIX_STATUSES = new Set([
   'implemented',
   'documented-gap',
-  'deferred',
   'not-applicable'
 ]);
 
@@ -276,7 +275,7 @@ function buildDiagnosticsPrivacyMatrix() {
       evidenceRefs: ['src/core/workspace/appSettingsStore.js', 'src/core/diagnostics-release/diagnosticsSettings.js', 'src/core/contracts/ipcValidation.js', 'src/core/contracts/payloadSchemas.js', 'src/renderer/renderer.js'],
       tests: ['test/electron/appSettingsStore.test.js', 'test/electron/diagnostics.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/workspaceIpc.test.js']
     }),
-    row('privacy.performance-results', 'Performance results', 'Local Performance tests keep configurations, progress, capture-policy-controlled result samples, exports, diagnostics, and failure artifacts bounded; high-volume runs use one reusable local runtime result store with pre-run disk-space warnings, shutdown cleanup, and guardrails for optional response/body/script capture, and no Performance diagnostic path introduces telemetry, cloud upload, account-gated execution, distributed result collection, or retained run history.', 'implemented', {
+    row('privacy.performance-results', 'Performance results', 'Local Performance tests keep configurations, progress, capture-policy-controlled result samples, exports, diagnostics, and failure artifacts bounded; high-volume runs use one reusable local runtime result store with pre-run disk-space warnings, shutdown cleanup, and guardrails for optional response/body/script capture, and no Performance diagnostic path introduces telemetry, remote upload, account-gated execution, or retained run history.', 'implemented', {
       evidenceRefs: ['docs/TECH_SPECS.md', 'src/core/runtime/performanceRunner.js', 'src/core/workspace/resultCapturePolicy.js', 'src/core/runtime/runtimeResultStore.js', 'electron/ipc/runtimeIpc.js', 'electron/main.js'],
       tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceRunner.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/runtimeResultStore.test.js', 'test/electron/diagnostics.test.js', 'test/electron/diagnosticsIpc.test.js']
     }),
@@ -296,7 +295,7 @@ function buildDiagnosticsPrivacyMatrix() {
       evidenceRefs: ['src/core/diagnostics-release/diagnostics.js', 'electron/ipc/diagnosticsIpc.js', 'docs/TROUBLESHOOTING.md'],
       tests: ['test/electron/diagnostics.test.js', 'test/electron/diagnosticsIpc.test.js']
     }),
-    row('bundle.no-telemetry', 'No telemetry', 'Diagnostics export performs no automatic telemetry, cloud upload, PostMeter account flow, network/DNS/socket call, artifact directory crawl, screenshot inclusion, or GitHub Actions log ingestion.', 'implemented', {
+    row('bundle.no-telemetry', 'No telemetry', 'Diagnostics export performs no automatic telemetry, remote upload, PostMeter account flow, network/DNS/socket call, artifact directory crawl, screenshot inclusion, or GitHub Actions log ingestion.', 'implemented', {
       evidenceRefs: ['src/core/diagnostics-release/diagnostics.js', 'electron/ipc/diagnosticsIpc.js', 'README.md', 'docs/TECH_SPECS.md'],
       tests: ['test/electron/diagnostics.test.js', 'test/electron/diagnosticsIpc.test.js']
     }),
@@ -365,7 +364,7 @@ function buildElectronSecurityMatrix() {
       evidenceRefs: ['electron/app-shell/preload.js', 'docs/ARCHITECTURE.md'],
       tests: ['test/electron/ipcValidation.test.js']
     }),
-    row('preload.main-frame-only', 'Preload', 'The preload exposes window.postmeter only in the main app frame so sandboxed iframes and future subframe preload behavior cannot receive privileged APIs.', 'implemented', {
+    row('preload.main-frame-only', 'Preload', 'The preload exposes window.postmeter only in the main app frame so sandboxed iframes and subframes cannot receive privileged APIs.', 'implemented', {
       evidenceRefs: ['electron/app-shell/preload.js', 'electron/security/ipcSecurity.js'],
       tests: ['test/electron/appChrome.test.js', 'test/electron/mainWindowSmoke.test.js']
     }),
@@ -497,7 +496,7 @@ function buildNonPostmanCompatibilityMatrix() {
       evidenceRefs: ['src/core/workspace/workspaceStore.js', 'src/core/workspace/workspacePersistence.js'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/postmanImporter.test.js']
     }),
-    row('native-postmeter.performance-tests', 'Native PostMeter', 'Native workspace and Performance-test import/export preserve local workspace-owned performanceTests, including request copies, source metadata, environment mutation policy, execution config, safety limits, result metadata, and schema validation without merging request copies back into Collections or claiming JMeter/distributed load compatibility.', 'implemented', {
+    row('native-postmeter.performance-tests', 'Native PostMeter', 'Native workspace and Performance-test import/export preserve local workspace-owned performanceTests, including request copies, source metadata, environment mutation policy, execution config, safety limits, result metadata, and schema validation without merging request copies back into Collections.', 'implemented', {
       evidenceRefs: ['docs/COMPATIBILITY.md', 'docs/TECH_SPECS.md', 'src/core/import-export/performanceFormats.js', 'electron/ipc/runtimeIpc.js'],
       tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceFormats.test.js', 'test/electron/workspaceStore.test.js']
     }),
@@ -534,7 +533,7 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/app/requestTabState.js', 'src/renderer/app/sessionPersistence.js', 'src/renderer/app/rendererWorkflows.js', 'electron/ipc/runtimeIpc.js', 'electron/main.js', 'src/core/runtime/runtimeResultStore.js', 'src/core/workspace/resultCapturePolicy.js'],
       tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot', 'test/electron/requestTabState.test.js', 'test/electron/rendererSessionPersistence.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/runtimeResultStore.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/rendererWorkflows.test.js']
     }),
-    row('workflow.performance', 'Performance', 'The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, eight local modes with type-scoped input fields including one-click Full Endpoint Diagnosis with Quick/Medium/Extended scopes, capture settings, pre-run result-store size warnings, dirty performance tabs, save/discard semantics, type-specific safety-cap rejection, cancellation, target-rate cancellable local calibration with phase progress, bounded probe-and-verification stages, local latency-knee rejection, store-backed paged high-volume results up to one million requests, UAT-ready diagnostic CSV plus self-contained HTML result export, and local result panes without claiming distributed/cloud execution.', 'implemented', {
+    row('workflow.performance', 'Performance', 'The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, eight local modes with type-scoped input fields including one-click Full Endpoint Diagnosis with Quick/Medium/Extended scopes, capture settings, pre-run result-store size warnings, dirty performance tabs, save/discard semantics, type-specific safety-cap rejection, cancellation, target-rate cancellable local calibration with phase progress, bounded probe-and-verification stages, local latency-knee rejection, store-backed paged high-volume results up to one million requests, UAT-ready diagnostic CSV plus self-contained HTML result export, and local result panes.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/models/performanceTestModel.js', 'src/core/runtime/performanceCalibration.js', 'src/core/runtime/runtimeResultStore.js', 'src/core/workspace/resultCapturePolicy.js', 'electron/main.js', 'docs/ARCHITECTURE.md', 'docs/TECH_SPECS.md'],
       tests: ['test/electron/performanceCalibration.test.js', 'test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceRendererModel.test.js', 'test/electron/rendererBootstrap.test.js', 'test/electron/runtimeResultStore.test.js', 'test/electron/requestTabState.test.js', 'npm run test:ui:regression', 'npm run test:ui:snapshot']
     }),
@@ -558,7 +557,7 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/app/rendererWorkflows.js', 'src/core/http/fileAttachmentBindings.js', 'docs/SANDBOX_CONTRACT.md'],
       tests: ['npm run test:ui:regression', 'test/electron/postmanImporter.test.js', 'test/electron/scriptSandbox.test.js']
     }),
-    row('workflow.local-mocks', 'Local mocks', 'Imported local mock scripts are preserved and run through the bounded loopback mock runner; mock failure and state behavior remain documented as sandbox-owned rather than cloud-owned.', 'implemented', {
+    row('workflow.local-mocks', 'Local mocks', 'Imported local mock scripts are preserved and run through the bounded loopback mock runner; mock failure and state behavior remain documented as sandbox-owned.', 'implemented', {
       evidenceRefs: ['src/core/runtime/localMockServer.js', 'docs/COMPATIBILITY.md', 'docs/SANDBOX_CONTRACT.md'],
       tests: ['test/electron/postmanScriptImportCoverage.test.js', 'test/electron/postmanSandboxCorpus.test.js', 'test/electron/localMockServer.test.js']
     }),

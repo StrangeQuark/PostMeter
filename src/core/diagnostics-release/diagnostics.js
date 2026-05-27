@@ -1670,7 +1670,7 @@ async function exportDiagnosticBundle(options = {}) {
     generatedAt: safeIsoTimestamp(options.generatedAt || new Date().toISOString()),
     privacy: {
       automaticTelemetry: false,
-      cloudUpload: false,
+      remoteUpload: false,
       userControlledLocalExportOnly: true,
       requestResponseLogging: settings.requestResponseLogging
     },

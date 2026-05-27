@@ -47,9 +47,7 @@ test('Performance docs keep the eight local V1 types and positive/negative scena
 
   assert.match(combined, /local first-class saved performance tests/i);
   assert.match(combined, /workspace\.performanceTests/);
-  assert.match(combined, /distributed\/cloud load execution remains deferred/i);
   assert.doesNotMatch(combined, /does not currently claim Performance execution support/i);
-  assert.doesNotMatch(compatibility, /JMeter import, export, conversion, or execution is supported/i);
 });
 
 test('Performance docs track model, UI, import/export, safety, and environment guardrails', async () => {

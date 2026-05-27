@@ -1318,7 +1318,7 @@ test('diagnostic bundle export is local sanitized and does not use network APIs'
   assert.deepEqual(bundle.app, { version: '0.2.0', releaseChannel: 'beta', name: 'PostMeter' });
   assert.deepEqual(bundle.runtime, runtimeInfo);
   assert.equal(bundle.privacy.automaticTelemetry, false);
-  assert.equal(bundle.privacy.cloudUpload, false);
+  assert.equal(bundle.privacy.remoteUpload, false);
   assert.equal(bundle.privacy.userControlledLocalExportOnly, true);
   assert.equal(bundle.workspace.requestCount, 2);
   assert.equal(bundle.workspace.historyCount, 1);

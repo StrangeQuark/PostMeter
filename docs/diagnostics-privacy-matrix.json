@@ -7,7 +7,7 @@
     {
       "id": "bundle.no-telemetry",
       "area": "No telemetry",
-      "target": "Diagnostics export performs no automatic telemetry, cloud upload, PostMeter account flow, network/DNS/socket call, artifact directory crawl, screenshot inclusion, or GitHub Actions log ingestion.",
+      "target": "Diagnostics export performs no automatic telemetry, remote upload, PostMeter account flow, network/DNS/socket call, artifact directory crawl, screenshot inclusion, or GitHub Actions log ingestion.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/diagnostics-release/diagnostics.js",
@@ -141,7 +141,7 @@
     {
       "id": "privacy.performance-results",
       "area": "Performance results",
-      "target": "Local Performance tests keep configurations, progress, capture-policy-controlled result samples, exports, diagnostics, and failure artifacts bounded; high-volume runs use one reusable local runtime result store with pre-run disk-space warnings, shutdown cleanup, and guardrails for optional response/body/script capture, and no Performance diagnostic path introduces telemetry, cloud upload, account-gated execution, distributed result collection, or retained run history.",
+      "target": "Local Performance tests keep configurations, progress, capture-policy-controlled result samples, exports, diagnostics, and failure artifacts bounded; high-volume runs use one reusable local runtime result store with pre-run disk-space warnings, shutdown cleanup, and guardrails for optional response/body/script capture, and no Performance diagnostic path introduces telemetry, remote upload, account-gated execution, or retained run history.",
       "status": "implemented",
       "evidenceRefs": [
         "docs/TECH_SPECS.md",

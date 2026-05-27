@@ -173,6 +173,8 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm run pack:linux/,
   /platform:\s*linux/,
   /Prepare native helpers/,
+  /Ensure Electron runtime/,
+  /node scripts\/ensureElectronRuntime\.js --repair/,
   /Source-tree sandbox runtime validation/,
   /npm run dist:linux/,
   /npm run release:validate:packaged-smoke/,

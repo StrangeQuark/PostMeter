@@ -266,6 +266,9 @@ jobs:
       - name: Prepare native helpers
         run: ${{ matrix.prepare_native_helpers_command }}
 
+      - name: Ensure Electron runtime
+        run: node scripts/ensureElectronRuntime.js --repair
+
       - name: Source-tree sandbox runtime validation
         run: npm run sandbox:validate
 

@@ -60,8 +60,6 @@ The first mode, Full Endpoint Diagnosis, is a one-click local report for an endp
 
 Performance runs use the same reusable temp result database and expose Capture Settings for response bodies, script output, local variables, response headers, and transport timings. High-volume Performance execution keeps exact aggregate latency/status/error metrics with streaming counters instead of retaining every per-request result object in memory, uses an explicit keep-alive Node HTTP transport with bounded per-request timeouts, and coalesces rapid progress updates so million-request local runs do not flood Electron IPC. CSV export is generated only when requested by streaming from the temp result store, so normal runs do not leave historical result files behind. PostMeter deletes the current temp result database and SQLite sidecars on app shutdown, which means unexported Runner/Performance results are intentionally session-local.
 
-The legacy Load Test panel has been removed. Distributed/cloud load execution, JMeter import/export/execution, and hosted load agents are not part of the current production claim.
-
 ## Tutorials
 
 Use `Help > Tutorials` in the desktop app to open guided walkthroughs. The tutorial catalog covers requests, environments, runners, performance tests, workspaces, cookies, vault/packages/secrets, and SSL certificates. Runner and performance walkthroughs include their CSV variable and refreshing auth controls. Each tutorial highlights the relevant controls in the app and advances at your pace.

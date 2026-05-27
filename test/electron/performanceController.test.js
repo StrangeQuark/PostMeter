@@ -138,7 +138,7 @@ function loadPerformanceController() {
     EXECUTION_RESULT_PAGE_SIZE: 2,
     PERFORMANCE_GRAPH_PAGE_LIMIT: 100,
     PERFORMANCE_GRAPH_SAMPLE_LIMIT: 300,
-    activePerformanceTest: () => ({ id: 'perf-1', name: 'Load test' }),
+    activePerformanceTest: () => ({ id: 'perf-1', name: 'Performance test' }),
     cloneJson: (value) => JSON.parse(JSON.stringify(value)),
     currentResolvedThemeMode: () => 'light',
     document,
