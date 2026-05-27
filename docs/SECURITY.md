@@ -1,6 +1,6 @@
 # Security
 
-PostMeter is a standalone local desktop app. It does not require a PostMeter account, cloud login, or telemetry service for core use.
+PostMeter is a standalone local desktop app. It does not require a PostMeter account, application login, or telemetry service for core use.
 
 ## Trust Boundaries
 

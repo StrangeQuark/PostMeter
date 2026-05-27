@@ -9,6 +9,8 @@ const {
 } = require('../../src/core/import-export/performanceFormats');
 const { performanceTestModel } = require('../../src/core/workspace/models');
 
+const RETIRED_EXECUTION_POLICY_FIELD = 'loadTestPolicy';
+
 test('exports and imports native performance test documents with schema validation', () => {
   const performanceTest = performanceTestModel({
     id: 'perf-1',
@@ -48,11 +50,11 @@ test('rejects malformed and unsafe performance test imports', () => {
   );
   assert.throws(
     () => importPerformanceTestDocument({
-      name: 'Legacy Load Test',
+      name: 'Retired Performance Payload',
       type: 'latency',
-      request: { method: 'GET', url: 'https://example.test', loadTestPolicy: { requestsPerSecond: 1000 } }
+      request: { method: 'GET', url: 'https://example.test', [RETIRED_EXECUTION_POLICY_FIELD]: { requestsPerSecond: 1000 } }
     }),
-    /loadTestPolicy is no longer supported/
+    /request contains a retired execution policy field/
   );
 });
 

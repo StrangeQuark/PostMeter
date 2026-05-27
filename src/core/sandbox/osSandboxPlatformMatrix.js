@@ -1,11 +1,10 @@
 const PLATFORM_OS_SANDBOX_CLAIM = 'platform-os-sandbox';
 const POSTMAN_API_PARITY_CLAIM = 'postman-api-parity';
-const HIGH_VOLUME_SCRIPTING_CLAIM = 'high-volume-scripting';
 const RELEASE_GATE_CLAIM = 'release-gate';
 
 const STATUS_DESCRIPTIONS = Object.freeze({
   implemented: 'Implemented and covered by automated validation or source-owned contract checks.',
-  'blocked-native-backend': 'Reserved for future platform rows that lack a native OS sandbox backend or packaged validation.',
+  'blocked-native-backend': 'Platform row lacks a native OS sandbox backend or packaged validation.',
   'out-of-scope': 'Explicitly outside the current claim surface.',
   'validation-hook': 'Validation plumbing exists and must stay release-gated.'
 });
@@ -55,14 +54,12 @@ const REQUIRED_ROW_IDS = Object.freeze([
   'macos.seatbelt-backend',
   'macos.packaged-os-sandbox-validation',
   'postman-parity.separate-claim',
-  'high-volume.scripted-sandbox-contract',
   'release-gate.platform-matrix-validation'
 ]);
 
 const VALID_CLAIM_SURFACES = Object.freeze([
   PLATFORM_OS_SANDBOX_CLAIM,
   POSTMAN_API_PARITY_CLAIM,
-  HIGH_VOLUME_SCRIPTING_CLAIM,
   RELEASE_GATE_CLAIM
 ]);
 
@@ -91,7 +88,7 @@ function buildOsSandboxPlatformMatrix() {
     }),
     row('linux.seccomp-deny-default-allowlist-decision', 'linux', 'syscall-policy', 'Maintainer decision: platform-equivalent current Linux coverage does not require a maintained deny-by-default seccomp-BPF allowlist beyond the current bubblewrap namespace isolation plus dangerous-syscall deny policy.', 'implemented', {
       claimBlocking: false,
-      securityDecision: 'Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; track a deny-by-default allowlist only as optional future hardening.',
+      securityDecision: 'Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; a deny-by-default allowlist remains optional hardening, not a v1 release requirement.',
       sourceRefs: ['sandboxContract', 'seccompPolicy'],
       verificationRefs: [
         'npm run sandbox:validate',
@@ -165,16 +162,6 @@ function buildOsSandboxPlatformMatrix() {
         'docs/postman-docs-coverage-audit.json'
       ]
     }),
-    row('high-volume.scripted-sandbox-contract', 'all', 'claim-boundary', 'Future scripted high-volume execution remains outside the Postman scripting parity claim unless a separate contract is written and implemented.', 'out-of-scope', {
-      claimBlocking: false,
-      claimSurface: HIGH_VOLUME_SCRIPTING_CLAIM,
-      securityDecision: 'Do not imply partial scripted high-volume execution compatibility until the future feature has its own sandbox contract.',
-      sourceRefs: ['sandboxContract'],
-      verificationRefs: [
-        'docs/SANDBOX_CONTRACT.md high-volume execution decision',
-        'docs/SANDBOX_CONTRACT.md future high-volume execution decision'
-      ]
-    }),
     row('release-gate.platform-matrix-validation', 'all', 'release-gating', 'The OS-sandbox platform matrix is generated, committed, validated, and wired into check, CI, release workflow, and release-gate manifest validation.', 'validation-hook', {
       claimBlocking: false,
       claimSurface: RELEASE_GATE_CLAIM,
@@ -195,7 +182,7 @@ function buildOsSandboxPlatformMatrix() {
     deterministic: true,
     target: {
       claim: 'Implemented tier-one OS sandbox backend coverage for script workers',
-      separation: 'This matrix is separate from Postman API parity and from future scripted high-volume execution support.',
+      separation: 'This matrix is separate from Postman API parity.',
       postmanParityCommand: 'npm run postman:parity:claim',
       postmanDocsCommand: 'npm run postman:docs:validate',
       platformClaimCommand: 'npm run sandbox:platform:claim'
@@ -203,7 +190,6 @@ function buildOsSandboxPlatformMatrix() {
     claimSurfaces: {
       [PLATFORM_OS_SANDBOX_CLAIM]: 'Implemented native OS sandbox backends and packaged validation wiring across tier-one desktop platforms. Stable production readiness still requires native-runner evidence in the production readiness matrix.',
       [POSTMAN_API_PARITY_CLAIM]: 'Postman script API behavior and imported-script observable output.',
-      [HIGH_VOLUME_SCRIPTING_CLAIM]: 'Future scripted high-volume execution contract; currently out of scope.',
       [RELEASE_GATE_CLAIM]: 'Validation plumbing required to keep the matrix current.'
     },
     statuses: STATUS_DESCRIPTIONS,
@@ -396,7 +382,6 @@ function row(id, platform, area, target, status, options = {}) {
 }
 
 module.exports = {
-  HIGH_VOLUME_SCRIPTING_CLAIM,
   PLATFORM_OS_SANDBOX_CLAIM,
   POSTMAN_API_PARITY_CLAIM,
   RELEASE_GATE_CLAIM,

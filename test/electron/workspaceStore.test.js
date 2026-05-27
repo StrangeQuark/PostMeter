@@ -17,6 +17,8 @@ const {
   isEncryptedWorkspaceEnvelope
 } = require('../../src/core/workspace/workspaceEncryption');
 
+const RETIRED_EXECUTION_POLICY_FIELD = 'loadTestPolicy';
+
 test('creates a default current-schema workspace when no file exists', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const workspacePath = path.join(temp, 'workspace.json');
@@ -119,7 +121,7 @@ test('migrates schema 2 workspaces to the current schema and creates a backup', 
   assert.equal(workspace.settings.updates.includePrereleases, false);
   assert.equal(workspace.settings.appearance.theme, 'system');
   assert.deepEqual(workspace.localsettings.sandbox.fileBindings, []);
-  assert.equal(workspace.settings.loadTestPolicy, undefined);
+  assert.equal(workspace.settings[RETIRED_EXECUTION_POLICY_FIELD], undefined);
   assert.deepEqual(workspace.cookies, []);
   assert.deepEqual(workspace.runners, []);
   assert.deepEqual(workspace.collections[0].folders, []);
@@ -139,7 +141,7 @@ test('migrates schema 2 workspaces to the current schema and creates a backup', 
   assert.deepEqual(workspace.collections[0].requests[0].variables, []);
   assert.equal(workspace.collections[0].requests[0].docs, '');
   assert.deepEqual(workspace.collections[0].requests[0].cookieJar, { enabled: false, storeResponses: true });
-  assert.equal(workspace.collections[0].requests[0].loadTestPolicy, undefined);
+  assert.equal(workspace.collections[0].requests[0][RETIRED_EXECUTION_POLICY_FIELD], undefined);
   assert.equal(backups.length, 1);
   assert.equal(JSON.parse(await fs.readFile(path.join(temp, backups[0]), 'utf8')).schemaVersion, 2);
 });
@@ -251,8 +253,8 @@ test('creates collision-resistant backup files without overwriting existing back
   assert.equal((await fs.readdir(temp)).filter((entry) => entry.includes('manual.backup')).length, 2);
 });
 
-test('refuses future workspace schemas without quarantining or overwriting user data', async () => {
-  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-future-schema-'));
+test('refuses newer workspace schemas without quarantining or overwriting user data', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-newer-schema-'));
   const workspacePath = path.join(temp, 'workspace.json');
   await fs.writeFile(workspacePath, JSON.stringify({
     schemaVersion: CURRENT_SCHEMA_VERSION + 1,
@@ -548,7 +550,7 @@ test('preserves an intentionally empty collection list on save and reload', asyn
 
   const saved = await store.save({
     schemaVersion: 11,
-    settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true }, loadTestPolicy: { concurrency: 42 } },
+    settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true }, [RETIRED_EXECUTION_POLICY_FIELD]: { concurrency: 42 } },
     collections: [],
     environments: [],
     cookies: [],
@@ -557,14 +559,14 @@ test('preserves an intentionally empty collection list on save and reload', asyn
 
   assert.equal(saved.settings.updates.includePrereleases, true);
   assert.equal(saved.settings.appearance.theme, 'dark');
-  assert.equal(saved.settings.loadTestPolicy, undefined);
+  assert.equal(saved.settings[RETIRED_EXECUTION_POLICY_FIELD], undefined);
   assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(workspacePath, 'utf8')), 'settings'), false);
 
   const { workspace } = await store.load();
   assert.equal(workspace.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.equal(workspace.settings.updates.includePrereleases, false);
   assert.equal(workspace.settings.appearance.theme, 'system');
-  assert.equal(workspace.settings.loadTestPolicy, undefined);
+  assert.equal(workspace.settings[RETIRED_EXECUTION_POLICY_FIELD], undefined);
   assert.deepEqual(workspace.collections, []);
   assert.deepEqual(workspace.cookies, []);
 });

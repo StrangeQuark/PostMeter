@@ -48,17 +48,17 @@ test('maps representative docs tokens to explicit parity rows', () => {
 test('fails closed when an official-docs token is not mapped', () => {
   const audit = buildDocsCoverageAuditFromSources([
     {
-      content: '`pm.futureUndocumentedSurface.runEverything()`',
-      id: 'source:future',
+      content: '`pm.unmappedUndocumentedSurface.runEverything()`',
+      id: 'source:unmapped',
       kind: 'postman-learning-doc',
-      title: 'Future Surface',
-      url: 'https://learning.postman.com/docs/tests-and-scripts/write-scripts/future'
+      title: 'Unmapped Surface',
+      url: 'https://learning.postman.com/docs/tests-and-scripts/write-scripts/unmapped'
     }
   ]);
   const result = validateDocsCoverageAudit({
     ...audit,
     sources: Array.from({ length: 40 }, (_item, index) => ({
-      id: index === 0 ? 'source:future' : `source:padding-${index}`,
+      id: index === 0 ? 'source:unmapped' : `source:padding-${index}`,
       kind: 'postman-learning-doc',
       title: `Padding ${index}`,
       tokenCount: index === 0 ? 1 : 0,
@@ -70,12 +70,12 @@ test('fails closed when an official-docs token is not mapped', () => {
         coverage: { type: 'excluded', rowIds: [], reason: 'test padding token' },
         id: `padding-${index}`,
         kind: 'pm-api',
-        sourceRefs: ['source:future'],
+        sourceRefs: ['source:unmapped'],
         token: `padding.${index}`
       }))
     ]
   });
 
   assert.equal(result.ok, false);
-  assert.ok(result.errors.some((error) => error.includes('pm.futureUndocumentedSurface.runEverything')));
+  assert.ok(result.errors.some((error) => error.includes('pm.unmappedUndocumentedSurface.runEverything')));
 });

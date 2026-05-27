@@ -1974,7 +1974,7 @@ test('renderer bootstrap keeps active modals open when the backdrop is clicked b
   assert.equal(cancelCount, 0);
 });
 
-test('renderer bootstrap supports opt-in modal backdrop dismissal for future preferences', () => {
+test('renderer bootstrap supports opt-in modal backdrop dismissal for preference dialogs', () => {
   let cancelCount = 0;
   const elements = new Map([
     ['contextMenu', createElement()],

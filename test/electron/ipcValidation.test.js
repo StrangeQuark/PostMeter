@@ -39,6 +39,8 @@ const {
 } = require('../../src/core/contracts/ipcValidation');
 const { payloadSchemas } = require('../../src/core/contracts/payloadSchemas');
 
+const RETIRED_EXECUTION_POLICY_FIELD = 'loadTestPolicy';
+
 test('accepts structurally valid IPC payloads', () => {
   assert.doesNotThrow(() => assertRequestPayload({
     id: 'r1',
@@ -772,7 +774,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', cookieJar: { enabled: 'yes' } }), /request.cookieJar.enabled must be a boolean/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', autoHeaders: { sendPostMeterToken: 'yes' } }), /request.autoHeaders.sendPostMeterToken must be a boolean/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', settings: { caCertificatePath: '/tmp/request-ca.pem' } }), /request.settings.caCertificatePath is not allowed/);
-  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', loadTestPolicy: { hostPolicies: [{ host: 42 }] } }), /request.loadTestPolicy is no longer supported/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', [RETIRED_EXECUTION_POLICY_FIELD]: { hostPolicies: [{ host: 42 }] } }), /request contains a retired execution policy field/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', grantType: 'password' } }), /request.auth.grantType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'apiKey', location: 'body' } }), /request.auth.location must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', redirectStrategy: 'embeddedWebView' } }), /request.auth.redirectStrategy must be one of/);
@@ -803,7 +805,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { packageCache: [{ specifier: '@team/tools', source: 'x', integrity: 'sha256', files: Array.from({ length: 129 }, (_value, index) => ({ path: `${index}.js`, source: 'x' })) }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.packageCache\[0\].files cannot contain more than 128 items/);
   assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { packageCache: [{ specifier: '@team/tools', source: 'x'.repeat((128 * 1024) + 1), integrity: 'sha256' }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.packageCache\[0\].source cannot exceed/);
   assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { trustedCapabilities: { vaultGrants: { requests: ['r'.repeat(257)] } } } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.trustedCapabilities.vaultGrants.requests\[0\] cannot exceed/);
-  assert.throws(() => assertWorkspacePayload({ settings: { loadTestPolicy: { recordSamples: true } }, collections: [], environments: [], history: [] }), /workspace.settings.loadTestPolicy is no longer supported/);
+  assert.throws(() => assertWorkspacePayload({ settings: { [RETIRED_EXECUTION_POLICY_FIELD]: { recordSamples: true } }, collections: [], environments: [], history: [] }), /workspace.settings contains a retired execution policy field/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ secure: 'yes' }], history: [] }), /workspace.cookies\[0\].secure must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ sameSite: 'Loose' }], history: [] }), /workspace.cookies\[0\].sameSite must be one of/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ priority: 'Urgent' }], history: [] }), /workspace.cookies\[0\].priority must be one of/);

@@ -2,7 +2,7 @@
 
 ## Runtime And Packaging Dependency Inventory
 
-This inventory is intentionally limited to direct runtime dependencies plus the packaging dependencies that are distributed with, or materially responsible for producing, desktop release artifacts. It must stay aligned with `package-lock.json`.
+This inventory is intentionally limited to direct runtime dependencies plus the packaging dependencies that ship with, or materially help produce, desktop release artifacts. It must stay aligned with `package-lock.json`.
 
 | Package | License | V1 usage boundary |
 | --- | --- | --- |

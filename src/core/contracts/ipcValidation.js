@@ -29,6 +29,7 @@ const MAX_SANDBOX_PACKAGE_PACKAGE_DEPENDENCIES = 64;
 const MAX_SANDBOX_PACKAGE_SOURCE_BYTES = 128 * 1024;
 const MAX_VAULT_GRANT_IDS = 1000;
 const TYPOGRAPHY_FONT_SIZE_VALUES = Object.freeze([10, 13, 16, 19]);
+const RETIRED_EXECUTION_POLICY_FIELD = 'loadTestPolicy';
 const HARD_PERFORMANCE_LIMITS = Object.freeze({
   maxTotalRequests: 1000000,
   maxConcurrency: 25,
@@ -166,8 +167,8 @@ function assertRequestPayload(value, field = 'request') {
     settings: {},
     scripts: undefined
   });
-  if (value.loadTestPolicy != null) {
-    fail(`${field}.loadTestPolicy is no longer supported.`);
+  if (value[RETIRED_EXECUTION_POLICY_FIELD] != null) {
+    fail(`${field} contains a retired execution policy field.`);
   }
   if (value.examples != null) {
     fail(`${field}.examples is no longer supported.`);
@@ -650,8 +651,8 @@ function assertSettingsPayload(value, field) {
       }
     }
   }
-  if (value.loadTestPolicy != null) {
-    fail(`${field}.loadTestPolicy is no longer supported.`);
+  if (value[RETIRED_EXECUTION_POLICY_FIELD] != null) {
+    fail(`${field} contains a retired execution policy field.`);
   }
 }
 

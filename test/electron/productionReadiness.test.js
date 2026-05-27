@@ -47,8 +47,7 @@ test('production readiness matrix tracks release areas and stable-release blocke
     'postman.newman-json-reports',
     'updates.metadata',
     'vault.per-request-prompts',
-    'performance.local-v1',
-    'load.distributed'
+    'performance.local-v1'
   ]) {
     assert.ok(ids.has(requiredId), `Missing readiness row ${requiredId}`);
   }
@@ -67,6 +66,7 @@ test('production readiness matrix tracks release areas and stable-release blocke
   assert.ok(byId.get('diagnostics.privacy').commands.includes('npm run diagnostics:privacy:validate'));
   assert.equal(byId.get('oauth.live-certification').status, 'validated');
   assert.equal(byId.get('performance.local-v1').status, 'implemented');
+  assert.equal(byId.get('performance.local-v1').area, 'performance');
   assert.equal(byId.get('performance.local-v1').releaseBlocking, false);
   assert.ok(byId.get('performance.local-v1').commands.includes('npm run ux:accessibility:validate'));
   assert.deepEqual(matrix.releaseLevels, ['beta', 'rc', 'stable']);
@@ -144,7 +144,7 @@ test('production readiness matrix references real local evidence and required lo
 
   for (const row of matrix.rows) {
     for (const ref of row.evidenceRefs) {
-      if (/^(future|https?:|npm )/.test(ref)) {
+      if (/^(https?:|npm )/.test(ref)) {
         continue;
       }
       assert.ok(fs.existsSync(path.join(root, ref)), `Readiness row ${row.id} references missing evidence ${ref}`);
@@ -344,7 +344,7 @@ test('production support matrix validator rejects escaped evidence and missing t
         '../outside.test.js',
         'test/electron/missing-test.js',
         'src/renderer/renderer.js',
-        'future manual validation',
+        'manual validation placeholder',
         'https://example.test/validation'
       ]
     }]
@@ -356,7 +356,7 @@ test('production support matrix validator rejects escaped evidence and missing t
   assert.match(testErrors, /invalid test ref/);
   assert.match(testErrors, /test ref does not exist/);
   assert.match(testErrors, /not an executable test file/);
-  assert.match(testErrors, /future manual validation/);
+  assert.match(testErrors, /manual validation placeholder/);
   assert.match(testErrors, /https:\/\/example\.test\/validation/);
 });
 

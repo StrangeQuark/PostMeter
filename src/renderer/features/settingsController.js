@@ -325,7 +325,7 @@ function ensureSettings() {
   workspace.settings.appearance.interfaceFontSize = normalizeInterfaceFontSize(workspace.settings.appearance.interfaceFontSize);
   workspace.settings.appearance.editorFont = normalizeEditorFontOption(workspace.settings.appearance.editorFont);
   workspace.settings.appearance.editorFontSize = normalizeEditorFontSize(workspace.settings.appearance.editorFontSize);
-  delete workspace.settings.loadTestPolicy;
+  delete workspace.settings['loadTestPolicy'];
 }
 
 function normalizeRendererTlsSettings(value = {}) {

@@ -2,7 +2,7 @@
 
 Use this document for maintainer-run outbound OAuth certification. It is not end-user login documentation.
 
-PostMeter is a standalone local desktop app. OAuth is only for authenticating outbound API requests to target APIs. Do not add PostMeter accounts, PostMeter login, required cloud sign-in, or any account gate for core usage.
+PostMeter is a standalone local desktop app. OAuth is only for authenticating outbound API requests to target APIs. Do not add PostMeter accounts, PostMeter login, required application sign-in, or any account gate for core usage.
 
 ## Current Status
 

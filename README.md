@@ -48,19 +48,40 @@ The CLI uses the same import and runner logic as the desktop app. It exits with 
 
 ## Runners
 
-Runners let you save and replay a sequence of requests from the desktop app. They are useful for API workflows where one request sets up data for the next, such as authentication, setup, validation, and cleanup steps. Each runner row can repeat for a configured number of iterations without duplicating the same request in the queue.
+Runners save and replay request sequences from the desktop app.
 
-Runner results keep the same split execution/details view, but completed runs are now backed by one reusable local temp result database instead of a large in-memory result object. The Capture Settings panel lets you choose whether to retain response body previews, pre-request output, post-request output, script logs, and local variables. High-volume runs can plan up to 1,000,000 expanded requests; PostMeter estimates the temp SQLite file size before execution, warns when it would leave less than 1 GB of effective free space, blocks runs that exceed available space, keeps core metrics for every request, and automatically limits expensive captures such as all response bodies, logs, script outputs, and per-request variables when the run size would produce impractical artifacts. Those guardrails are reflected directly in the Capture Settings panel: forced-off checkboxes are shown unchecked, disabled, and explain the planned-request threshold on hover.
+- Build multi-step workflows for auth, setup, validation, and cleanup.
+- Repeat runner rows without duplicating requests in the queue.
+- Review completed runs in the split execution/details view.
+- Tune Capture Settings for response previews, script output, logs, and local variables.
+- Plan high-volume runs up to 1,000,000 expanded requests.
+- Keep core metrics for every request while limiting expensive captures when runs get large.
+- Store results in a reusable local temp database that is cleared when the app shuts down.
 
 ## Performance
 
-Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, pick the performance mode that matches the question you are asking, run a local-machine calibration to estimate maximum sustained local RPS and a conservative planning cap, run the test, and review status-code, error, latency, request-rate, and endpoint-diagnosis summaries.
+Performance tests are saved workspace items for checking endpoint behavior under local load.
 
-The first mode, Full Endpoint Diagnosis, is a one-click local report for an endpoint. It offers Quick, Medium, and Extended scopes that automatically choose the request budget and raise the duration cap for deeper UAT evidence, then runs bounded preflight, HEAD/OPTIONS probe, warmup, baseline, throughput, spike, mini-soak, and recovery stages, captures transport timing and passive endpoint signals, scores local-client confidence, and exports a formatted CSV that Product Owners can use for UAT review.
+- Create tests from scratch or import requests from Collections.
+- Choose an environment and mode for the test goal.
+- Calibrate local-machine capacity before planning larger runs.
+- Review status-code, error, latency, request-rate, and endpoint-diagnosis summaries.
+- Export CSV reports on demand from the temp result store.
 
-Performance runs use the same reusable temp result database and expose Capture Settings for response bodies, script output, local variables, response headers, and transport timings. High-volume Performance execution keeps exact aggregate latency/status/error metrics with streaming counters instead of retaining every per-request result object in memory, uses an explicit keep-alive Node HTTP transport with bounded per-request timeouts, and coalesces rapid progress updates so million-request local runs do not flood Electron IPC. CSV export is generated only when requested by streaming from the temp result store, so normal runs do not leave historical result files behind. PostMeter deletes the current temp result database and SQLite sidecars on app shutdown, which means unexported Runner/Performance results are intentionally session-local.
+Performance test types:
 
-The legacy Load Test panel has been removed. Distributed/cloud load execution, JMeter import/export/execution, and hosted load agents are not part of the current production claim.
+- Full endpoint diagnosis
+- Latency
+- Throughput
+- Concurrency
+- Stress
+- Spike
+- Soak
+- Ramp
+
+Full Endpoint Diagnosis is a one-click local report with Quick, Medium, and Extended scopes. It runs bounded probe, warmup, baseline, throughput, spike, mini-soak, and recovery stages, then exports a UAT-ready CSV report.
+
+Performance runs use Capture Settings for response bodies, script output, local variables, response headers, and transport timings. High-volume runs keep aggregate latency, status, and error metrics with streaming counters, and unexported Runner/Performance results are session-local.
 
 ## Tutorials
 

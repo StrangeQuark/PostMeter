@@ -46,7 +46,6 @@ test('blocks the full Postman compatibility claim while latest package imports a
   assert.equal(blockerIds.has('harness.broad-differential-corpus'), false);
   assert.equal(blockerIds.has('harness.completed-desktop-observations'), false);
   assert.equal(result.blockers.length, 1);
-  assert.equal(blockerIds.has('run-order.load-tests.skip'), false);
   assert.equal(result.summary.claim.ready, false);
 });
 

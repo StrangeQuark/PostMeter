@@ -138,7 +138,7 @@ requireFile('Production readiness source matrix', productionReadinessMatrixSourc
 ]);
 
 requireWorkflow('CI workflow', ciWorkflow, [
-  /node-version:\s*24/,
+  /node-version:\s*"?24\.15\.0"?/,
   /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
   /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
@@ -173,6 +173,8 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm run pack:linux/,
   /platform:\s*linux/,
   /Prepare native helpers/,
+  /Ensure Electron runtime/,
+  /node scripts\/ensureElectronRuntime\.js --repair/,
   /Source-tree sandbox runtime validation/,
   /npm run dist:linux/,
   /npm run release:validate:packaged-smoke/,
@@ -194,7 +196,7 @@ requireWorkflow('CI workflow', ciWorkflow, [
 ]);
 
 requireWorkflow('Release workflow', releaseWorkflow, [
-  /node-version:\s*24/,
+  /node-version:\s*"?24\.15\.0"?/,
   /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /platform:\s*linux/,
   /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
@@ -260,7 +262,7 @@ requireWorkflow('Release workflow', releaseWorkflow, [
 requireWorkflow('Manual native release validation workflow', releaseValidationWorkflow, [
   /workflow_dispatch:/,
   /contents:\s*read/,
-  /node-version:\s*24/,
+  /node-version:\s*"?24\.15\.0"?/,
   /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /platform:\s*linux/,
   /bash scripts\/ci\/install-linux-sandbox-backend\.sh/,
@@ -466,7 +468,7 @@ requireWorkflow('OAuth provider certification workflow', oauthProviderCertificat
   /run_live:/,
   /evidence_path:/,
   /contents:\s*read/,
-  /node-version:\s*24/,
+  /node-version:\s*"?24\.15\.0"?/,
   /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/,
   /npm run oauth:certify:validate/,
   /npm run oauth:certify:mock/,
@@ -490,7 +492,10 @@ for (const [label, workflow] of [
   ['OAuth provider certification workflow', oauthProviderCertificationWorkflow]
 ]) {
   if (/node-version:\s*22/.test(workflow)) {
-    errors.push(`${label} must use Node 24 for all GitHub Actions Node setup steps.`);
+    errors.push(`${label} must use Node 24.15.0 for all GitHub Actions Node setup steps.`);
+  }
+  if (/node-version:\s*24(?:\s|$)/.test(workflow)) {
+    errors.push(`${label} must pin GitHub Actions Node setup steps to Node 24.15.0, not floating Node 24.`);
   }
   if (!/FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/.test(workflow)) {
     errors.push(`${label} must force JavaScript GitHub Actions to run on Node 24.`);

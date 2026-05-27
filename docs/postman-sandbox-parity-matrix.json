@@ -6361,25 +6361,6 @@
       "notes": ""
     },
     {
-      "id": "run-order.load-tests.skip",
-      "area": "execution-order",
-      "claimScope": "out-of-scope",
-      "kind": "policy",
-      "target": "Load tests stay outside sandbox v1 scripting unless a separate contract is written.",
-      "status": "intentional-strict-gap",
-      "sourceRefs": [
-        "scriptRunOrder"
-      ],
-      "fixtureRefs": [],
-      "differential": {
-        "newman": "not-applicable",
-        "desktopObservation": "not-required",
-        "desktopEvidence": "not-required"
-      },
-      "securityDecision": "no-host-access",
-      "notes": ""
-    },
-    {
       "id": "runtime.resource-limit-parity",
       "area": "runtime",
       "claimScope": "default-import",

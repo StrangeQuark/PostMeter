@@ -460,12 +460,6 @@ function buildPostmanParityMatrix() {
       newman: 'supported',
       security: 'brokered'
     }),
-    row('run-order.load-tests.skip', 'execution-order', 'policy', 'Load tests stay outside sandbox v1 scripting unless a separate contract is written.', 'intentional-strict-gap', {
-      sources: ['scriptRunOrder'],
-      newman: 'not-applicable',
-      security: 'no-host-access',
-      claimScope: 'out-of-scope'
-    }),
     row('runtime.resource-limit-parity', 'runtime', 'limits', 'Postman/Newman script timeout, async-drain, output, package, visualizer, request, and payload limits are observed and PostMeter limits are matched or covered by the documented production resource policy.', 'implemented', {
       sources: ['sandboxOverview', 'scriptRunOrder'],
       fixtures: ['newman-sandbox-v1', 'differential-runtime-limits', 'desktop-runtime-limits-audit-v1', 'adversarial-sandbox-v1'],

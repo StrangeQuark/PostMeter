@@ -1713,7 +1713,7 @@
     {
       "id": "preload.main-frame-only",
       "area": "Preload",
-      "target": "The preload exposes window.postmeter only in the main app frame so sandboxed iframes and future subframe preload behavior cannot receive privileged APIs.",
+      "target": "The preload exposes window.postmeter only in the main app frame so sandboxed iframes and subframes cannot receive privileged APIs.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/app-shell/preload.js",

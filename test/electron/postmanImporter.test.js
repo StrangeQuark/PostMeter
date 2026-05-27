@@ -585,7 +585,7 @@ test('round-trips Postman request cookie source metadata without promoting disab
     domain: 'api.example.test',
     path: '/raw',
     expires: 'not-a-date',
-    sameSite: 'future-mode',
+    sameSite: 'unknown-mode',
     priority: 'urgent',
     unknownScalar: 'preserved',
     unknownObject: { nested: ['yes'] }

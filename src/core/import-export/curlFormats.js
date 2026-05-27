@@ -18,7 +18,7 @@ function importCurlCommand(text) {
   }
   const request = requestModel({ name: 'Imported curl Request', method: 'GET', url: '' });
   const dataParts = [];
-  const deferredQueryParts = [];
+  const pendingQueryParts = [];
   let sendDataAsQuery = false;
   let explicitMethod = false;
   for (let index = 1; index < tokens.length; index++) {
@@ -112,9 +112,9 @@ function importCurlCommand(text) {
     } else if (token.startsWith('--request-target=')) {
       request.variables.push(keyValue('curl.requestTarget', token.slice('--request-target='.length)));
     } else if (token === '--url-query') {
-      deferredQueryParts.push(tokens[++index] || '');
+      pendingQueryParts.push(tokens[++index] || '');
     } else if (token.startsWith('--url-query=')) {
-      deferredQueryParts.push(token.slice('--url-query='.length));
+      pendingQueryParts.push(token.slice('--url-query='.length));
     } else if (token === '--url') {
       request.url = tokens[++index] || '';
     } else if (token.startsWith('--url=')) {
@@ -127,7 +127,7 @@ function importCurlCommand(text) {
     throw new Error('curl command does not include a URL.');
   }
   if (sendDataAsQuery) {
-    deferredQueryParts.push(...dataParts);
+    pendingQueryParts.push(...dataParts);
     request.body = '';
     request.bodyType = BODY_TYPES.NONE;
     if (!explicitMethod) {
@@ -141,7 +141,7 @@ function importCurlCommand(text) {
       request.queryParams.push(keyValue(key, value));
     }
   }
-  for (const part of deferredQueryParts) {
+  for (const part of pendingQueryParts) {
     appendCurlQueryPart(request, part);
   }
   applyCurlTlsMetadata(request);

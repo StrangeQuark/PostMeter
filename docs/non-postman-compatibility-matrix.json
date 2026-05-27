@@ -37,7 +37,7 @@
     {
       "id": "native-postmeter.performance-tests",
       "area": "Native PostMeter",
-      "target": "Native workspace and Performance-test import/export preserve local workspace-owned performanceTests, including request copies, source metadata, environment mutation policy, execution config, safety limits, result metadata, and schema validation without merging request copies back into Collections or claiming JMeter/distributed load compatibility.",
+      "target": "Native workspace and Performance-test import/export preserve local workspace-owned performanceTests, including request copies, source metadata, environment mutation policy, execution config, safety limits, result metadata, and schema validation without merging request copies back into Collections.",
       "status": "implemented",
       "evidenceRefs": [
         "docs/COMPATIBILITY.md",

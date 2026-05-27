@@ -21,7 +21,7 @@ test('validates the committed OS sandbox platform matrix', async () => {
   assert.equal(result.summary.byClaimSurface[PLATFORM_OS_SANDBOX_CLAIM], 8);
 });
 
-test('keeps platform OS sandbox claim separate from Postman API parity and future high-volume scripting', async () => {
+test('keeps platform OS sandbox claim separate from Postman API parity', async () => {
   const result = await validateCommittedOsSandboxPlatformClaim();
   const blockerIds = new Set(result.blockers.map((row) => row.id));
 
@@ -33,7 +33,6 @@ test('keeps platform OS sandbox claim separate from Postman API parity and futur
   assert.equal(blockerIds.has('macos.packaged-os-sandbox-validation'), false);
   assert.equal(blockerIds.has('linux.seccomp-deny-default-allowlist-decision'), false);
   assert.equal(blockerIds.has('postman-parity.separate-claim'), false);
-  assert.equal(blockerIds.has('high-volume.scripted-sandbox-contract'), false);
   assert.equal(blockerIds.has('sendRequest.advanced-auth-proxy'), false);
   assert.equal(result.summary.claim.claimReady, true);
 });
