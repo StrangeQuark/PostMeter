@@ -12,7 +12,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
 
   assertWorkflowRunsOnlyOnMainPullRequests(workflowDocument, 'ci.yml');
   assertNoPlatformSpecificSkippedSteps(workflowDocument, 'ci.yml');
-  assertAllSetupNodeStepsUseNode24(workflowDocument, 'ci.yml');
+  assertAllSetupNodeStepsUsePinnedNode24(workflowDocument, 'ci.yml');
   assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'ci.yml');
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /bash scripts\/ci\/install-linux-sandbox-backend\.sh/);
@@ -82,7 +82,7 @@ test('release workflow builds artifacts for all tier-one desktop platforms', asy
   const workflowDocument = YAML.parse(workflow);
   assertValidationLogUploadsFailClosed(workflowDocument, 'release.yml');
   assertNoPlatformSpecificSkippedSteps(workflowDocument, 'release.yml');
-  assertAllSetupNodeStepsUseNode24(workflowDocument, 'release.yml');
+  assertAllSetupNodeStepsUsePinnedNode24(workflowDocument, 'release.yml');
   assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'release.yml');
 
   assert.match(workflow, /tags:\s*\n\s*-\s+"v\*"/);
@@ -173,7 +173,7 @@ test('native release validation workflow exercises release evidence without publ
   const workflowDocument = YAML.parse(workflow);
   const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   assertValidationLogUploadsFailClosed(workflowDocument, 'release-validation.yml');
-  assertAllSetupNodeStepsUseNode24(workflowDocument, 'release-validation.yml');
+  assertAllSetupNodeStepsUsePinnedNode24(workflowDocument, 'release-validation.yml');
   assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'release-validation.yml');
 
   assert.match(workflow, /workflow_dispatch:/);
@@ -442,13 +442,17 @@ function assertValidationLogUploadsFailClosed(workflow, workflowName) {
   }
 }
 
-function assertAllSetupNodeStepsUseNode24(workflow, workflowName) {
+function assertAllSetupNodeStepsUsePinnedNode24(workflow, workflowName) {
   const setupSteps = Object.values(workflow?.jobs || {})
     .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
     .filter((step) => String(step?.uses || '').startsWith('actions/setup-node@'));
   assert.ok(setupSteps.length > 0, `${workflowName} must set up Node explicitly`);
   for (const step of setupSteps) {
-    assert.equal(step.with?.['node-version'], 24, `${workflowName} ${step.name || 'Setup Node'} must use Node 24`);
+    assert.equal(
+      step.with?.['node-version'],
+      '24.15.0',
+      `${workflowName} ${step.name || 'Setup Node'} must use pinned Node 24.15.0`
+    );
   }
 }
 
@@ -465,7 +469,7 @@ test('manual OAuth provider certification workflow supports env signoff with opt
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'oauth-provider-certification.yml'), 'utf8');
   const workflowDocument = YAML.parse(workflow);
 
-  assertAllSetupNodeStepsUseNode24(workflowDocument, 'oauth-provider-certification.yml');
+  assertAllSetupNodeStepsUsePinnedNode24(workflowDocument, 'oauth-provider-certification.yml');
   assertWorkflowForcesJavascriptActionsToNode24(workflowDocument, 'oauth-provider-certification.yml');
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /provider:/);
