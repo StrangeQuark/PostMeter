@@ -76,6 +76,7 @@
   --sidebar-content-min-width: clamp(208px, calc(var(--ui-font-size) * 14.5), 268px);
   --sidebar-min-width: calc(var(--sidebar-rail-width) + var(--sidebar-content-min-width));
   --sidebar-width: 300px;
+  --split-pane-min-height: 48px;
   --request-height: 52%;
   --runner-editor-height: 52%;
   --performance-editor-height: max-content;

@@ -731,7 +731,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-rows: auto minmax(240px, var(--request-height)) 6px minmax(200px, 1fr);
+  grid-template-rows: auto minmax(var(--split-pane-min-height), var(--request-height)) 6px minmax(var(--split-pane-min-height), 1fr);
   gap: 6px;
   min-width: 0;
   padding: 10px;
@@ -1463,7 +1463,7 @@ h2 {
 
 .runner-main-panel {
   display: grid;
-  grid-template-rows: minmax(220px, var(--runner-editor-height)) 6px minmax(180px, 1fr);
+  grid-template-rows: minmax(var(--split-pane-min-height), var(--runner-editor-height)) 6px minmax(var(--split-pane-min-height), 1fr);
   gap: 6px;
   padding: 0;
   border: 0;
@@ -1551,7 +1551,7 @@ h2 {
 
 .performance-main-panel {
   display: grid;
-  grid-template-rows: minmax(320px, var(--performance-request-height)) 6px minmax(180px, 1fr);
+  grid-template-rows: minmax(var(--split-pane-min-height), var(--performance-request-height)) 6px minmax(var(--split-pane-min-height), 1fr);
   gap: 6px;
   padding: 0;
   border: 0;
