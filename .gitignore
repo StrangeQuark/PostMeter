@@ -36,6 +36,11 @@ npm-debug.log*
 build/
 !build/
 !build/icon.png
+!build/icon.ico
+!build/icons/
+!build/icons/*.png
+!build/linux-before-remove.tpl
+!build/linux-after-remove.tpl
 
 ### VS Code ###
 .vscode/
