@@ -54,7 +54,7 @@
               "    pm.expect(summary.timerFunctions).to.equal('function,function,function,function');",
               "    pm.expect(summary.consoleFunctions).to.equal('function,function,function');",
               "  });",
-              "}, 25);"
+              "}, 75);"
             ]
           }
         }
