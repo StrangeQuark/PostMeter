@@ -65,7 +65,12 @@ test('.gitignore keeps generated artifacts out while preserving release source i
     '/dist/',
     'build/',
     '!build/',
-    '!build/icon.png'
+    '!build/icon.png',
+    '!build/icon.ico',
+    '!build/icons/',
+    '!build/icons/*.png',
+    '!build/linux-before-remove.tpl',
+    '!build/linux-after-remove.tpl'
   ];
   const forbiddenSourcePatterns = [
     'src/',
@@ -90,8 +95,13 @@ test('.gitignore keeps generated artifacts out while preserving release source i
   }
   assert.ok(
     ignored.indexOf('build/') < ignored.indexOf('!build/')
-      && ignored.indexOf('!build/') < ignored.indexOf('!build/icon.png'),
-    '.gitignore should re-include build/icon.png after the generated build/ directory pattern'
+      && ignored.indexOf('!build/') < ignored.indexOf('!build/icon.png')
+      && ignored.indexOf('!build/icon.png') < ignored.indexOf('!build/icon.ico')
+      && ignored.indexOf('!build/icon.ico') < ignored.indexOf('!build/icons/')
+      && ignored.indexOf('!build/icons/') < ignored.indexOf('!build/icons/*.png')
+      && ignored.indexOf('!build/icons/*.png') < ignored.indexOf('!build/linux-before-remove.tpl')
+      && ignored.indexOf('!build/linux-before-remove.tpl') < ignored.indexOf('!build/linux-after-remove.tpl'),
+    '.gitignore should re-include release icon assets after the generated build/ directory pattern'
   );
 });
 

@@ -19,6 +19,8 @@ const CHECKSUM_FILE = process.env.POSTMETER_RELEASE_CHECKSUMS
   ? path.resolve(process.env.POSTMETER_RELEASE_CHECKSUMS)
   : path.join(RELEASE_DIR, 'SHA256SUMS');
 const DEFAULT_COMMAND_TIMEOUT_MILLIS = 30_000;
+const LINUX_APP_ICON_NAME = 'postmeter';
+const REQUIRED_LINUX_ICON_SIZES = Object.freeze([16, 24, 32, 48, 64, 128, 256, 512, 1024]);
 
 async function main() {
   const packageJson = await validatePackageMetadata(PACKAGE_JSON);
@@ -60,6 +62,22 @@ async function validatePackageMetadata(packageJsonPath) {
   }
   if (build.icon !== 'build/icon.png') {
     throw new Error('package.json build.icon must point to build/icon.png.');
+  }
+  if (build.linux?.icon !== 'build/icons') {
+    throw new Error('package.json build.linux.icon must point to build/icons.');
+  }
+  if (build.win?.icon !== 'build/icon.ico') {
+    throw new Error('package.json build.win.icon must point to build/icon.ico.');
+  }
+  if (build.nsis?.installerIcon !== 'build/icon.ico' || build.nsis?.uninstallerIcon !== 'build/icon.ico') {
+    throw new Error('package.json build.nsis installer and uninstaller icons must point to build/icon.ico.');
+  }
+  if (build.deb?.afterRemove !== 'build/linux-after-remove.tpl') {
+    throw new Error('package.json build.deb.afterRemove must point to build/linux-after-remove.tpl.');
+  }
+  const debFpmOptions = Array.isArray(build.deb?.fpm) ? build.deb.fpm : [];
+  if (!debFpmOptions.includes('--before-remove=build/linux-before-remove.tpl')) {
+    throw new Error('package.json build.deb.fpm must install build/linux-before-remove.tpl as the before-remove script.');
   }
   if (build.directories?.output !== 'release') {
     throw new Error('package.json build.directories.output must be release.');
@@ -419,6 +437,11 @@ async function validateLinuxDebProtocol(debPath) {
     if (!await desktopFilesRegisterProtocol(desktopFiles)) {
       throw new Error(`${path.basename(debPath)} does not register x-scheme-handler/postmeter.`);
     }
+    if (!await desktopFilesUseIcon(desktopFiles, LINUX_APP_ICON_NAME)) {
+      throw new Error(`${path.basename(debPath)} does not declare Icon=${LINUX_APP_ICON_NAME}.`);
+    }
+    await validateLinuxHicolorIcons(tempDir, path.basename(debPath));
+    await validateLinuxDebMaintainerScripts(debPath);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
@@ -497,6 +520,73 @@ async function desktopFilesRegisterProtocol(desktopFiles) {
     }
   }
   return false;
+}
+
+async function desktopFilesUseIcon(desktopFiles, iconName) {
+  for (const desktopFile of desktopFiles) {
+    const content = await fs.readFile(desktopFile, 'utf8');
+    const iconLine = content.split(/\r?\n/)
+      .find((line) => line.startsWith('Icon='));
+    if (String(iconLine || '').slice('Icon='.length).trim() === iconName) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function validateLinuxHicolorIcons(rootDir, artifactName) {
+  const missing = [];
+  for (const size of REQUIRED_LINUX_ICON_SIZES) {
+    const iconPath = path.join(
+      rootDir,
+      'usr',
+      'share',
+      'icons',
+      'hicolor',
+      `${size}x${size}`,
+      'apps',
+      `${LINUX_APP_ICON_NAME}.png`
+    );
+    if (!await fileExists(iconPath)) {
+      missing.push(`${size}x${size}`);
+      continue;
+    }
+    const icon = await fs.readFile(iconPath);
+    if (!pngHasDimensions(icon, size, size)) {
+      throw new Error(`${artifactName} contains an invalid ${size}x${size} Linux icon.`);
+    }
+  }
+  if (missing.length) {
+    throw new Error(`${artifactName} is missing Linux hicolor app icons: ${missing.join(', ')}.`);
+  }
+}
+
+function pngHasDimensions(buffer, width, height) {
+  return buffer.length >= 24
+    && buffer.readUInt32BE(0) === 0x89504e47
+    && buffer.toString('ascii', 1, 4) === 'PNG'
+    && buffer.readUInt32BE(16) === width
+    && buffer.readUInt32BE(20) === height;
+}
+
+async function validateLinuxDebMaintainerScripts(debPath) {
+  const controlDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-deb-control-'));
+  try {
+    await runCommand('dpkg-deb', ['-e', debPath, controlDir]);
+    const prerm = await fs.readFile(path.join(controlDir, 'prerm'), 'utf8');
+    const postrm = await fs.readFile(path.join(controlDir, 'postrm'), 'utf8');
+    if (!/update-alternatives --remove 'postmeter' '\/opt\/PostMeter\/postmeter'/.test(prerm)) {
+      throw new Error(`${path.basename(debPath)} prerm must remove the postmeter alternative before package files are deleted.`);
+    }
+    if (/update-alternatives --remove 'postmeter' '\/usr\/bin\/postmeter'/.test(`${prerm}\n${postrm}`)) {
+      throw new Error(`${path.basename(debPath)} must not remove update-alternatives using the /usr/bin/postmeter link path.`);
+    }
+    if (!/APPARMOR_PROFILE_DEST='\/etc\/apparmor\.d\/postmeter'/.test(postrm)) {
+      throw new Error(`${path.basename(debPath)} postrm must remove the PostMeter AppArmor profile.`);
+    }
+  } finally {
+    await fs.rm(controlDir, { recursive: true, force: true });
+  }
 }
 
 async function runCommand(command, args, options = {}) {

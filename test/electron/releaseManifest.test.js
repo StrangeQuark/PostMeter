@@ -154,10 +154,16 @@ test('validates release artifact manifest entries against files and package prot
       publish: [{ provider: 'github', owner: 'StrangeQuark', repo: 'PostMeter', releaseType: 'release' }],
       directories: { output: 'release' },
       linux: {
+        icon: 'build/icons',
         maintainer: 'StrangeQuark <support@qrksw.com>',
         target: ['AppImage', 'deb']
       },
-      win: { target: ['nsis'] },
+      deb: {
+        afterRemove: 'build/linux-after-remove.tpl',
+        fpm: ['--before-remove=build/linux-before-remove.tpl']
+      },
+      win: { icon: 'build/icon.ico', target: ['nsis'] },
+      nsis: { installerIcon: 'build/icon.ico', uninstallerIcon: 'build/icon.ico' },
       mac: { target: ['dmg', 'zip'] }
     }
   }));
