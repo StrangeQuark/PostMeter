@@ -1,3 +1,6 @@
+const COLLAPSED_PANE_MINIMUM_PIXELS = 48;
+const SPLITTER_TRACK_RESERVE_PIXELS = 18;
+
 function initResizablePanes() {
   restoreLayout();
   setupDragResize('mainPaneResize', {
@@ -18,9 +21,11 @@ function initResizablePanes() {
     max: () => {
       const workspaceElement = document.querySelector('.workspace');
       const rect = workspaceElement.getBoundingClientRect();
-      return Math.max(260, rect.height - 220);
+      const min = collapsiblePaneMinimumPixels('#requestEditorPanel', '.request-main-header');
+      const responseMinimum = collapsiblePaneMinimumPixels('.results', '.results > .tabs');
+      return Math.max(min, rect.height - responseMinimum - SPLITTER_TRACK_RESERVE_PIXELS);
     },
-    min: 240,
+    min: () => collapsiblePaneMinimumPixels('#requestEditorPanel', '.request-main-header'),
     valueFromEvent: (event) => {
       const workspaceElement = document.querySelector('.workspace');
       const rect = workspaceElement.getBoundingClientRect();
@@ -36,9 +41,11 @@ function initResizablePanes() {
     max: () => {
       const panel = document.getElementById('runnerMainPanel');
       const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
-      return Math.max(220, panelRect.height - 210);
+      const min = collapsiblePaneMinimumPixels('#runnerEditorSection', '.runner-main-header');
+      const resultsMinimum = collapsiblePaneMinimumPixels('#runnerResultsShell', '.runner-results-header');
+      return Math.max(min, panelRect.height - resultsMinimum - SPLITTER_TRACK_RESERVE_PIXELS);
     },
-    min: 220,
+    min: () => collapsiblePaneMinimumPixels('#runnerEditorSection', '.runner-main-header'),
     valueFromEvent: (event) => {
       const editor = document.getElementById('runnerEditorSection');
       const rect = editor?.getBoundingClientRect?.() || { top: 0 };
@@ -54,9 +61,11 @@ function initResizablePanes() {
     max: () => {
       const panel = document.getElementById('performanceMainPanel');
       const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
-      return Math.max(320, panelRect.height - 140);
+      const min = collapsiblePaneMinimumPixels('#performanceRequestSection', '.performance-main-header');
+      const resultsMinimum = collapsiblePaneMinimumPixels('#performanceResults', '.performance-results-header');
+      return Math.max(min, panelRect.height - resultsMinimum - SPLITTER_TRACK_RESERVE_PIXELS);
     },
-    min: 320,
+    min: () => collapsiblePaneMinimumPixels('#performanceRequestSection', '.performance-main-header'),
     valueFromEvent: (event) => {
       const section = document.getElementById('performanceRequestSection');
       const rect = section?.getBoundingClientRect?.() || { top: 0 };
@@ -181,6 +190,25 @@ function measuredElementPixels(selector, dimension) {
   }
   const rect = target.getBoundingClientRect();
   return dimension === 'height' ? rect.height : rect.width;
+}
+
+function collapsiblePaneMinimumPixels(panelSelector, headerSelector, fallbackPixels = COLLAPSED_PANE_MINIMUM_PIXELS) {
+  const panel = document.querySelector(panelSelector);
+  const header = panel?.querySelector?.(headerSelector) || document.querySelector(headerSelector);
+  const headerHeight = header?.getBoundingClientRect?.().height || 0;
+  if (!headerHeight) {
+    return fallbackPixels;
+  }
+  const panelStyle = panel ? getComputedStyle(panel) : null;
+  const verticalInsets = stylePixels(panelStyle, 'padding-top')
+    + stylePixels(panelStyle, 'border-top-width')
+    + stylePixels(panelStyle, 'border-bottom-width');
+  return Math.max(fallbackPixels, Math.ceil(headerHeight + verticalInsets));
+}
+
+function stylePixels(style, propertyName) {
+  const parsed = Number.parseFloat(style?.getPropertyValue?.(propertyName));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function restoreLayout() {

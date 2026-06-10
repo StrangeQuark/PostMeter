@@ -61,7 +61,38 @@ test('layout controls handle keyboard splitter movement and reset persisted valu
   assert.equal(handle.getAttribute('aria-valuenow'), '300');
 });
 
-function loadLayoutControls() {
+test('layout controls allow collapsed panes down to their measured header height', () => {
+  const header = new FakeElement('div', { height: 42 });
+  const panel = new FakeElement('section', {
+    computedStyle: {
+      'padding-top': '10px',
+      'padding-bottom': '10px',
+      'border-top-width': '1px',
+      'border-bottom-width': '1px'
+    }
+  });
+  panel.children.set('.performance-main-header', header);
+  const { document, handle, localStorage, sandbox } = loadLayoutControls({
+    querySelector: (selector) => selector === '#performanceRequestSection' ? panel : null
+  });
+  const config = {
+    cssVariable: '--performance-request-height',
+    fallbackPixels: 420,
+    label: 'Resize performance request builder and results panels',
+    max: () => 500,
+    min: () => sandbox.collapsiblePaneMinimumPixels('#performanceRequestSection', '.performance-main-header')
+  };
+
+  sandbox.configureSplitterAccessibility(handle, config, 0);
+  assert.equal(handle.getAttribute('aria-valuemin'), '54');
+  assert.equal(handle.getAttribute('aria-valuenow'), '54');
+
+  sandbox.applySplitterValue(handle, config, 1);
+  assert.equal(document.documentElement.style.values.get('--performance-request-height'), '54px');
+  assert.equal(localStorage.getItem('postmeter.layout.--performance-request-height'), '54px');
+});
+
+function loadLayoutControls(options = {}) {
   const handle = new FakeElement('div');
   const document = {
     body: { classList: { add() {}, remove() {} } },
@@ -74,13 +105,13 @@ function loadLayoutControls() {
       }
     },
     getElementById: (id) => id === 'mainPaneResize' ? handle : null,
-    querySelector: () => null
+    querySelector: options.querySelector || (() => null)
   };
   const localStorage = new FakeStorage();
   const sandbox = {
     document,
-    getComputedStyle: () => ({
-      getPropertyValue: (name) => document.documentElement.style.values.get(name) || ''
+    getComputedStyle: (element) => ({
+      getPropertyValue: (name) => element?.computedStyle?.[name] || document.documentElement.style.values.get(name) || ''
     }),
     localStorage
   };
@@ -119,8 +150,15 @@ class FakeStorage {
 }
 
 class FakeElement {
-  constructor(tagName = 'div') {
+  constructor(tagName = 'div', options = {}) {
     this.attributes = {};
+    this.children = new Map();
+    this.computedStyle = options.computedStyle || {};
+    this.rect = {
+      height: options.height || 0,
+      width: options.width || 0,
+      top: options.top || 0
+    };
     this.classList = {
       contains: () => false
     };
@@ -145,5 +183,13 @@ class FakeElement {
 
   getAttribute(name) {
     return this.attributes[name];
+  }
+
+  getBoundingClientRect() {
+    return this.rect;
+  }
+
+  querySelector(selector) {
+    return this.children.get(selector) || null;
   }
 }
