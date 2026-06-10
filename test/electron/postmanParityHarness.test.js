@@ -144,7 +144,7 @@ test('runs the HTTP-core Postman parity differential fixture through PostMeter',
   ]);
   assert.ok(broadSuite);
   assert.equal(broadSuite.postmeter.summary.collectionName, 'PostMeter Differential Sandbox Broad');
-  assert.equal(broadSuite.postmeter.summary.passed, true);
+  assertSuitePassed(broadSuite);
   assert.equal(broadSuite.postmeter.summary.totalRequests, 4);
   assert.deepEqual(broadSuite.postmeter.requests.map((item) => item.requestName), [
     'Broad Runtime Surface',
@@ -154,7 +154,7 @@ test('runs the HTTP-core Postman parity differential fixture through PostMeter',
   ]);
   assert.ok(dynamicSuite);
   assert.equal(dynamicSuite.postmeter.summary.collectionName, 'PostMeter Differential Dynamic Host Globals');
-  assert.equal(dynamicSuite.postmeter.summary.passed, true);
+  assertSuitePassed(dynamicSuite);
   assert.equal(dynamicSuite.postmeter.summary.totalRequests, 1);
   assert.deepEqual(dynamicSuite.postmeter.requests[0].tests.map((item) => item.name), [
     'dynamic code and host-like globals match Postman sandbox profile'
@@ -162,7 +162,7 @@ test('runs the HTTP-core Postman parity differential fixture through PostMeter',
   assert.equal(JSON.parse(dynamicSuite.postmeter.environment.find((item) => item.key === 'dynamicHostSummary').value).functionProcessType.value, 'undefined');
   assert.ok(runtimeLimitsSuite);
   assert.equal(runtimeLimitsSuite.postmeter.summary.collectionName, 'PostMeter Differential Runtime Limits');
-  assert.equal(runtimeLimitsSuite.postmeter.summary.passed, true);
+  assertSuitePassed(runtimeLimitsSuite);
   assert.equal(runtimeLimitsSuite.postmeter.summary.totalRequests, 1);
   assert.deepEqual(runtimeLimitsSuite.postmeter.requests[0].tests.map((item) => item.name), [
     'runtime timers, console, and visualizer work below policy limits'
@@ -170,7 +170,7 @@ test('runs the HTTP-core Postman parity differential fixture through PostMeter',
   assert.equal(JSON.parse(runtimeLimitsSuite.postmeter.environment.find((item) => item.key === 'runtimeLimitsSummary').value).intervalCleared, true);
   assert.ok(httpOnlyCookiesSuite);
   assert.equal(httpOnlyCookiesSuite.postmeter.summary.collectionName, 'PostMeter Differential HttpOnly Cookies');
-  assert.equal(httpOnlyCookiesSuite.postmeter.summary.passed, true);
+  assertSuitePassed(httpOnlyCookiesSuite);
   assert.equal(httpOnlyCookiesSuite.postmeter.summary.totalRequests, 4);
   assert.deepEqual(httpOnlyCookiesSuite.postmeter.requests.map((item) => item.requestName), [
     'Seed HttpOnly Cookies',
@@ -181,7 +181,7 @@ test('runs the HTTP-core Postman parity differential fixture through PostMeter',
   assert.equal(JSON.parse(httpOnlyCookiesSuite.postmeter.environment.find((item) => item.key === 'httpOnlyCookieSummary').value).clearRemovedAll, true);
   assert.ok(sendRequestAdvancedSuite);
   assert.equal(sendRequestAdvancedSuite.postmeter.summary.collectionName, 'PostMeter Differential SendRequest Advanced');
-  assert.equal(sendRequestAdvancedSuite.postmeter.summary.passed, true);
+  assertSuitePassed(sendRequestAdvancedSuite);
   assert.equal(sendRequestAdvancedSuite.postmeter.summary.totalRequests, 1);
   assert.deepEqual(sendRequestAdvancedSuite.postmeter.requests[0].tests.map((item) => item.name), [
     'pm.sendRequest advanced auth helpers match Newman'
@@ -193,7 +193,7 @@ test('runs the HTTP-core Postman parity differential fixture through PostMeter',
   });
   assert.ok(sendRequestFilesSuite);
   assert.equal(sendRequestFilesSuite.postmeter.summary.collectionName, 'PostMeter Differential File Bindings');
-  assert.equal(sendRequestFilesSuite.postmeter.summary.passed, true);
+  assertSuitePassed(sendRequestFilesSuite);
   assert.equal(sendRequestFilesSuite.postmeter.summary.totalRequests, 3);
   assert.deepEqual(sendRequestFilesSuite.postmeter.requests.map((item) => item.requestName), [
     'Binary Attachment Body',
@@ -212,3 +212,17 @@ test('runs the HTTP-core Postman parity differential fixture through PostMeter',
   assert.equal(result.comparison.skipped, true);
   assert.equal(result.newman.skipped, true);
 });
+
+function assertSuitePassed(suite) {
+  assert.equal(suite.postmeter.summary.passed, true, postmeterSuiteFailureMessage(suite));
+}
+
+function postmeterSuiteFailureMessage(suite) {
+  const failed = (suite.postmeter.requests || [])
+    .filter((request) => request.passed !== true || request.tests?.some((item) => item.passed !== true))
+    .map((request) => ({
+      requestName: request.requestName,
+      tests: (request.tests || []).filter((item) => item.passed !== true)
+    }));
+  return `Postman parity fixture ${suite.fixture} failed: ${JSON.stringify(failed)}`;
+}
