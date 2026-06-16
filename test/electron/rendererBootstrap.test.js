@@ -931,6 +931,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.toolbar-group\s*\{[^}]*background:\s*transparent;/s);
   assert.match(chromeSource, /\.toolbar-group button\s*\{[^}]*min-height:\s*34px;[^}]*background:\s*var\(--surface-muted\);/s);
   assert.match(chromeSource, /\.toolbar-group button\.primary\s*\{[^}]*background:\s*var\(--primary\);/s);
+  assert.match(chromeSource, /\.toolbar-menu button \+ button\s*\{[^}]*margin-left:\s*0;/s);
   assert.match(chromeSource, /\.toolbar-menu:has\(\.toolbar-submenu-row:hover\) \.toolbar-submenu-row:not\(:hover\) \.toolbar-submenu/);
   assert.match(chromeSource, /\.toolbar-submenu::before/);
   assert.match(chromeSource, /\.request-tab-item\s*\{[\s\S]*overflow:\s*hidden;/);
