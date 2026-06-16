@@ -40,7 +40,7 @@ jobs:
             packaged_auth_command: xvfb-run -a npm run release:validate:packaged-auth
             packaged_sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
             protocol_command: echo "No protocol registration validation required for linux."
-            required_artifact_types: appimage,deb
+            required_artifact_types: deb
             ci_no_sandbox: "1"
           - platform: windows
             runner: windows-latest
@@ -226,7 +226,6 @@ jobs:
         with:
           name: postmeter-${{ matrix.platform }}
           path: |
-            release/*.AppImage
             release/*.deb
             release/*.dmg
             release/*.zip
@@ -289,7 +288,7 @@ jobs:
       - name: Validate release metadata
         run: npm run release:validate
         env:
-          POSTMETER_RELEASE_REQUIRED_TYPES: appimage,deb,dmg,zip,exe
+          POSTMETER_RELEASE_REQUIRED_TYPES: deb,dmg,zip,exe
 
       - name: Publish release
         env:

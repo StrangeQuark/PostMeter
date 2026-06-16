@@ -66,7 +66,6 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
   assert.match(workflow, /Upload native package artifacts/);
-  assert.match(workflow, /release\/\*\.AppImage/);
   assert.match(workflow, /release\/\*\.deb/);
   assert.match(workflow, /release\/latest\*\.yml/);
   assert.match(workflow, /release\/\*\.blockmap/);
@@ -153,9 +152,8 @@ test('release workflow builds artifacts for all tier-one desktop platforms', asy
   assert.match(workflow, /if:\s*always\(\)/);
   assert.match(workflow, /npm run release:prepare/);
   assert.match(workflow, /npm run release:validate/);
-  assert.match(workflow, /POSTMETER_RELEASE_REQUIRED_TYPES:\s*appimage,deb,dmg,zip,exe/);
+  assert.match(workflow, /POSTMETER_RELEASE_REQUIRED_TYPES:\s*deb,dmg,zip,exe/);
   assert.match(workflow, /gh release create/);
-  assert.match(workflow, /release\/\*\.AppImage/);
   assert.match(workflow, /release\/\*\.deb/);
   assert.match(workflow, /release\/\*\.dmg/);
   assert.match(workflow, /release\/\*\.zip/);

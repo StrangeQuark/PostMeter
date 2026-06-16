@@ -217,7 +217,7 @@
     {
       "id": "packaging.linux",
       "area": "packaging",
-      "target": "Linux deb/AppImage metadata, protocol registration, artifact checksums, and packaged sandbox validation are covered.",
+      "target": "Linux deb metadata, protocol registration, artifact checksums, and packaged sandbox validation are covered.",
       "status": "validated",
       "releaseBlocking": true,
       "commands": [
