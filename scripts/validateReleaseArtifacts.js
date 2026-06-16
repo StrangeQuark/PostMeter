@@ -86,7 +86,7 @@ async function validatePackageMetadata(packageJsonPath) {
     throw new Error('package.json must declare the postmeter:// custom protocol.');
   }
   validatePublishMetadata(build.publish);
-  requireBuildTargets(build.linux?.target, ['AppImage', 'deb'], 'Linux');
+  requireBuildTargets(build.linux?.target, ['deb'], 'Linux');
   requireBuildTargets(build.win?.target, ['nsis'], 'Windows');
   requireBuildTargets(build.mac?.target, ['dmg', 'zip'], 'macOS');
   if (build.linux?.maintainer !== 'StrangeQuark <support@qrksw.com>') {

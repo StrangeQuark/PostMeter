@@ -14,7 +14,7 @@ on:
       required_artifact_types:
         description: "Comma-separated artifact types required by release validation."
         required: false
-        default: "appimage,deb,dmg,zip,exe"
+        default: "deb,dmg,zip,exe"
 
 permissions:
   contents: read
@@ -51,7 +51,7 @@ jobs:
             packaged_auth_command: xvfb-run -a npm run release:validate:packaged-auth
             packaged_sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
             protocol_command: echo "No protocol registration validation required for linux."
-            required_artifact_types: appimage,deb
+            required_artifact_types: deb
             ci_no_sandbox: "1"
           - platform: windows
             runner: windows-latest
@@ -236,7 +236,6 @@ jobs:
         with:
           name: postmeter-validation-${{ matrix.platform }}
           path: |
-            release/*.AppImage
             release/*.deb
             release/*.dmg
             release/*.zip

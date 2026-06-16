@@ -315,7 +315,6 @@ jobs:
         with:
           name: postmeter-ci-${{ matrix.platform }}-artifacts
           path: |
-            release/*.AppImage
             release/*.deb
             release/*.dmg
             release/*.zip

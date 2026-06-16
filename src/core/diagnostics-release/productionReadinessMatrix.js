@@ -79,7 +79,7 @@ function buildProductionReadinessMatrix() {
       evidenceRefs: ['src/core/diagnostics-release/productionReadinessMatrix.js', 'docs/production-readiness-matrix.json', 'docs/TECH_SPECS.md', '.github/workflows/release.yml'],
       notes: 'The tag-driven release workflow runs the stable readiness claim before artifact publication.'
     }),
-    row('packaging.linux', 'packaging', 'Linux deb/AppImage metadata, protocol registration, artifact checksums, and packaged sandbox validation are covered.', 'validated', {
+    row('packaging.linux', 'packaging', 'Linux deb metadata, protocol registration, artifact checksums, and packaged sandbox validation are covered.', 'validated', {
       releaseBlocking: true,
       commands: ['npm run dist:linux', 'npm run release:validate:packaged-smoke', 'npm run release:validate:packaged-workflow', 'npm run release:validate', 'npm run sandbox:validate:packaged'],
       evidenceRefs: ['scripts/validatePackagedAppSmoke.js', 'scripts/validatePackagedWorkflowSmoke.js', 'scripts/validateReleaseArtifacts.js', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml']
