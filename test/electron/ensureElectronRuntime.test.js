@@ -10,6 +10,7 @@ const {
   ensureElectronRuntime,
   linuxChromeSandboxRepairCommand
 } = require('../../scripts/ensureElectronRuntime');
+const { WAIVER_ENV } = require('../../scripts/electronCiSandboxWaiver');
 
 test('Electron runtime check accepts an installed runtime path from path.txt', (t) => {
   const root = makeElectronInstall(t, { executable: true });
@@ -75,10 +76,22 @@ test('Electron runtime check accepts a configured Linux chrome-sandbox helper', 
   assert.equal(status.ok, true);
 });
 
+test('Electron runtime check accepts CI Linux no-sandbox waiver for chrome-sandbox permissions', (t) => {
+  const root = makeElectronInstall(t, { executable: true, chromeSandbox: true });
+  const status = electronRuntimeStatus(root, {
+    env: { [WAIVER_ENV]: '1' },
+    platform: 'linux',
+    statSync: fakeChromeSandboxStat(root, { uid: 1000, mode: 0o0755 })
+  });
+
+  assert.equal(status.ok, true);
+});
+
 test('Electron runtime check reports the Linux chrome-sandbox setup command', (t) => {
   const root = makeElectronInstall(t, { executable: true, chromeSandbox: true });
   const chromeSandbox = electronChromeSandboxPath(root);
   const status = ensureElectronRuntime({
+    env: {},
     projectRoot: root,
     repair: true,
     platform: 'linux',

@@ -116,6 +116,8 @@ jobs:
 
       - name: Unit tests
         run: npm test
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
 
       - name: Electron runtime version
         run: npm run electron:version

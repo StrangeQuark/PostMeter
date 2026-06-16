@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { shouldUseCiNoSandbox } = require('./electronCiSandboxWaiver');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 
@@ -196,6 +197,9 @@ function linuxChromeSandboxStatus(projectRoot = PROJECT_ROOT, options = {}) {
 
   const mode = stat.mode & 0o7777;
   if (stat.uid !== 0 || mode !== 0o4755) {
+    if (shouldUseCiNoSandbox(options.env || process.env, platform)) {
+      return { ok: true };
+    }
     return {
       ok: false,
       reason: 'misconfigured-linux-chrome-sandbox',
