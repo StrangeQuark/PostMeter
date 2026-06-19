@@ -16,6 +16,7 @@ const {
   completeStartupSmoke,
   expectedDefaultUserDataRoot,
   isPathInside,
+  mainWindowBoundsForWorkArea,
   nextNumpadZoomLevel,
   nextZoomLevel,
   requiredPreloadApiSurface,
@@ -282,6 +283,37 @@ test('numpad zoom levels clamp to supported bounds', () => {
   assert.equal(nextNumpadZoomLevel(0, 'out'), -0.5);
   assert.equal(nextNumpadZoomLevel(3, 'reset'), 0);
   assert.equal(nextNumpadZoomLevel('not-a-number', 'in'), 0.5);
+});
+
+test('main window bounds preserve desktop defaults when work area is large enough', () => {
+  assert.deepEqual(mainWindowBoundsForWorkArea({
+    workAreaSize: { width: 1920, height: 1080 }
+  }), {
+    width: 1320,
+    height: 860,
+    minWidth: 1040,
+    minHeight: 700
+  });
+});
+
+test('main window bounds clamp startup and minimum sizes to small work areas', () => {
+  assert.deepEqual(mainWindowBoundsForWorkArea({
+    workAreaSize: { width: 1366, height: 691 }
+  }), {
+    width: 1286,
+    height: 611,
+    minWidth: 1040,
+    minHeight: 611
+  });
+  assert.deepEqual(mainWindowBoundsForWorkArea({
+    constrained: true,
+    workAreaSize: { width: 1000, height: 650 }
+  }), {
+    width: 920,
+    height: 570,
+    minWidth: 920,
+    minHeight: 570
+  });
 });
 
 test('startup smoke probe prevents renderer shutdown from overwriting marker save', async () => {
