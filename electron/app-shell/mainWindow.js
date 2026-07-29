@@ -119,11 +119,14 @@ function mainWindowBoundsForWorkArea(options = {}) {
   const minWidth = constrained
     ? MIN_MAIN_WINDOW_WIDTH
     : windowDimensionForWorkArea(MIN_MAIN_WINDOW_WIDTH, workAreaSize?.width);
+  const minHeight = constrained
+    ? MIN_MAIN_WINDOW_HEIGHT
+    : windowDimensionForWorkArea(MIN_MAIN_WINDOW_HEIGHT, workAreaSize?.height);
   return {
     width: Math.max(windowDimensionForWorkArea(preferredWidth, workAreaSize?.width), minWidth),
-    height: windowDimensionForWorkArea(preferredHeight, workAreaSize?.height),
+    height: Math.max(windowDimensionForWorkArea(preferredHeight, workAreaSize?.height), minHeight),
     minWidth,
-    minHeight: windowDimensionForWorkArea(MIN_MAIN_WINDOW_HEIGHT, workAreaSize?.height)
+    minHeight
   };
 }
 

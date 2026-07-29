@@ -14,6 +14,7 @@ async function main() {
     ...process.env,
     POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
     POSTMETER_UI_SNAPSHOT_SMOKE: '1',
+    POSTMETER_UI_CONSTRAINED_WINDOW: '1',
     POSTMETER_UI_SNAPSHOT_DIR: snapshotDir,
     POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || path.join(tempDir, 'validation-artifacts')
   };

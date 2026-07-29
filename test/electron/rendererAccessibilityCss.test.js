@@ -35,15 +35,22 @@ test('renderer CSS motion declarations are covered by the reduced-motion contrac
       .map((line, index) => ({ line: line.trim(), number: index + 1 }))
       .filter(({ line }) => /^(animation|transition)\s*:/.test(line));
     for (const declaration of declarations) {
-      motionDeclarations.push(`${filePath}:${declaration.number}: ${declaration.line}`);
+      motionDeclarations.push({
+        contract: `${filePath}: ${declaration.line}`,
+        source: `${filePath}:${declaration.number}: ${declaration.line}`
+      });
     }
   }
 
-  assert.deepEqual(motionDeclarations, [
-    'src/renderer/styles/chrome.css:397: transition: background 120ms ease;',
-    'src/renderer/styles/overlays.css:739: transition: top 120ms ease, left 120ms ease, width 120ms ease, height 120ms ease;',
-    'src/renderer/styles/overlays.css:916: animation: performance-calibration-spin 0.85s linear infinite;',
-    'src/renderer/styles/overlays.css:1089: transition: transform 0.12s ease;',
-    'src/renderer/styles/overlays.css:1376: transition: transform 120ms ease;'
-  ]);
+  assert.deepEqual(
+    motionDeclarations.map(({ contract }) => contract),
+    [
+      'src/renderer/styles/chrome.css: transition: background 120ms ease;',
+      'src/renderer/styles/overlays.css: transition: top 120ms ease, left 120ms ease, width 120ms ease, height 120ms ease;',
+      'src/renderer/styles/overlays.css: animation: performance-calibration-spin 0.85s linear infinite;',
+      'src/renderer/styles/overlays.css: transition: transform 0.12s ease;',
+      'src/renderer/styles/overlays.css: transition: transform 120ms ease;'
+    ],
+    `Current motion declaration locations:\n${motionDeclarations.map(({ source }) => source).join('\n')}`
+  );
 });
