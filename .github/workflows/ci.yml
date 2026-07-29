@@ -52,6 +52,18 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Upload npm install logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
+        with:
+          name: postmeter-ci-node-npm-logs
+          path: |
+            ~/.npm/_logs/**
+            ~/AppData/Local/npm-cache/_logs/**
+            C:/npm/cache/_logs/**
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Renderer HTML check
         run: npm run renderer:html:check
 
@@ -110,7 +122,15 @@ jobs:
         run: npm run release:gate
 
       - name: Audit high severity
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          for attempt in 1 2 3; do
+            npm audit --omit=dev --audit-level=high && exit 0
+            status=$?
+            if [ "$attempt" = "3" ]; then
+              exit "$status"
+            fi
+            sleep $((attempt * 10))
+          done
 
       - name: Electron version
         run: npm run electron:version
@@ -244,6 +264,18 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Upload npm install logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
+        with:
+          name: postmeter-ci-${{ matrix.platform }}-npm-logs
+          path: |
+            ~/.npm/_logs/**
+            ~/AppData/Local/npm-cache/_logs/**
+            C:/npm/cache/_logs/**
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Renderer HTML check
         run: npm run renderer:html:check

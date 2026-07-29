@@ -316,6 +316,7 @@
 
 .sidebar-panel-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -1213,7 +1214,7 @@ h2 {
   gap: 8px;
   align-items: center;
   justify-self: end;
-  margin-left: 8px;
+  margin-left: 0;
 }
 
 .capture-settings-menu-group {
@@ -1638,7 +1639,7 @@ h2 {
 }
 
 .performance-request-line {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
@@ -1649,8 +1650,8 @@ h2 {
 }
 
 #performanceUrlInput {
-  flex: 1;
-  min-width: 160px;
+  flex: 1 1 144px;
+  min-width: 0;
   min-height: 36px;
   padding: 8px 10px;
   font-family: var(--mono);
