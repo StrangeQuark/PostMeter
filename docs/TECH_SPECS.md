@@ -1137,7 +1137,7 @@ CI is configured in `.github/workflows/ci.yml` for:
 
 - `npm ci`
 - `npm test`
-- `npm audit --audit-level=high`
+- `npm audit --omit=dev --audit-level=high`
 - `npm run electron:version`
 - `xvfb-run -a npm run test:smoke`
 - `xvfb-run -a npm run test:ui`

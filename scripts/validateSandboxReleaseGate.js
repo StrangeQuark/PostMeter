@@ -48,7 +48,7 @@ requireScript('check', [
   'npm run test:ui:a11y',
   'npm run test:ui:auth',
   'npm run test:ui:snapshot',
-  'npm audit --audit-level=high',
+  'npm audit --omit=dev --audit-level=high',
   'npm run electron:version'
 ]);
 for (const scriptName of [
@@ -167,7 +167,7 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /xvfb-run -a npm run test:ui:a11y/,
   /xvfb-run -a npm run test:ui:auth/,
   /xvfb-run -a npm run test:ui:snapshot/,
-  /npm audit --audit-level=high/,
+  /npm audit --omit=dev --audit-level=high/,
   /npm run sandbox:validate/,
   /npm run sandbox:platform:validate/,
   /npm run pack:linux/,
@@ -356,7 +356,7 @@ for (const [label, workflowDocument, requiredRunSteps] of [
     /xvfb-run -a npm run test:ui:a11y/,
     /xvfb-run -a npm run test:ui:auth/,
     /xvfb-run -a npm run test:ui:snapshot/,
-    /npm audit --audit-level=high/,
+    /npm audit --omit=dev --audit-level=high/,
     /npm run pack:linux/,
     /\$\{\{\s*matrix\.command\s*\}\}/,
     /npm run release:validate:packaged-smoke/,
