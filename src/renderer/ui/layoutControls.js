@@ -253,7 +253,7 @@ function defaultLayoutVars() {
     '--sidebar-width': '300px',
     '--request-height': '52%',
     '--runner-editor-height': '52%',
-    '--performance-request-height': '420px',
+    '--performance-request-height': 'min(420px, 64%)',
     '--performance-editor-height': 'max-content'
   };
 }
