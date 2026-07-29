@@ -309,9 +309,9 @@ test('main window bounds clamp startup and minimum sizes to small work areas', (
     constrained: true,
     workAreaSize: { width: 1000, height: 650 }
   }), {
-    width: 920,
+    width: 1040,
     height: 570,
-    minWidth: 920,
+    minWidth: 1040,
     minHeight: 570
   });
 });

@@ -116,10 +116,13 @@ function mainWindowBoundsForWorkArea(options = {}) {
   const workAreaSize = compactContentWorkAreaSize(options.workAreaSize);
   const preferredWidth = constrained ? CONSTRAINED_MAIN_WINDOW_WIDTH : DEFAULT_MAIN_WINDOW_WIDTH;
   const preferredHeight = constrained ? CONSTRAINED_MAIN_WINDOW_HEIGHT : DEFAULT_MAIN_WINDOW_HEIGHT;
+  const minWidth = constrained
+    ? MIN_MAIN_WINDOW_WIDTH
+    : windowDimensionForWorkArea(MIN_MAIN_WINDOW_WIDTH, workAreaSize?.width);
   return {
-    width: windowDimensionForWorkArea(preferredWidth, workAreaSize?.width),
+    width: Math.max(windowDimensionForWorkArea(preferredWidth, workAreaSize?.width), minWidth),
     height: windowDimensionForWorkArea(preferredHeight, workAreaSize?.height),
-    minWidth: windowDimensionForWorkArea(MIN_MAIN_WINDOW_WIDTH, workAreaSize?.width),
+    minWidth,
     minHeight: windowDimensionForWorkArea(MIN_MAIN_WINDOW_HEIGHT, workAreaSize?.height)
   };
 }
