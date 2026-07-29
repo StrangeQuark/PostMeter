@@ -78,7 +78,7 @@
     "diagnostics:privacy:write": "node scripts/productionSupportMatrix.js diagnostics-privacy write",
     "diagnostics:privacy:validate": "node scripts/productionSupportMatrix.js diagnostics-privacy validate",
     "pack:linux": "electron-builder --linux dir --publish never",
-    "dist:linux": "electron-builder --linux AppImage deb --publish never",
+    "dist:linux": "electron-builder --linux deb --publish never",
     "dist:win": "npm run native:windows-sandbox:build && electron-builder --win nsis --publish never",
     "dist:mac": "electron-builder --mac dmg zip --publish never",
     "release:checksums": "node scripts/writeReleaseChecksums.js",
@@ -132,7 +132,6 @@
       "category": "Development",
       "maintainer": "StrangeQuark <support@qrksw.com>",
       "target": [
-        "AppImage",
         "deb"
       ]
     },

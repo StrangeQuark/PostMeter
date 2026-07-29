@@ -175,6 +175,10 @@
   text-align: left;
 }
 
+.toolbar-menu button + button {
+  margin-left: 0;
+}
+
 .toolbar-menu button:hover,
 .toolbar-menu button:focus-visible {
   background: var(--surface-muted);

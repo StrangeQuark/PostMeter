@@ -156,7 +156,7 @@ test('validates release artifact manifest entries against files and package prot
       linux: {
         icon: 'build/icons',
         maintainer: 'StrangeQuark <support@qrksw.com>',
-        target: ['AppImage', 'deb']
+        target: ['deb']
       },
       deb: {
         afterRemove: 'build/linux-after-remove.tpl',

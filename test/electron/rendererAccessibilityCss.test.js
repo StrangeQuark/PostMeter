@@ -40,7 +40,7 @@ test('renderer CSS motion declarations are covered by the reduced-motion contrac
   }
 
   assert.deepEqual(motionDeclarations, [
-    'src/renderer/styles/chrome.css:393: transition: background 120ms ease;',
+    'src/renderer/styles/chrome.css:397: transition: background 120ms ease;',
     'src/renderer/styles/overlays.css:739: transition: top 120ms ease, left 120ms ease, width 120ms ease, height 120ms ease;',
     'src/renderer/styles/overlays.css:916: animation: performance-calibration-spin 0.85s linear infinite;',
     'src/renderer/styles/overlays.css:1089: transition: transform 0.12s ease;',

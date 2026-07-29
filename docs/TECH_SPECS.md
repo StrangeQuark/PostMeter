@@ -90,7 +90,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 - OpenAPI YAML parsing: `yaml`
 - XML parsing and XPath evaluation: `@xmldom/xmldom` and `xpath`
 - HTML parsing and selector evaluation: `node-html-parser`
-- Packaging: electron-builder with Linux unpacked/AppImage/deb, Windows NSIS, and macOS dmg/zip targets
+- Packaging: electron-builder with Linux unpacked/deb, Windows NSIS, and macOS dmg/zip targets
 - Tests: Node built-in test runner plus Electron startup, UI workflow, UI regression, UI typography, UI OAuth, and UI screenshot smoke scripts
 
 ## Guided Tutorials
@@ -836,7 +836,7 @@ Auth limitations:
 - Refresh-token renewal, authorization-code exchange, client-credentials retrieval, and device-code polling send `client_id` and `client_secret` in the form body when present. HTTP Basic client authentication and private-key JWT are not supported.
 - OAuth access tokens, refresh tokens, and client secrets are ordinary visible auth fields persisted in workspace JSON and exported collections. Certification evidence must scrub those fields.
 - OAuth progress is represented in a persistent in-app panel and validated by schema-backed main-to-renderer IPC checks. Renderer regression smoke validates key progress states, and mocked Electron OAuth smoke covers loopback PKCE success, custom-scheme PKCE success, rejected wrong-state callbacks that keep the flow cancellable, PKCE token failure, cancellation, provider denial, timeout, and device-code success. Loading or switching workspace context cancels active OAuth flows so the renderer does not lose its cancellation handle.
-- Custom URI-scheme PKCE is implemented. Release validation checks Linux deb/AppImage desktop-entry metadata, Windows NSIS registry registration plus `postmeter://` ShellExecute launch, and macOS app-bundle/zip/dmg URL-scheme metadata plus Launch Services `postmeter://` launch on native runners.
+- Custom URI-scheme PKCE is implemented. Release validation checks Linux deb desktop-entry metadata, Windows NSIS registry registration plus `postmeter://` ShellExecute launch, and macOS app-bundle/zip/dmg URL-scheme metadata plus Launch Services `postmeter://` launch on native runners.
 - Client-certificate requests use the Node `https` transport path instead of global `fetch`; that path intentionally follows redirects only when they stay on the original HTTPS origin to avoid leaking client certificate material to redirected hosts.
 ## Cookie Jar
 
@@ -1115,13 +1115,13 @@ Distribution scripts pass `--publish never`; GitHub Release publication is handl
 Targets:
 
 - `npm run pack:linux`: unpacked Linux directory build.
-- `npm run dist:linux`: Linux AppImage and deb artifacts.
+- `npm run dist:linux`: Linux deb artifact.
 - `npm run dist:win`: Windows NSIS artifact.
 - `npm run dist:mac`: macOS DMG and zip artifacts.
-- `npm run release:checksums`: writes `release/SHA256SUMS` for generated top-level AppImage, deb, dmg, zip, and exe distributable artifacts.
+- `npm run release:checksums`: writes `release/SHA256SUMS` for generated top-level deb, dmg, zip, and exe distributable artifacts.
 - `npm run release:manifest`: writes `release/release-manifest.json` with artifact size, SHA-256, platform, type, app ID, product name, and version metadata.
 - `npm run release:prepare`: runs checksums and manifest generation.
-- `npm run release:validate`: validates package metadata, canonical GitHub release/update source metadata, expected AppImage/deb/NSIS/dmg/zip targets, icon metadata, release output directory, the `postmeter://` protocol declaration, top-level-only release manifest entries, exact agreement between top-level distributable artifacts, `SHA256SUMS`, and `release-manifest.json`, artifact sizes, SHA-256 hashes, expected platform/type/name patterns, Linux deb/AppImage `x-scheme-handler/postmeter` desktop registration, Linux deb hicolor app icons, and macOS zip `.app` `Info.plist` URL-scheme registration when those artifacts are present. Unconfigured MSI/RPM artifacts are rejected until package metadata, docs, upload paths, and native validators explicitly support them. `POSTMETER_RELEASE_REQUIRED_TYPES` can require specific artifact types in release CI.
+- `npm run release:validate`: validates package metadata, canonical GitHub release/update source metadata, expected deb/NSIS/dmg/zip targets, icon metadata, release output directory, the `postmeter://` protocol declaration, top-level-only release manifest entries, exact agreement between top-level distributable artifacts, `SHA256SUMS`, and `release-manifest.json`, artifact sizes, SHA-256 hashes, expected platform/type/name patterns, Linux deb `x-scheme-handler/postmeter` desktop registration, Linux deb hicolor app icons, and macOS zip `.app` `Info.plist` URL-scheme registration when those artifacts are present. Unconfigured MSI/RPM artifacts are rejected until package metadata, docs, upload paths, and native validators explicitly support them. `POSTMETER_RELEASE_REQUIRED_TYPES` can require specific artifact types in release CI.
 - `npm run release:validate:win-protocol`: on a native Windows release runner, silently installs the generated NSIS artifact, validates the `postmeter://` registry root/open command belongs to that temporary install, launches a `postmeter://oauth/callback?...` URL through ShellExecute, verifies the launched process path when Windows exposes it, writes a transcript when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set, then runs the generated uninstaller silently.
 - `npm run release:validate:mac-protocol`: on a native macOS release runner, validates `PostMeter.app` URL-scheme metadata in the app bundle, zip, and DMG artifacts, registers each discovered bundle with Launch Services, launches a `postmeter://oauth/callback?...` URL through `open -b com.strangequark.postmeter` for each bundle, verifies the launched process belongs to that bundle, writes a protocol log when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set, and quits the app between launches.
 - The package author and deb maintainer metadata use `StrangeQuark <support@qrksw.com>`.
@@ -1130,7 +1130,7 @@ Targets:
 - Debian packages remove the `/opt/PostMeter/postmeter` update-alternatives entry in `prerm` before package files are deleted, while `postrm` is reserved for AppArmor profile cleanup.
 - Packaged builds declare the `postmeter://` protocol for OAuth callback handling.
 - No desktop file associations are declared in the current package metadata.
-- Linux AppImage artifacts are self-contained; deb artifacts are installed/removed by the user's package manager. Windows NSIS validation installs into a temporary directory and runs the generated uninstaller. macOS dmg/zip artifacts carry `PostMeter.app`; users install by copying the app bundle, and no macOS package uninstaller is produced.
+- Linux deb artifacts are installed/removed by the user's package manager. Windows NSIS validation installs into a temporary directory and runs the generated uninstaller. macOS dmg/zip artifacts carry `PostMeter.app`; users install by copying the app bundle, and no macOS package uninstaller is produced.
 - The app can check `https://api.github.com/repos/StrangeQuark/PostMeter/releases/latest` for stable versions and `https://api.github.com/repos/StrangeQuark/PostMeter/releases` when prerelease checks are enabled. `POSTMETER_UPDATE_URL` is accepted only for explicit development/test override paths and is ignored in packaged production; production update checks remain pinned to the canonical GitHub API host and path.
 
 CI is configured in `.github/workflows/ci.yml` for:
@@ -1158,7 +1158,7 @@ Release automation is configured in `.github/workflows/release.yml` for tag push
 - Uploads validation logs and packaged startup-smoke failure screenshots on native runner failure so launch/protocol failures can be inspected after the job exits.
 - Downloads platform artifacts into one release directory.
 - Generates `SHA256SUMS` and `release-manifest.json`.
-- Validates release artifacts and requires AppImage, deb, DMG, zip, and exe artifact types before publishing.
+- Validates release artifacts and requires deb, DMG, zip, and exe artifact types before publishing.
 - Publishes artifacts to GitHub Releases using the built-in `GITHUB_TOKEN`.
 
 Manual native release validation is configured in `.github/workflows/release-validation.yml`:

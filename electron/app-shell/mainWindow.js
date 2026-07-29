@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, screen } = require('electron');
 const {
   APP_PROTOCOL_HOST,
   APP_PROTOCOL_SCHEME,
@@ -37,6 +37,14 @@ const UI_SMOKE_COOKIE_HEADER_SAFE_CONTEXT_BOUNDARY_PATTERN = new RegExp(String.r
 const NUMPAD_ZOOM_STEP_LEVEL = 0.5;
 const MIN_ZOOM_LEVEL = -6;
 const MAX_ZOOM_LEVEL = 6;
+const DEFAULT_MAIN_WINDOW_WIDTH = 1320;
+const DEFAULT_MAIN_WINDOW_HEIGHT = 860;
+const CONSTRAINED_MAIN_WINDOW_WIDTH = 1040;
+const CONSTRAINED_MAIN_WINDOW_HEIGHT = 700;
+const MIN_MAIN_WINDOW_WIDTH = 1040;
+const MIN_MAIN_WINDOW_HEIGHT = 700;
+const COMPACT_WINDOW_DECORATION_RESERVE_WIDTH = 80;
+const COMPACT_WINDOW_DECORATION_RESERVE_HEIGHT = 80;
 const EDIT_SHORTCUT_METHODS = Object.freeze({
   undo: 'undo',
   redo: 'redo',
@@ -52,11 +60,12 @@ function createMainWindow(app, options = {}) {
   const env = options.env || process.env;
   const allowRendererSmoke = shouldAllowRendererSmoke(app, env, options);
   const constrainedUiSmoke = allowRendererSmoke && env.POSTMETER_UI_CONSTRAINED_WINDOW === '1';
+  const windowBounds = mainWindowBoundsForWorkArea({
+    constrained: constrainedUiSmoke,
+    workAreaSize: options.workAreaSize || primaryDisplayWorkAreaSize()
+  });
   const mainWindow = new BrowserWindow({
-    width: constrainedUiSmoke ? 1040 : 1320,
-    height: constrainedUiSmoke ? 700 : 860,
-    minWidth: 1040,
-    minHeight: 700,
+    ...windowBounds,
     title: 'PostMeter',
     webPreferences: {
       preload: options.preloadPath || path.join(__dirname, 'preload.js'),
@@ -89,6 +98,82 @@ function createMainWindow(app, options = {}) {
     loadPromise.catch(handleLoadFailure);
   }
   return mainWindow;
+}
+
+function primaryDisplayWorkAreaSize(screenModule = screen) {
+  try {
+    if (!screenModule || typeof screenModule.getPrimaryDisplay !== 'function') {
+      return null;
+    }
+    return screenModule.getPrimaryDisplay()?.workAreaSize || null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function mainWindowBoundsForWorkArea(options = {}) {
+  const constrained = options.constrained === true;
+  const workAreaSize = compactContentWorkAreaSize(options.workAreaSize);
+  const preferredWidth = constrained ? CONSTRAINED_MAIN_WINDOW_WIDTH : DEFAULT_MAIN_WINDOW_WIDTH;
+  const preferredHeight = constrained ? CONSTRAINED_MAIN_WINDOW_HEIGHT : DEFAULT_MAIN_WINDOW_HEIGHT;
+  return {
+    width: windowDimensionForWorkArea(preferredWidth, workAreaSize?.width),
+    height: windowDimensionForWorkArea(preferredHeight, workAreaSize?.height),
+    minWidth: windowDimensionForWorkArea(MIN_MAIN_WINDOW_WIDTH, workAreaSize?.width),
+    minHeight: windowDimensionForWorkArea(MIN_MAIN_WINDOW_HEIGHT, workAreaSize?.height)
+  };
+}
+
+function normalizeWorkAreaSize(workAreaSize) {
+  const width = positiveIntegerPixels(workAreaSize?.width);
+  const height = positiveIntegerPixels(workAreaSize?.height);
+  if (!width || !height) {
+    return null;
+  }
+  return { width, height };
+}
+
+function compactContentWorkAreaSize(workAreaSize) {
+  const normalized = normalizeWorkAreaSize(workAreaSize);
+  if (!normalized) {
+    return null;
+  }
+  return {
+    width: compactContentDimension(
+      normalized.width,
+      DEFAULT_MAIN_WINDOW_WIDTH,
+      COMPACT_WINDOW_DECORATION_RESERVE_WIDTH
+    ),
+    height: compactContentDimension(
+      normalized.height,
+      DEFAULT_MAIN_WINDOW_HEIGHT,
+      COMPACT_WINDOW_DECORATION_RESERVE_HEIGHT
+    )
+  };
+}
+
+function compactContentDimension(workAreaDimension, defaultDimension, decorationReserve) {
+  if (workAreaDimension >= defaultDimension + decorationReserve) {
+    return workAreaDimension;
+  }
+  return Math.max(1, workAreaDimension - decorationReserve);
+}
+
+function windowDimensionForWorkArea(preferred, workAreaDimension) {
+  const preferredPixels = positiveIntegerPixels(preferred);
+  const workAreaPixels = positiveIntegerPixels(workAreaDimension);
+  if (!workAreaPixels) {
+    return preferredPixels;
+  }
+  return Math.min(preferredPixels, workAreaPixels);
+}
+
+function positiveIntegerPixels(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+    return 0;
+  }
+  return Math.floor(numberValue);
 }
 
 function bindNavigationGuards(mainWindow, trustedRendererUrl, options = {}) {
@@ -1289,6 +1374,7 @@ module.exports = {
   isAllowedRendererNavigation,
   isPathInside,
   loadQuery,
+  mainWindowBoundsForWorkArea,
   nativeImageHasVariance,
   normalizedRendererNavigationUrl,
   redactUiSmokeText,
