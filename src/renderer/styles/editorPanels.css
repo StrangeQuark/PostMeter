@@ -503,6 +503,12 @@ textarea.code-editor-input:placeholder-shown {
   min-width: 160px;
 }
 
+.performance-request-line > .variable-highlight-editor {
+  flex: 1 1 144px;
+  min-width: 144px;
+  width: auto;
+}
+
 .variable-highlight-overlay {
   position: absolute;
   inset: 0;

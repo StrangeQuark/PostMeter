@@ -52,6 +52,18 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Upload npm install logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
+        with:
+          name: postmeter-ci-node-npm-logs
+          path: |
+            ~/.npm/_logs/**
+            ~/AppData/Local/npm-cache/_logs/**
+            C:/npm/cache/_logs/**
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Renderer HTML check
         run: npm run renderer:html:check
 
@@ -244,6 +256,18 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Upload npm install logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact@v4
+        with:
+          name: postmeter-ci-${{ matrix.platform }}-npm-logs
+          path: |
+            ~/.npm/_logs/**
+            ~/AppData/Local/npm-cache/_logs/**
+            C:/npm/cache/_logs/**
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Renderer HTML check
         run: npm run renderer:html:check
