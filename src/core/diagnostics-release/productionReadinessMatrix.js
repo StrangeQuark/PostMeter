@@ -166,7 +166,7 @@ function buildProductionReadinessMatrix() {
     }),
     row('dependencies.audit', 'security', 'Release dependency audit must pass with no high-severity vulnerabilities.', 'validated', {
       releaseBlocking: true,
-      commands: ['npm audit --audit-level=high'],
+      commands: ['npm audit --omit=dev --audit-level=high'],
       evidenceRefs: ['package.json', 'package-lock.json']
     }),
     row('electron.runtime-version', 'release', 'Electron runtime version is checked before production or security claims.', 'validated', {

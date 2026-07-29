@@ -10,10 +10,10 @@ This inventory is intentionally limited to direct runtime dependencies plus the 
 | `@grpc/proto-loader@0.8.1` | Apache-2.0 | Parent-owned `.proto` loading for gRPC requests only. |
 | `@xmldom/xmldom@0.9.10` | MIT | Import/export XML parsing and formatting helpers. |
 | `electron@42.2.0` | MIT | Desktop shell runtime and packaged application host. |
-| `electron-builder@26.8.1` | MIT | Release packaging, installer, and artifact generation tooling. |
-| `electron-updater@6.8.3` | MIT | GitHub update metadata checks and packaged update flow. |
+| `electron-builder@26.15.3` | MIT | Release packaging, installer, and artifact generation tooling. |
+| `electron-updater@6.8.9` | MIT | GitHub update metadata checks and packaged update flow. |
 | `handlebars@4.7.9` | MIT | Isolated visualizer runtime bundle. |
-| `markdown-it@14.2.0` | MIT | Renderer-side markdown preview and documentation rendering. |
+| `markdown-it@14.3.0` | MIT | Renderer-side markdown preview and documentation rendering. |
 | `node-forge@1.4.0` | `(BSD-3-Clause OR GPL-2.0)` | Parent-owned PFX/P12 certificate parsing; PostMeter relies on the BSD-3-Clause option. |
 | `node-html-parser@7.1.0` | MIT | Test/build-time renderer HTML contract parsing. |
 | `psl@1.15.0` | MIT | Cookie/public suffix normalization. |

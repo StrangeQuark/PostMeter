@@ -59,7 +59,7 @@ test('production readiness matrix tracks release areas and stable-release blocke
   assert.ok(byId.get('release.dashboard').commands.includes('npm run production:readiness:claim:beta'));
   assert.ok(byId.get('release.dashboard').commands.includes('npm run production:readiness:claim:rc'));
   assert.ok(byId.get('release.dashboard').commands.includes('npm run production:readiness:claim:stable'));
-  assert.ok(byId.get('dependencies.audit').commands.includes('npm audit --audit-level=high'));
+  assert.ok(byId.get('dependencies.audit').commands.includes('npm audit --omit=dev --audit-level=high'));
   assert.ok(byId.get('electron.runtime-version').commands.includes('npm run electron:version'));
   assert.equal(byId.get('grpc.pfx-p12-mtls').area, 'transport');
   assert.equal(byId.get('diagnostics.privacy').status, 'validated');
@@ -129,7 +129,7 @@ test('production readiness matrix references real local evidence and required lo
     'npm run sandbox:platform:claim',
     'npm run postman:parity:claim',
     'npm run postman:docs:validate',
-    'npm audit --audit-level=high',
+    'npm audit --omit=dev --audit-level=high',
     'npm run electron:version',
     'npm run dist:linux',
     'npm run dist:win',

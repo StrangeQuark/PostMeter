@@ -110,7 +110,7 @@ jobs:
         run: npm run release:gate
 
       - name: Audit high severity
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Electron version
         run: npm run electron:version

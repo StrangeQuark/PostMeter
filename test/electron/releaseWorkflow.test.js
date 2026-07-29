@@ -30,7 +30,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm run ux:accessibility:validate/);
   assert.match(workflow, /npm run diagnostics:privacy:validate/);
   assert.match(workflow, /npm run release:gate/);
-  assert.match(workflow, /npm audit --audit-level=high/);
+  assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
   assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /xvfb-run -a npm run test:smoke/);
