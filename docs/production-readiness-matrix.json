@@ -243,7 +243,7 @@
       "id": "packaging.macos",
       "area": "packaging",
       "target": "macOS packaged launch, protocol registration, workspace path, and script-worker validation must run on macos-latest.",
-      "status": "external-validation-required",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run dist:mac",
@@ -268,7 +268,7 @@
       "id": "packaging.windows",
       "area": "packaging",
       "target": "Windows packaged launch, protocol registration, workspace path, and script-worker validation must run on windows-latest.",
-      "status": "external-validation-required",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run dist:win",
@@ -443,7 +443,7 @@
       "id": "ux.accessibility",
       "area": "ux",
       "target": "Production user workflows, accessibility-sensitive modals, and failure states are source-matrixed, smoke-tested, artifacted, and documented before release.",
-      "status": "external-validation-required",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run ux:accessibility:validate",

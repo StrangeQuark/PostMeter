@@ -22,7 +22,7 @@ const {
   validateCommittedMatrix
 } = require('../../scripts/productionReadiness');
 
-test('production readiness matrix tracks release areas and stable-release blockers', async () => {
+test('production readiness matrix tracks release areas and stable-release gates', async () => {
   const matrix = buildProductionReadinessMatrix();
   const ids = new Set(matrix.rows.map((row) => row.id));
   const byId = new Map(matrix.rows.map((row) => [row.id, row]));
@@ -83,14 +83,15 @@ test('production readiness matrix tracks release areas and stable-release blocke
   }
   const summary = productionReadinessSummary(matrix);
   assert.equal(summary.releaseLevel, 'stable');
-  assert.ok(summary.releaseBlockerCount >= 1);
+  assert.equal(summary.releaseBlockerCount, 0);
+  assert.deepEqual(summary.releaseBlockers, []);
   assert.equal(summary.releaseBlockers.includes('diagnostics.privacy'), false);
   const betaBlockers = productionReadinessBlockers(matrix, 'beta');
   const rcBlockers = productionReadinessBlockers(matrix, 'rc');
   const stableBlockers = productionReadinessBlockers(matrix, 'stable');
   assert.deepEqual(betaBlockers, []);
-  assert.ok(betaBlockers.length < rcBlockers.length);
-  assert.equal(rcBlockers.length, stableBlockers.length);
+  assert.deepEqual(rcBlockers, []);
+  assert.deepEqual(stableBlockers, []);
   for (const validatedGateRow of ['release.dashboard', 'dependencies.audit', 'electron.runtime-version', 'diagnostics.privacy']) {
     assert.equal(stableBlockers.some((row) => row.id === validatedGateRow), false);
   }
