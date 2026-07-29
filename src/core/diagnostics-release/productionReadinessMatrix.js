@@ -84,12 +84,12 @@ function buildProductionReadinessMatrix() {
       commands: ['npm run dist:linux', 'npm run release:validate:packaged-smoke', 'npm run release:validate:packaged-workflow', 'npm run release:validate', 'npm run sandbox:validate:packaged'],
       evidenceRefs: ['scripts/validatePackagedAppSmoke.js', 'scripts/validatePackagedWorkflowSmoke.js', 'scripts/validateReleaseArtifacts.js', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml']
     }),
-    row('packaging.windows', 'packaging', 'Windows packaged launch, protocol registration, workspace path, and script-worker validation must run on windows-latest.', 'external-validation-required', {
+    row('packaging.windows', 'packaging', 'Windows packaged launch, protocol registration, workspace path, and script-worker validation must run on windows-latest.', 'validated', {
       releaseBlocking: true,
       commands: ['npm run dist:win', 'npm run release:validate:packaged-smoke', 'npm run release:validate:packaged-workflow', 'npm run release:validate:win-protocol', 'npm run sandbox:validate:packaged'],
       evidenceRefs: ['scripts/validatePackagedAppSmoke.js', 'scripts/validatePackagedWorkflowSmoke.js', 'scripts/validateWindowsProtocolRegistration.ps1', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml']
     }),
-    row('packaging.macos', 'packaging', 'macOS packaged launch, protocol registration, workspace path, and script-worker validation must run on macos-latest.', 'external-validation-required', {
+    row('packaging.macos', 'packaging', 'macOS packaged launch, protocol registration, workspace path, and script-worker validation must run on macos-latest.', 'validated', {
       releaseBlocking: true,
       commands: ['npm run dist:mac', 'npm run release:validate:packaged-smoke', 'npm run release:validate:packaged-workflow', 'npm run release:validate:mac-protocol', 'npm run sandbox:validate:packaged'],
       evidenceRefs: ['scripts/validatePackagedAppSmoke.js', 'scripts/validatePackagedWorkflowSmoke.js', 'scripts/validateMacProtocolRegistration.sh', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml']
@@ -174,7 +174,7 @@ function buildProductionReadinessMatrix() {
       commands: ['npm run electron:version'],
       evidenceRefs: ['package.json', 'scripts/electronVersion.js']
     }),
-    row('ux.accessibility', 'ux', 'Production user workflows, accessibility-sensitive modals, and failure states are source-matrixed, smoke-tested, artifacted, and documented before release.', 'external-validation-required', {
+    row('ux.accessibility', 'ux', 'Production user workflows, accessibility-sensitive modals, and failure states are source-matrixed, smoke-tested, artifacted, and documented before release.', 'validated', {
       releaseBlocking: true,
       commands: ['npm run ux:accessibility:validate', 'npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:hawk', 'npm run test:ui:aws', 'npm run test:ui:a11y', 'npm run test:ui:snapshot'],
       evidenceRefs: ['docs/ux-accessibility-matrix.json', 'docs/TECH_SPECS.md', 'src/renderer/index.html', 'src/renderer/smoke/uiA11ySmoke.js', 'src/renderer/smoke/uiRegressionSmoke.js', 'src/renderer/smoke/uiSnapshotSmoke.js', 'test/electron/startupSmoke.js', 'test/electron/uiA11ySmoke.js', 'scripts/smokeProcess.js', 'electron/app-shell/mainWindow.js'],

@@ -81,7 +81,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 
 ## Technology Stack
 
-- Desktop shell: Electron `41.3.0`
+- Desktop shell: Electron `42.2.0`
 - Main process: CommonJS Node modules under `electron/`
 - Renderer UI: static HTML/CSS/JavaScript under `src/renderer/`
 - Core services: CommonJS Node modules under `src/core/`
