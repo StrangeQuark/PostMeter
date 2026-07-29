@@ -1485,6 +1485,8 @@
     assertUiSmoke(checkbox, 'Variable tooltip hint setting checkbox should exist.');
     assertUiSmoke(checkbox.checked === true, 'Variable tooltip hint setting should default to checked.');
 
+    checkbox.scrollIntoView({ block: 'center', inline: 'nearest' });
+    await nextPaint();
     clickElementAtCenter(checkbox, 'Variable tooltip hint setting checkbox');
     await waitForUiSmoke(
       () => checkbox.checked === false && workspace.settings.editor.variableTooltipHints === false,
@@ -1499,6 +1501,8 @@
       global
     );
 
+    checkbox.scrollIntoView({ block: 'center', inline: 'nearest' });
+    await nextPaint();
     clickElementAtCenter(checkbox, 'Variable tooltip hint setting checkbox');
     await waitForUiSmoke(
       () => checkbox.checked === true && workspace.settings.editor.variableTooltipHints === true,
