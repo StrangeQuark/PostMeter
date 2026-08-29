@@ -1485,6 +1485,7 @@ function normalizeTimeoutMillis(value) {
 async function prepareRequestForSend(request, environment, options = {}) {
   const refreshed = await maybeRefreshOAuthToken(request?.auth, environment, {
     fetchImpl: options.fetchImpl,
+    networkPolicy: options.networkPolicy,
     signal: options.signal,
     now: options.now
   });
