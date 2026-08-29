@@ -440,16 +440,13 @@ function registerWorkspaceIpc(options = {}) {
     return publicResult;
   });
 
-  ipcMain.handle('workspace:encrypt', async (_event, workspaceId, encryptionKey, nextWorkspace = null) => {
+  ipcMain.handle('workspace:encrypt', async (_event, workspaceId, encryptionKey) => {
     const targetWorkspaceId = validateWorkspaceId(workspaceId);
     const key = validateWorkspaceEncryptionKey(encryptionKey);
-    if (nextWorkspace) {
-      assertWorkspacePayload(nextWorkspace);
-    }
     const result = await queueWorkspaceOperation(async () => {
       const workspaceStore = getWorkspaceStore();
       const currentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
-      let workspaceForEncryption = nextWorkspace || getWorkspace();
+      let workspaceForEncryption = getWorkspace();
       if (targetWorkspaceId === currentWorkspaceId && workspaceForEncryption) {
         const localSettings = await saveLocalSettings(
           workspaceForEncryption.settings,
