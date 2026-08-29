@@ -9,7 +9,7 @@ This inventory is intentionally limited to direct runtime dependencies plus the 
 | `@grpc/grpc-js@1.14.4` | Apache-2.0 | Parent-owned gRPC transport only. |
 | `@grpc/proto-loader@0.8.1` | Apache-2.0 | Parent-owned `.proto` loading for gRPC requests only. |
 | `@xmldom/xmldom@0.9.10` | MIT | Import/export XML parsing and formatting helpers. |
-| `electron@42.2.0` | MIT | Desktop shell runtime and packaged application host. |
+| `electron@42.10.1` | MIT | Desktop shell runtime and packaged application host. |
 | `electron-builder@26.15.3` | MIT | Release packaging, installer, and artifact generation tooling. |
 | `electron-updater@6.8.9` | MIT | GitHub update metadata checks and packaged update flow. |
 | `handlebars@4.7.9` | MIT | Isolated visualizer runtime bundle. |
