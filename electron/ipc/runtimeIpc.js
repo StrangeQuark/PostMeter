@@ -58,6 +58,7 @@ const {
   classifyHostname
 } = require('../../src/core/security/networkPolicy');
 const { mainOwnedFileBindingsForWorkspace } = require('../../src/core/http/fileAttachmentBindings');
+const { artifactIsImportedUntrusted } = require('../../src/core/security/importProvenance');
 
 const RESULT_STORE_WARNING_MARGIN_BYTES = 1024 * 1024 * 1024;
 const IMPORT_TEXT_LIMIT = fieldLimit('body');
@@ -182,7 +183,8 @@ function registerRuntimeIpc(options = {}) {
         dialog,
         getMainWindow,
         recordDiagnosticEvent,
-        workspace
+        workspace,
+        artifacts: [collection]
       });
       const runnerOptions = {
         abortController,
@@ -403,7 +405,8 @@ function registerRuntimeIpc(options = {}) {
         dialog,
         getMainWindow,
         recordDiagnosticEvent,
-        workspace
+        workspace,
+        artifacts: [performanceTest]
       });
       currentResultStore?.close?.();
       currentResultStore = await prepareRuntimeResultStore({
@@ -748,7 +751,8 @@ function assessHighRiskRun(options = {}) {
   const kind = options.kind === 'performance' ? 'performance' : 'runner';
   const workspace = options.workspace || {};
   const security = workspace.localsettings?.security || {};
-  const importedUntrusted = security.importedUntrusted === true;
+  const importedUntrusted = security.importedUntrusted === true
+    || artifactIsImportedUntrusted(options.collection, options.performanceTest);
   const plannedRequests = boundedRuntimeNumber(options.plannedRequests, 0);
   const concurrency = boundedRuntimeNumber(options.concurrency, 1);
   const durationSeconds = boundedRuntimeNumber(options.durationSeconds, 0);

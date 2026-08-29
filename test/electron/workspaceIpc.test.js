@@ -1224,6 +1224,7 @@ test('workspace IPC imports and exports environments and runner definitions', as
   });
   assert.equal(runnerImport.cancelled, false);
   assert.equal(runnerImport.runner.name, 'Smoke Runner');
+  assert.equal(runnerImport.runner.security.importedUntrusted, true);
 
   const runnerExport = await handlers.get('runner:exportDefinition')({}, runnerImport.runner, 'postmeter');
   assert.equal(runnerExport.cancelled, false);
@@ -1300,7 +1301,10 @@ test('workspace IPC exposes only documented collection import filters', async ()
   assert.deepEqual(openDialogOptions?.properties, ['openFile']);
   assert.deepEqual(openDialogOptions?.filters, collectionImportFilters());
   assert.equal(importedPath, '/tmp/collection.openapi.json');
-  assert.deepEqual(result, { cancelled: false, collection: { id: 'c1', name: 'Imported', requests: [], folders: [] } });
+  assert.deepEqual(result, {
+    cancelled: false,
+    collection: { id: 'c1', name: 'Imported', requests: [], folders: [], security: { importedUntrusted: true } }
+  });
 });
 
 test('workspace IPC imports a workspace as an additional managed workspace without backing up or replacing the current workspace', async () => {

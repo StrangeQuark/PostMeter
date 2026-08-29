@@ -80,10 +80,11 @@ function registerRequestIpc(options = {}) {
         fileBindings: mainOwnedFileBindings(workspaceSnapshot),
         networkPolicy: createRequestNetworkPolicyForWorkspace({
           dialog,
-          getMainWindow,
-          recordDiagnosticEvent,
-          workspace: workspaceSnapshot
-        }),
+        getMainWindow,
+        recordDiagnosticEvent,
+        workspace: workspaceSnapshot,
+        artifacts: [requestContext?.collection, requestContext?.request, request]
+      }),
         sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
         trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspaceSnapshot),
         tlsSettings,

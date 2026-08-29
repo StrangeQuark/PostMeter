@@ -66,6 +66,7 @@ const {
   findWorkspaceRunnerRequestContext,
   findWorkspaceRequestContext
 } = require('../services/workspaceMutations');
+const { markArtifactImportedUntrusted } = require('../../src/core/security/importProvenance');
 
 const IMPORT_TEXT_LIMIT = fieldLimit('body');
 
@@ -696,7 +697,7 @@ function registerWorkspaceIpc(options = {}) {
           requestCount: countRequests(collection)
         }
       });
-      return fileOperationResult({ cancelled: false, collection });
+      return fileOperationResult({ cancelled: false, collection: markArtifactImportedUntrusted(collection) });
     } catch (error) {
       await recordDiagnosticEvent({
         type: 'collection.import.failed',
@@ -771,7 +772,7 @@ function registerWorkspaceIpc(options = {}) {
     }
     const runner = importRunnerFromText(importSource.text);
     assertRunnerPayload(runner);
-    return fileOperationResult({ cancelled: false, runner });
+    return fileOperationResult({ cancelled: false, runner: markArtifactImportedUntrusted(runner) });
   });
 
   ipcMain.handle('runner:exportDefinition', async (_event, runner, format = 'postmeter') => {
@@ -811,7 +812,7 @@ function registerWorkspaceIpc(options = {}) {
     }
     const request = importRequestFromText(content);
     assertRequestPayload(request);
-    return fileOperationResult({ cancelled: false, request });
+    return fileOperationResult({ cancelled: false, request: markArtifactImportedUntrusted(request) });
   });
 
   ipcMain.handle('request:export', async (_event, request, format = 'postmeter') => {
