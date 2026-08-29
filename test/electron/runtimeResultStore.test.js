@@ -112,6 +112,20 @@ test('runtime result store cleanup removes SQLite files and sidecars', async () 
   }
 });
 
+test('runtime result store creates owner-only runtime files', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-result-permissions-'));
+  const storePath = path.join(temp, 'runtime', 'current.sqlite');
+  const store = createRuntimeResultStore(storePath);
+  try {
+    await store.reset();
+    assert.equal((await fs.stat(path.dirname(storePath))).mode & 0o777, 0o700);
+    assert.equal((await fs.stat(storePath)).mode & 0o777, 0o600);
+  } finally {
+    store.close();
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});
+
 test('runtime result store reset replaces stale SQLite schema if file removal is skipped', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-result-stale-schema-'));
   const storePath = path.join(temp, 'current.sqlite');

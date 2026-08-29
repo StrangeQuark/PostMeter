@@ -191,6 +191,9 @@ if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
 
 async function startApplication() {
   try {
+    // A prior crash bypasses will-quit. Do not expose stale runtime captures
+    // while the next workspace is loading.
+    cleanupRuntimeResultStoreSync(runtimeResultStorePath);
     registerAppProtocolHandler(protocol, { app, env: process.env });
     oauthFlows.registerProtocol();
     sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
