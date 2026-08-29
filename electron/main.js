@@ -201,7 +201,10 @@ async function startApplication() {
     try {
       const loaded = await workspaceStore.load({ preferredWorkspaceId: sessionState.activeWorkspaceId });
       workspace = hydrateWorkspaceSettings(loaded.workspace, loaded.activeWorkspaceId);
-      sessionState = await sessionStore.patch({ activeWorkspaceId: loaded.activeWorkspaceId });
+      sessionState = await sessionStore.patch(
+        { activeWorkspaceId: loaded.activeWorkspaceId },
+        { redactSensitive: loaded.encrypted === true }
+      );
     } catch (error) {
       if (error instanceof WorkspaceRecoveryError) {
         workspace = hydrateWorkspaceSettings(error.recoveredWorkspace, error.activeWorkspaceId || workspaceStore.getWorkspaceId());
@@ -616,6 +619,7 @@ registerDiagnosticsIpc({
 registerSessionIpc({
   getSession: () => sessionState,
   getSessionStore: () => sessionStore,
+  getWorkspaceEncryptionState: () => workspaceStore?.isWorkspaceEncrypted?.(workspaceStore.getWorkspaceId()) === true,
   ipcMain: trustedIpcMain,
   setSession: (nextSession) => {
     sessionState = nextSession;

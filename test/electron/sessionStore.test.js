@@ -184,3 +184,20 @@ test('session store can synchronously save normalized renderer session state', a
   const raw = JSON.parse(await fs.readFile(sessionPath, 'utf8'));
   assert.equal(raw.activeEnvironmentId, 'environment-1');
 });
+
+test('session store redacts draft and dirty content for encrypted workspaces', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-session-encrypted-'));
+  const sessionPath = path.join(temp, 'session.json');
+  const store = new SessionStore(sessionPath);
+  await store.save({
+    activeWorkspaceId: 'Encrypted.json',
+    draftRequests: [{ id: 'draft-1', headers: [{ key: 'Authorization', value: 'canary' }], body: 'canary-body' }],
+    openRequestTabs: [{ key: 'draft:draft-1', requestId: 'draft-1', draft: true, dirty: true, currentState: { body: 'canary-body' } }]
+  }, { redactSensitive: true });
+
+  const raw = await fs.readFile(sessionPath, 'utf8');
+  assert.doesNotMatch(raw, /canary/);
+  const loaded = await store.load();
+  assert.deepEqual(loaded.draftRequests, []);
+  assert.equal(loaded.openRequestTabs[0].currentState, null);
+});
