@@ -303,6 +303,9 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
 async function sendWithTransport(url, fetchOptions, options = {}) {
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   const networkClassification = await enforceRequestNetworkPolicy(url, options.networkPolicy);
+  const proxyNetworkClassification = options.proxyOptions
+    ? await enforceRequestNetworkPolicy(new URL(`${options.proxyOptions.protocol}//${options.proxyOptions.hostname}:${options.proxyOptions.port}`), options.networkPolicy)
+    : null;
   if (requestSettings.httpVersion === 'http2') {
     if (options.proxyOptions) {
       throw new Error('HTTP/2 requests through proxies are not supported yet.');
@@ -314,6 +317,7 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
       requestSettings,
       networkPolicy: options.networkPolicy,
       networkClassification,
+      proxyNetworkLookup: pinnedNetworkLookup(proxyNetworkClassification),
       responseLimits: options.responseLimits
     });
   }
@@ -333,6 +337,7 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
       requestSettings,
       networkPolicy: options.networkPolicy,
       networkClassification,
+      proxyNetworkLookup: pinnedNetworkLookup(proxyNetworkClassification),
       responseLimits: options.responseLimits
     });
   }
@@ -949,7 +954,8 @@ function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOpt
       method: requestOptions.method,
       headers,
       insecureHTTPParser: requestSettings.strictHttpParser !== true,
-      signal: requestOptions.signal
+      signal: requestOptions.signal,
+      ...(options.proxyNetworkLookup ? { lookup: options.proxyNetworkLookup } : {})
     };
     const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings, options.responseLimits));
     attachNodeRequestTimingListeners(request, timings);
@@ -968,7 +974,7 @@ function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOpt
 }
 
 async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions, options = {}) {
-  const tunnelSocket = await openProxyTunnel(url, requestOptions.signal, proxyOptions);
+  const tunnelSocket = await openProxyTunnel(url, requestOptions.signal, proxyOptions, options.proxyNetworkLookup);
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http;
@@ -1014,7 +1020,7 @@ async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptio
   });
 }
 
-function openProxyTunnel(url, signal, proxyOptions) {
+function openProxyTunnel(url, signal, proxyOptions, proxyNetworkLookup = null) {
   return new Promise((resolve, reject) => {
     const transport = proxyOptions.protocol === 'https:' ? https : http;
     const target = hostHeaderForUrl(url);
@@ -1024,6 +1030,7 @@ function openProxyTunnel(url, signal, proxyOptions) {
       protocol: proxyOptions.protocol,
       hostname: proxyOptions.hostname,
       port: proxyOptions.port,
+      ...(proxyNetworkLookup ? { lookup: proxyNetworkLookup } : {}),
       method: 'CONNECT',
       path: target,
       headers,
