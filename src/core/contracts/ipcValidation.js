@@ -229,6 +229,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'refreshingAuthOriginalAuth',
     'autoHeaders',
     'scripts',
+    'security',
     'source',
     'settings',
     'url',
