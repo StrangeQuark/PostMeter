@@ -550,6 +550,13 @@ trustedIpcMain.handle('vault:metadata', async () => {
 
 trustedIpcMain.handle('vault:reset', async () => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const confirmation = await dialog.showMessageBox(mainWindow, {
+    type: 'warning', buttons: ['Reset vault', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
+    title: 'Reset workspace vault?', message: 'All stored vault secrets for this workspace will be removed.'
+  });
+  if (confirmation?.response !== 0) {
+    return { ok: false, cancelled: true };
+  }
   await deleteVaultStore(workspaceId);
   await recordDiagnosticEvent({
     type: 'vault.reset.completed',
@@ -575,6 +582,13 @@ trustedIpcMain.handle('vault:bind-secret', async (_event, key, value) => {
 
 trustedIpcMain.handle('vault:unset-secret', async (_event, key) => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const confirmation = await dialog.showMessageBox(mainWindow, {
+    type: 'warning', buttons: ['Remove secret', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
+    title: 'Remove vault secret?', message: `Remove the vault secret "${String(key || '').slice(0, 256)}" from this workspace?`
+  });
+  if (confirmation?.response !== 0) {
+    return { ok: false, cancelled: true };
+  }
   const store = vaultStoreForWorkspace(workspaceId);
   await store.unset(key, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
   await recordDiagnosticEvent({
