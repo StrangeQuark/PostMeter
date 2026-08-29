@@ -7,6 +7,7 @@ const {
   normalizeCapturePolicy
 } = require('../workspace/resultCapturePolicy');
 const { writeResultHtmlReport } = require('../import-export/resultHtmlReport');
+const { csvValue } = require('../import-export/csvSafety');
 
 const RESULT_STORE_SCHEMA_VERSION = 1;
 const DEFAULT_RESULT_STORE_FILENAME = 'postmeter-current-results.sqlite';
@@ -707,11 +708,6 @@ function parseJson(value) {
   } catch {
     return null;
   }
-}
-
-function csvValue(value) {
-  const text = String(value ?? '');
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 function csvRow(values) {

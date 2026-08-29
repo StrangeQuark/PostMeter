@@ -26,6 +26,7 @@ const {
 const {
   resolveFileAttachmentBinding
 } = require('../http/fileAttachmentBindings');
+const { csvValue } = require('../import-export/csvSafety');
 
 const MAX_PM_EXECUTION_RUN_REQUEST_DEPTH = 5;
 const MAX_PM_EXECUTION_RUN_REQUESTS_PER_COLLECTION = 50;
@@ -1126,11 +1127,6 @@ function appendScriptTests(rows, item, phase, scriptResult) {
   for (const test of scriptResult.tests || []) {
     rows.push([item.requestId || '', phase, test.name || '', test.passed === true, test.error || '']);
   }
-}
-
-function csvValue(value) {
-  const text = String(value ?? '');
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 module.exports = {
