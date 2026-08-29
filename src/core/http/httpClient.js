@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const http = require('node:http');
 const http2 = require('node:http2');
 const https = require('node:https');
+const net = require('node:net');
 const path = require('node:path');
 const tls = require('node:tls');
 const zlib = require('node:zlib');
@@ -301,7 +302,7 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
 
 async function sendWithTransport(url, fetchOptions, options = {}) {
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
-  await enforceRequestNetworkPolicy(url, options.networkPolicy);
+  const networkClassification = await enforceRequestNetworkPolicy(url, options.networkPolicy);
   if (requestSettings.httpVersion === 'http2') {
     if (options.proxyOptions) {
       throw new Error('HTTP/2 requests through proxies are not supported yet.');
@@ -312,6 +313,7 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
       hasClientCertificate: options.tlsPolicy?.hasClientCertificate === true,
       requestSettings,
       networkPolicy: options.networkPolicy,
+      networkClassification,
       responseLimits: options.responseLimits
     });
   }
@@ -319,6 +321,7 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
     || options.collectTimings
     || options.tlsOptions
     || options.proxyOptions
+    || options.networkPolicy?.enabled === true
     || requestSettingsRequireNodeTransport(requestSettings)
     || requiresBoundedNodeTransport(options.responseLimits)) {
     return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
@@ -329,6 +332,7 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
       proxyOptions: options.proxyOptions,
       requestSettings,
       networkPolicy: options.networkPolicy,
+      networkClassification,
       responseLimits: options.responseLimits
     });
   }
@@ -548,10 +552,12 @@ function stripCrossOriginRedirectHeaders(headers, options = {}) {
 
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
+  const networkClassification = options.networkClassification || await enforceRequestNetworkPolicy(url, options.networkPolicy);
   const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent, {
     collectTimings: options.collectTimings,
     requestSettings,
-    responseLimits: options.responseLimits
+    responseLimits: options.responseLimits,
+    networkLookup: pinnedNetworkLookup(networkClassification)
   });
   recordResponseCookies(response, url.toString(), options.cookieJarState);
   const location = response.headers.location?.[0];
@@ -617,9 +623,11 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
 
 async function sendHttp2Request(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
   const requestSettings = normalizeRequestSettings(options.requestSettings || {});
+  const networkClassification = options.networkClassification || await enforceRequestNetworkPolicy(url, options.networkPolicy);
   const response = await sendSingleHttp2Request(url, requestOptions, tlsOptions, {
     collectTimings: options.collectTimings,
-    responseLimits: options.responseLimits
+    responseLimits: options.responseLimits,
+    networkLookup: pinnedNetworkLookup(networkClassification)
   });
   recordResponseCookies(response, url.toString(), options.cookieJarState);
   const location = response.headers.location?.[0];
@@ -758,7 +766,10 @@ function sendSingleHttp2Request(url, requestOptions, tlsOptions, options = {}) {
       timings.httpVersion = '2';
     }
     let settled = false;
-    const sessionOptions = url.protocol === 'https:' ? (tlsOptions || {}) : {};
+    const sessionOptions = {
+      ...(url.protocol === 'https:' ? (tlsOptions || {}) : {}),
+      ...(options.networkLookup ? { lookup: options.networkLookup } : {})
+    };
     const session = http2.connect(url.origin, sessionOptions);
     const fail = (error) => {
       if (settled) {
@@ -882,6 +893,7 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = n
       agent,
       insecureHTTPParser: requestSettings.strictHttpParser !== true,
       signal: requestOptions.signal,
+      ...(options.networkLookup ? { lookup: options.networkLookup } : {}),
       ...(url.protocol === 'https:' ? tlsOptions : {})
     };
     const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings, options.responseLimits));
@@ -899,6 +911,21 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = n
     }
     request.end();
   });
+}
+
+function pinnedNetworkLookup(classification = {}) {
+  const address = classification?.addresses?.[0]?.address;
+  if (!address) {
+    return null;
+  }
+  const family = net.isIP(address);
+  if (!family) {
+    return null;
+  }
+  return (_hostname, options, callback) => {
+    const done = typeof options === 'function' ? options : callback;
+    done(null, address, family);
+  };
 }
 
 function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions, options = {}) {
