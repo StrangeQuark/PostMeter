@@ -21,6 +21,7 @@ const {
   createRequestNetworkPolicyForWorkspace
 } = require('../security/requestNetworkPolicy');
 const { mainOwnedFileBindingsForWorkspace } = require('../../src/core/http/fileAttachmentBindings');
+const { artifactIsImportedUntrusted } = require('../../src/core/security/importProvenance');
 
 function registerRequestIpc(options = {}) {
   const {
@@ -64,6 +65,10 @@ function registerRequestIpc(options = {}) {
     const startedAt = Date.now();
     const vaultStore = getVaultStore(workspaceId);
     try {
+      const importedArtifacts = [requestContext?.collection, requestContext?.request, request];
+      if (artifactIsImportedUntrusted(...importedArtifacts) && requestHasScripts(request, requestContext)) {
+        await confirmImportedScriptSend({ dialog, getMainWindow, request });
+      }
       const tlsSettings = await resolveTlsSettingsSecrets(workspaceSnapshot.settings || {}, vaultStore);
       const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequest(request, environment, {
         collectionId: requestContext?.collection?.id || '',
@@ -86,7 +91,7 @@ function registerRequestIpc(options = {}) {
         artifacts: [requestContext?.collection, requestContext?.request, request]
       }),
         sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspaceSnapshot),
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspaceSnapshot, importedArtifacts),
         tlsSettings,
         vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
@@ -338,14 +343,43 @@ function mainOwnedFileBindings(workspace = {}) {
   return mainOwnedFileBindingsForWorkspace(workspace);
 }
 
-function scriptTrustedCapabilitiesForWorkspace(workspace = {}) {
+function scriptTrustedCapabilitiesForWorkspace(workspace = {}, artifacts = []) {
   const trusted = workspace.settings?.sandbox?.trustedCapabilities || {};
+  const importedUntrusted = artifactIsImportedUntrusted(...artifacts);
   return {
-    sendRequest: trusted.sendRequest !== false,
-    cookies: trusted.cookies !== false,
+    sendRequest: !importedUntrusted && trusted.sendRequest !== false,
+    cookies: !importedUntrusted && trusted.cookies !== false,
     vault: false,
     vaultGrants: workspace.localsettings?.sandbox?.trustedCapabilities?.vaultGrants || {}
   };
+}
+
+function requestHasScripts(request, context = {}) {
+  const subjects = [request, context?.request, context?.collection, ...(context?.folders || [])];
+  return subjects.some((subject) => Object.values(subject?.scripts || {}).some((script) => String(script || '').trim()));
+}
+
+async function confirmImportedScriptSend(options = {}) {
+  if (!options.dialog || typeof options.dialog.showMessageBox !== 'function') {
+    const error = new Error('Imported scripted requests require review before sending.');
+    error.code = 'POSTMETER_IMPORTED_SCRIPT_REVIEW_REQUIRED';
+    throw error;
+  }
+  const result = await options.dialog.showMessageBox(options.getMainWindow?.(), {
+    type: 'warning',
+    buttons: ['Send Once', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    title: 'Review Imported Script',
+    message: 'This imported request contains scripts.',
+    detail: `Request destination: ${String(options.request?.url || '').trim() || 'unknown'}\nScript networking and cookies are disabled for this send.`
+  });
+  if (result?.response !== 0) {
+    const error = new Error('Imported scripted request was not approved.');
+    error.code = 'POSTMETER_IMPORTED_SCRIPT_REVIEW_DENIED';
+    throw error;
+  }
 }
 
 module.exports = {

@@ -194,7 +194,7 @@ function registerRuntimeIpc(options = {}) {
         fileBindings: mainOwnedFileBindings(workspace),
         networkPolicy,
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace),
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace, [collection]),
         includeTransportDiagnostics: true,
         tlsSettings,
         vault: vaultStore,
@@ -428,7 +428,7 @@ function registerRuntimeIpc(options = {}) {
         fileBindings: mainOwnedFileBindings(workspace),
         networkPolicy,
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace),
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace, [performanceTest]),
         tlsSettings,
         vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
@@ -1423,11 +1423,12 @@ function safeFileOperationExportResult(filePath) {
   };
 }
 
-function scriptTrustedCapabilitiesForWorkspace(workspace = {}) {
+function scriptTrustedCapabilitiesForWorkspace(workspace = {}, artifacts = []) {
   const trusted = workspace.settings?.sandbox?.trustedCapabilities || {};
+  const importedUntrusted = artifactIsImportedUntrusted(...artifacts);
   return {
-    sendRequest: trusted.sendRequest !== false,
-    cookies: trusted.cookies !== false,
+    sendRequest: !importedUntrusted && trusted.sendRequest !== false,
+    cookies: !importedUntrusted && trusted.cookies !== false,
     vault: false,
     vaultGrants: workspace.localsettings?.sandbox?.trustedCapabilities?.vaultGrants || {}
   };
