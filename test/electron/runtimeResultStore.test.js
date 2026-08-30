@@ -118,8 +118,16 @@ test('runtime result store creates owner-only runtime files', async () => {
   const store = createRuntimeResultStore(storePath);
   try {
     await store.reset();
-    assert.equal((await fs.stat(path.dirname(storePath))).mode & 0o777, 0o700);
-    assert.equal((await fs.stat(storePath)).mode & 0o777, 0o600);
+    const runtimeDirectory = await fs.stat(path.dirname(storePath));
+    const databaseFile = await fs.stat(storePath);
+    assert.ok(runtimeDirectory.isDirectory());
+    assert.ok(databaseFile.isFile());
+
+    // Windows reports POSIX-compatible mode bits rather than the NTFS ACL.
+    if (process.platform !== 'win32') {
+      assert.equal(runtimeDirectory.mode & 0o777, 0o700);
+      assert.equal(databaseFile.mode & 0o777, 0o600);
+    }
   } finally {
     store.close();
     await fs.rm(temp, { recursive: true, force: true });
