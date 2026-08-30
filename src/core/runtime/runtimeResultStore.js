@@ -7,6 +7,7 @@ const {
   normalizeCapturePolicy
 } = require('../workspace/resultCapturePolicy');
 const { writeResultHtmlReport } = require('../import-export/resultHtmlReport');
+const { csvValue } = require('../import-export/csvSafety');
 
 const RESULT_STORE_SCHEMA_VERSION = 1;
 const DEFAULT_RESULT_STORE_FILENAME = 'postmeter-current-results.sqlite';
@@ -41,11 +42,13 @@ class RuntimeResultStore {
 
   async reset() {
     this.close();
-    await fsp.mkdir(path.dirname(this.filePath), { recursive: true });
+    await fsp.mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
+    await fsp.chmod(path.dirname(this.filePath), 0o700).catch(() => {});
     for (const candidate of runtimeResultStoreFiles(this.filePath)) {
       await fsp.rm(candidate, { force: true }).catch(() => {});
     }
     this.db = new DatabaseSync(this.filePath);
+    await fsp.chmod(this.filePath, 0o600).catch(() => {});
     this.db.exec(`
       PRAGMA journal_mode=DELETE;
       PRAGMA synchronous=NORMAL;
@@ -705,11 +708,6 @@ function parseJson(value) {
   } catch {
     return null;
   }
-}
-
-function csvValue(value) {
-  const text = String(value ?? '');
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 function csvRow(values) {

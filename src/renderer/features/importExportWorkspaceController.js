@@ -592,12 +592,11 @@ async function encryptWorkspace(workspaceId = selectedWorkspaceId || activeWorks
     return null;
   }
   try {
-    let workspacePayload = null;
     if (workspaceId === activeWorkspaceId) {
       collectActiveEditorState();
-      workspacePayload = cloneJson(workspace);
+      await saveWorkspace(false, { scope: 'all', collectEditors: false });
     }
-    const loaded = await window.postmeter.workspace.encrypt(workspaceId, key, workspacePayload);
+    const loaded = await window.postmeter.workspace.encrypt(workspaceId, key);
     if (workspaceId === activeWorkspaceId) {
       applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: workspaceId });
     } else {

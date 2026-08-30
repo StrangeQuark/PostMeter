@@ -125,7 +125,10 @@ class WorkspaceManager {
     const parsed = JSON.parse(rawContent);
     if (isEncryptedWorkspaceEnvelope(parsed)) {
       const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
-      return this.saveNewWorkspaceTextFile(workspaceName, rawContent, catalog.files);
+      return this.saveNewWorkspaceTextFile(workspaceName, JSON.stringify({
+        ...parsed,
+        importedUntrusted: true
+      }, null, 2), catalog.files);
     }
     const importedWorkspace = markWorkspaceImportedUntrusted(await this.currentStore().importWorkspace(importPath));
     const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
@@ -291,7 +294,12 @@ class WorkspaceManager {
     if (workspaceId !== this.currentWorkspaceId) {
       throw new Error('Only the active workspace can be unlocked. Switch to the workspace before unlocking it.');
     }
-    const loaded = await new WorkspaceStore(this.absoluteWorkspacePath(workspaceId)).load({ encryptionKey });
+    const workspacePath = this.absoluteWorkspacePath(workspaceId);
+    const envelope = JSON.parse(await fs.readFile(workspacePath, 'utf8'));
+    const loaded = await new WorkspaceStore(workspacePath).load({
+      encryptionKey,
+      importedUntrusted: envelope.importedUntrusted === true
+    });
     if (loaded.encrypted !== true) {
       throw new Error(`Workspace "${workspaceId}" is not encrypted.`);
     }

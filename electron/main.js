@@ -191,6 +191,9 @@ if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
 
 async function startApplication() {
   try {
+    // A prior crash bypasses will-quit. Do not expose stale runtime captures
+    // while the next workspace is loading.
+    cleanupRuntimeResultStoreSync(runtimeResultStorePath);
     registerAppProtocolHandler(protocol, { app, env: process.env });
     oauthFlows.registerProtocol();
     sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
@@ -201,7 +204,10 @@ async function startApplication() {
     try {
       const loaded = await workspaceStore.load({ preferredWorkspaceId: sessionState.activeWorkspaceId });
       workspace = hydrateWorkspaceSettings(loaded.workspace, loaded.activeWorkspaceId);
-      sessionState = await sessionStore.patch({ activeWorkspaceId: loaded.activeWorkspaceId });
+      sessionState = await sessionStore.patch(
+        { activeWorkspaceId: loaded.activeWorkspaceId },
+        { redactSensitive: loaded.encrypted === true }
+      );
     } catch (error) {
       if (error instanceof WorkspaceRecoveryError) {
         workspace = hydrateWorkspaceSettings(error.recoveredWorkspace, error.activeWorkspaceId || workspaceStore.getWorkspaceId());
@@ -547,6 +553,13 @@ trustedIpcMain.handle('vault:metadata', async () => {
 
 trustedIpcMain.handle('vault:reset', async () => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const confirmation = await dialog.showMessageBox(mainWindow, {
+    type: 'warning', buttons: ['Reset vault', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
+    title: 'Reset workspace vault?', message: 'All stored vault secrets for this workspace will be removed.'
+  });
+  if (confirmation?.response !== 0) {
+    return { ok: false, cancelled: true };
+  }
   await deleteVaultStore(workspaceId);
   await recordDiagnosticEvent({
     type: 'vault.reset.completed',
@@ -572,6 +585,13 @@ trustedIpcMain.handle('vault:bind-secret', async (_event, key, value) => {
 
 trustedIpcMain.handle('vault:unset-secret', async (_event, key) => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const confirmation = await dialog.showMessageBox(mainWindow, {
+    type: 'warning', buttons: ['Remove secret', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
+    title: 'Remove vault secret?', message: `Remove the vault secret "${String(key || '').slice(0, 256)}" from this workspace?`
+  });
+  if (confirmation?.response !== 0) {
+    return { ok: false, cancelled: true };
+  }
   const store = vaultStoreForWorkspace(workspaceId);
   await store.unset(key, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
   await recordDiagnosticEvent({
@@ -616,6 +636,7 @@ registerDiagnosticsIpc({
 registerSessionIpc({
   getSession: () => sessionState,
   getSessionStore: () => sessionStore,
+  getWorkspaceEncryptionState: () => workspaceStore?.isWorkspaceEncrypted?.(workspaceStore.getWorkspaceId()) === true,
   ipcMain: trustedIpcMain,
   setSession: (nextSession) => {
     sessionState = nextSession;

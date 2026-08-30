@@ -96,9 +96,29 @@ class WorkspaceStore {
       parsed = await decryptWorkspaceEnvelope(parsed, options.encryptionKey);
     }
 
+    const importedUntrusted = encrypted && options.importedUntrusted === true;
+    if (importedUntrusted) {
+      // Imported encrypted envelopes are untrusted input just like plaintext
+      // imports.  Their local state must never become main-owned state.
+      parsed = {
+        ...parsed,
+        settings: undefined,
+        localsettings: undefined,
+        localSettings: undefined
+      };
+    }
+
     const migrated = migrate(parsed);
     const workspace = normalizeWorkspace(parsed);
-    if (migrated) {
+    if (importedUntrusted) {
+      workspace.localsettings.security.importedUntrusted = true;
+      workspace.localsettings.security.allowPrivateNetworkRequests = false;
+      workspace.localsettings.security.privateNetworkPolicySource = '';
+      workspace.localsettings.security.trustedWorkspace = false;
+      workspace.localsettings.security.allowHighRiskRuns = false;
+      workspace.settings = normalizeWorkspace(workspace).settings;
+    }
+    if (migrated || importedUntrusted) {
       await this.createBackup('pre-migration.backup');
       await this.save(workspace, encrypted ? { encryptionKey: options.encryptionKey } : {});
     }

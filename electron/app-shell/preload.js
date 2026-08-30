@@ -97,7 +97,7 @@ const postmeterApi = {
     rename: (workspaceId, name) => ipcRenderer.invoke('workspace:rename', workspaceId, name),
     switch: (workspaceId) => ipcRenderer.invoke('workspace:switch', workspaceId),
     unlock: (workspaceId, key) => ipcRenderer.invoke('workspace:unlock', workspaceId, key),
-    encrypt: (workspaceId, key, workspace) => ipcRenderer.invoke('workspace:encrypt', workspaceId, key, workspace || null),
+    encrypt: (workspaceId, key) => ipcRenderer.invoke('workspace:encrypt', workspaceId, key),
     removeEncryption: (workspaceId, key) => ipcRenderer.invoke('workspace:removeEncryption', workspaceId, key),
     resetEncryptionKey: (workspaceId, currentKey, newKey) => ipcRenderer.invoke(
       'workspace:resetEncryptionKey',

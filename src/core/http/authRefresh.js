@@ -246,6 +246,7 @@ class AuthRefreshManager {
       tlsSettings: scope.tlsSettings || {},
       fileBindings: scope.fileBindings || [],
       sandboxPackages: scope.sandboxPackages || [],
+      networkPolicy: scope.networkPolicy,
       vault: scope.vault,
       vaultPrompt: scope.vaultPrompt,
       recordDiagnosticEvent: scope.recordDiagnosticEvent,

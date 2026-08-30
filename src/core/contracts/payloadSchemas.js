@@ -424,6 +424,7 @@ const FIELD_SCHEMAS = {
     allowEnvironmentMutation: { type: 'boolean', optional: true },
     stopOnFailure: { type: 'boolean', optional: true }
   },
+  artifactSecurity: {},
   runnerRequestSource: {
     collectionId: { type: 'string', limit: 'name', optional: true },
     collectionName: { type: 'string', limit: 'name', optional: true },

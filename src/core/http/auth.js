@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const net = require('node:net');
+const { classifyNetworkDestination } = require('../security/networkPolicy');
 const { resolveEnvironmentValue } = require('../workspace/environmentResolver');
 const {
   API_KEY_LOCATIONS,
@@ -22,6 +23,7 @@ const OAUTH_DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const OAUTH_PKCE_CODE_VERIFIER_BYTES = 32;
 const OAUTH_PKCE_STATE_BYTES = 24;
 const OAUTH_REDACTED_VALUE = '[redacted]';
+const MAX_OAUTH_RESPONSE_BYTES = 1024 * 1024;
 const OAUTH_AUTH_SCHEME_NAMES = 'Bearer|Basic|Digest|Hawk|Token|OAuth|NTLM|Negotiate|AWS4-HMAC-SHA256|EG1-HMAC-SHA256';
 const OAUTH_SECRET_FIELD_NAMES = [
   'token',
@@ -2004,6 +2006,7 @@ function oauth2RequestParams(params, environment) {
 }
 
 async function postOAuthTokenRequest(url, body, options, label, requestOptions = {}) {
+  await enforceOAuthNetworkPolicy(url, options.networkPolicy);
   const fetchImpl = options.fetchImpl || fetch;
   const response = await fetchImpl(url, {
     method: 'POST',
@@ -2021,7 +2024,7 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
     throw new Error(`${label} refused an HTTP redirect from the token endpoint.`);
   }
 
-  const responseText = await response.text();
+  const responseText = await readOAuthResponseText(response, label);
   const payload = parseOAuthTokenResponsePayload(responseText, response.headers.get('content-type'), label, {
     status: response.status
   });
@@ -2041,6 +2044,69 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
     throw new Error(`${label} response did not include an access token.`);
   }
   return payload;
+}
+
+async function enforceOAuthNetworkPolicy(url, policy = {}) {
+  if (!policy || policy.enabled !== true) {
+    return;
+  }
+  const classification = await classifyNetworkDestination(url, { resolveHost: policy.resolveHost });
+  if (classification.category === 'public') {
+    return;
+  }
+  if (classification.category === 'metadata') {
+    throw oauthNetworkPolicyError('Metadata-service OAuth endpoints are blocked.', classification);
+  }
+  if (policy.allowPrivateNetworkRequests === true) {
+    return;
+  }
+  if (typeof policy.confirmPrivateNetworkRequest === 'function'
+    && await policy.confirmPrivateNetworkRequest(classification) === true) {
+    return;
+  }
+  throw oauthNetworkPolicyError('Private-network OAuth endpoints are blocked.', classification);
+}
+
+function oauthNetworkPolicyError(message, classification = {}) {
+  const error = new Error(message);
+  error.code = classification.category === 'metadata'
+    ? 'POSTMETER_METADATA_REQUEST_BLOCKED'
+    : 'POSTMETER_PRIVATE_NETWORK_REQUEST_BLOCKED';
+  return error;
+}
+
+async function readOAuthResponseText(response, label) {
+  const declaredLength = Number(response.headers?.get?.('content-length') || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_OAUTH_RESPONSE_BYTES) {
+    throw new Error(`${label} response exceeds the ${MAX_OAUTH_RESPONSE_BYTES} byte limit.`);
+  }
+  if (!response.body?.getReader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, 'utf8') > MAX_OAUTH_RESPONSE_BYTES) {
+      throw new Error(`${label} response exceeds the ${MAX_OAUTH_RESPONSE_BYTES} byte limit.`);
+    }
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      bytes += value?.byteLength || 0;
+      if (bytes > MAX_OAUTH_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new Error(`${label} response exceeds the ${MAX_OAUTH_RESPONSE_BYTES} byte limit.`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 function parseOAuthTokenResponsePayload(responseText, contentType, label, debugContext = {}) {

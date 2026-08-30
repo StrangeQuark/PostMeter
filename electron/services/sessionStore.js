@@ -17,33 +17,60 @@ class SessionStore {
     return this.sessionPath;
   }
 
-  async load() {
+  async load(options = {}) {
     if (!(await pathExists(this.sessionPath))) {
       return defaultSessionState();
     }
     try {
-      return normalizeSessionState(JSON.parse(await fs.readFile(this.sessionPath, 'utf8')));
+      return sessionForStorage(JSON.parse(await fs.readFile(this.sessionPath, 'utf8')), options);
     } catch {
       return defaultSessionState();
     }
   }
 
-  async save(session) {
-    const normalized = normalizeSessionState(session);
+  async save(session, options = {}) {
+    const normalized = sessionForStorage(session, options);
     await writeJsonFileAtomic(this.sessionPath, normalized, { prefix: 'postmeter-session' });
     return normalized;
   }
 
-  saveSync(session) {
-    const normalized = normalizeSessionState(session);
+  saveSync(session, options = {}) {
+    const normalized = sessionForStorage(session, options);
     writeJsonFileAtomicSync(this.sessionPath, normalized, { prefix: 'postmeter-session' });
     return normalized;
   }
 
-  async patch(partial) {
-    const current = await this.load();
-    return this.save({ ...current, ...partial });
+  async patch(partial, options = {}) {
+    const current = await this.load(options);
+    return this.save({ ...current, ...partial }, options);
   }
+}
+
+function sessionForStorage(session, options = {}) {
+  const normalized = normalizeSessionState(session);
+  return options.redactSensitive === true ? redactSensitiveSessionState(normalized) : normalized;
+}
+
+function redactSensitiveSessionState(session) {
+  const clearTabState = (tabs = []) => tabs.map((tab) => ({
+    ...tab,
+    dirty: false,
+    createdUnsaved: false,
+    snapshot: '',
+    currentState: null
+  }));
+  return {
+    ...session,
+    openCollectionTabs: clearTabState(session.openCollectionTabs),
+    openFolderTabs: clearTabState(session.openFolderTabs),
+    openRequestTabs: clearTabState(session.openRequestTabs),
+    openEnvironmentTabs: clearTabState(session.openEnvironmentTabs),
+    openRunnerTabs: clearTabState(session.openRunnerTabs),
+    openPerformanceTabs: clearTabState(session.openPerformanceTabs),
+    draftRequests: [],
+    dirtyCollectionStates: [],
+    dirtyCookieJarState: null
+  };
 }
 
 function defaultSessionPath(userDataPath) {
@@ -52,5 +79,6 @@ function defaultSessionPath(userDataPath) {
 
 module.exports = {
   SessionStore,
-  defaultSessionPath
+  defaultSessionPath,
+  redactSensitiveSessionState
 };

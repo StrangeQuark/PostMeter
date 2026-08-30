@@ -66,6 +66,7 @@ const {
   findWorkspaceRunnerRequestContext,
   findWorkspaceRequestContext
 } = require('../services/workspaceMutations');
+const { markArtifactImportedUntrusted } = require('../../src/core/security/importProvenance');
 
 const IMPORT_TEXT_LIMIT = fieldLimit('body');
 
@@ -439,16 +440,13 @@ function registerWorkspaceIpc(options = {}) {
     return publicResult;
   });
 
-  ipcMain.handle('workspace:encrypt', async (_event, workspaceId, encryptionKey, nextWorkspace = null) => {
+  ipcMain.handle('workspace:encrypt', async (_event, workspaceId, encryptionKey) => {
     const targetWorkspaceId = validateWorkspaceId(workspaceId);
     const key = validateWorkspaceEncryptionKey(encryptionKey);
-    if (nextWorkspace) {
-      assertWorkspacePayload(nextWorkspace);
-    }
     const result = await queueWorkspaceOperation(async () => {
       const workspaceStore = getWorkspaceStore();
       const currentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
-      let workspaceForEncryption = nextWorkspace || getWorkspace();
+      let workspaceForEncryption = getWorkspace();
       if (targetWorkspaceId === currentWorkspaceId && workspaceForEncryption) {
         const localSettings = await saveLocalSettings(
           workspaceForEncryption.settings,
@@ -696,7 +694,7 @@ function registerWorkspaceIpc(options = {}) {
           requestCount: countRequests(collection)
         }
       });
-      return fileOperationResult({ cancelled: false, collection });
+      return fileOperationResult({ cancelled: false, collection: markArtifactImportedUntrusted(collection) });
     } catch (error) {
       await recordDiagnosticEvent({
         type: 'collection.import.failed',
@@ -771,7 +769,7 @@ function registerWorkspaceIpc(options = {}) {
     }
     const runner = importRunnerFromText(importSource.text);
     assertRunnerPayload(runner);
-    return fileOperationResult({ cancelled: false, runner });
+    return fileOperationResult({ cancelled: false, runner: markArtifactImportedUntrusted(runner) });
   });
 
   ipcMain.handle('runner:exportDefinition', async (_event, runner, format = 'postmeter') => {
@@ -811,7 +809,7 @@ function registerWorkspaceIpc(options = {}) {
     }
     const request = importRequestFromText(content);
     assertRequestPayload(request);
-    return fileOperationResult({ cancelled: false, request });
+    return fileOperationResult({ cancelled: false, request: markArtifactImportedUntrusted(request) });
   });
 
   ipcMain.handle('request:export', async (_event, request, format = 'postmeter') => {
