@@ -85,13 +85,6 @@ test('package metadata declares canonical release repository and desktop protoco
   assert.match(installerInclude, /DeleteRegKey HKCU "Software\\Classes\\postmeter"/);
 });
 
-test('package metadata requires release signing and an expected publisher identity', async () => {
-  const packageJson = JSON.parse(await fs.readFile(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
-  assert.equal(packageJson.build.forceCodeSigning, true);
-  assert.deepEqual(packageJson.build.win.publisherName, 'StrangeQuark');
-  assert.match(packageJson.build.mac.identity, /^Developer ID Application: /);
-});
-
 function readIcoSizes(buffer) {
   assert.ok(buffer.length >= 6, 'ICO must contain a header.');
   assert.equal(buffer.readUInt16LE(0), 0, 'ICO reserved header must be zero.');

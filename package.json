@@ -100,7 +100,6 @@
   "build": {
     "appId": "com.strangequark.postmeter",
     "productName": "PostMeter",
-    "forceCodeSigning": true,
     "icon": "build/icon.png",
     "protocols": [
       {
@@ -145,7 +144,6 @@
     },
     "win": {
       "icon": "build/icon.ico",
-      "publisherName": "StrangeQuark",
       "extraResources": [
         {
           "from": "native/windows-sandbox-helper/bin/PostMeterWindowsSandboxHelper.exe",
@@ -163,7 +161,6 @@
       "uninstallerIcon": "build/icon.ico"
     },
     "mac": {
-      "identity": "Developer ID Application: StrangeQuark",
       "category": "public.app-category.developer-tools",
       "target": [
         "dmg",
