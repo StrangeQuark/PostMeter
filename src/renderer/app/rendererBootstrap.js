@@ -229,6 +229,7 @@
     bindClick(doc, 'exportCurlButton', options.onExportCurl);
     bindClick(doc, 'exportEnvironmentButton', options.onExportEnvironment);
     bindClick(doc, 'exportPostmanEnvironmentButton', options.onExportPostmanEnvironment);
+    bindClick(doc, 'exportDotenvEnvironmentButton', options.onExportDotenvEnvironment);
     bindClick(doc, 'exportRunnerDefinitionButton', options.onExportRunnerDefinition);
     bindClick(doc, 'exportPerformanceTestMenuButton', options.onExportPerformanceTest);
     bindClick(doc, 'sendButton', options.onSendRequest);

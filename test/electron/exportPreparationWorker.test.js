@@ -83,7 +83,7 @@ test('export preparation worker rejects unsupported kinds, formats, and malforme
   );
   assert.throws(
     () => prepareExport({ kind: 'environment', format: 'curl', payload: { id: 'e', name: 'E', variables: [] } }),
-    /Environment export format must be postmeter or postman/
+    /Environment export format must be postmeter, postman, or dotenv/
   );
   assert.throws(
     () => prepareExport({ kind: 'runner', format: 'json', payload: runnerModel({ id: 'runner-1', name: 'Runner' }) }),

@@ -543,6 +543,20 @@ const state = {
   get maxOpenRequestTabs() { return RENDERER_STATE_DEFAULTS.maxOpenRequestTabs; }
 };
 
+function renderActiveRequestTabResponse() {
+  const activeTab = openRequestTabs.find((tab) => isActiveRequestTab(tab));
+  const response = activeTab?.response;
+  if (!response) {
+    clearResponseDisplay();
+    return;
+  }
+  if (response.errorMessage) {
+    displayResponseFailure(response.errorMessage);
+    return;
+  }
+  displayResponse(response);
+}
+
 const requestTabState = createRequestTabState({
   state,
   activeCollection,
@@ -600,6 +614,7 @@ const rendererWorkflows = createRendererWorkflows({
   collectRequestFromEditor,
   collectSettingsFromEditor,
   displayResponse,
+  displayResponseFailure,
   displayTestResults,
   domainFromRequestUrl,
   notifyUser,

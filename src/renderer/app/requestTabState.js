@@ -1736,6 +1736,10 @@
         return;
       }
       const wasActive = rendererState.isActiveRequestTab(state, tab);
+      delete tab.response;
+      if (state.lastResponse?.requestId === tab.requestId) {
+        state.lastResponse = null;
+      }
       state.openRequestTabs.splice(index, 1);
       if (!wasActive) {
         if (options.forceRenderAll === true) {

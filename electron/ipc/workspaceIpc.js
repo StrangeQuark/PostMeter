@@ -728,7 +728,7 @@ function registerWorkspaceIpc(options = {}) {
     const importSource = await readTextImportSource(providedSource, 'environment import path', async () => selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
       title: 'Import Environment',
       properties: ['openFile'],
-      filters: jsonFilters()
+      filters: environmentImportFilters()
     })), { dialog, env, getMainWindow });
     if (!importSource) {
       return fileOperationResult({ cancelled: true });
@@ -746,7 +746,7 @@ function registerWorkspaceIpc(options = {}) {
       title: 'Export Environment',
       defaultPath: `${safeFilename(environment?.name || 'environment')}.${extension}`,
       filters: [
-        { name: `${format === 'postman' ? 'Postman' : 'PostMeter'} Environment`, extensions: ['json'] },
+        { name: environmentExportFormatName(format), extensions: [format === 'dotenv' ? 'env' : 'json'] },
         { name: 'All Files', extensions: ['*'] }
       ]
     });
@@ -978,13 +978,30 @@ function countFolders(collection = {}) {
 }
 
 function assertEnvironmentExportFormat(format) {
-  if (!['postmeter', 'postman'].includes(String(format || ''))) {
-    throw new Error('Environment export format must be postmeter or postman.');
+  if (!['postmeter', 'postman', 'dotenv'].includes(String(format || ''))) {
+    throw new Error('Environment export format must be postmeter, postman, or dotenv.');
   }
 }
 
 function environmentExportExtension(format) {
+  if (format === 'dotenv') {
+    return 'env';
+  }
   return format === 'postman' ? 'postman_environment.json' : 'postmeter-environment.json';
+}
+
+function environmentImportFilters() {
+  return [
+    { name: 'Environment Files', extensions: ['json', 'env'] },
+    { name: 'All Files', extensions: ['*'] }
+  ];
+}
+
+function environmentExportFormatName(format) {
+  if (format === 'dotenv') {
+    return '.env Environment';
+  }
+  return format === 'postman' ? 'Postman Environment' : 'PostMeter Environment';
 }
 
 async function rollbackWorkspaceRename(workspaceStore, renamedWorkspaceId, originalWorkspaceId) {

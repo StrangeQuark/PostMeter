@@ -177,7 +177,7 @@ function exportDialogOptions(options = {}) {
         title: 'Export Environment',
         defaultPath: `${name}.${environmentExportExtension(format)}`,
         filters: [
-          { name: `${format === 'postman' ? 'Postman' : 'PostMeter'} Environment`, extensions: ['json'] },
+          { name: environmentExportFormatName(format), extensions: [format === 'dotenv' ? 'env' : 'json'] },
           { name: 'All Files', extensions: ['*'] }
         ]
       };
@@ -288,13 +288,23 @@ function assertRequestExportFormat(format) {
 }
 
 function assertEnvironmentExportFormat(format) {
-  if (!['postmeter', 'postman'].includes(String(format || ''))) {
-    throw new Error('Environment export format must be postmeter or postman.');
+  if (!['postmeter', 'postman', 'dotenv'].includes(String(format || ''))) {
+    throw new Error('Environment export format must be postmeter, postman, or dotenv.');
   }
 }
 
 function environmentExportExtension(format) {
+  if (format === 'dotenv') {
+    return 'env';
+  }
   return format === 'postman' ? 'postman_environment.json' : 'postmeter-environment.json';
+}
+
+function environmentExportFormatName(format) {
+  if (format === 'dotenv') {
+    return '.env Environment';
+  }
+  return format === 'postman' ? 'Postman Environment' : 'PostMeter Environment';
 }
 
 function defaultExportName(kind) {

@@ -61,7 +61,8 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
       collectionId: 'collection-1',
       requestId: 'request-1',
       dirty: true,
-      snapshot: '{"saved":true}'
+      snapshot: '{"saved":true}',
+      response: { statusCode: 200, body: '{"sessionOnly":true}' }
     },
     {
       key: 'draft:draft-1',
@@ -129,6 +130,7 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   assert.deepEqual(session.workspaceOrder, ['Workspace 2.json', 'Workspace.json']);
   assert.equal(session.openCollectionTabs[0].currentState.name, 'Dirty Collection');
   assert.equal(session.openRequestTabs[0].currentState.url, 'https://example.test');
+  assert.equal(Object.hasOwn(session.openRequestTabs[0], 'response'), false);
   assert.equal(session.openRequestTabs[1].currentState, null);
   assert.equal(session.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
   assert.equal(session.openRunnerTabs[0].currentState.name, 'Dirty Runner');

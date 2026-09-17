@@ -331,7 +331,7 @@
     {
       "id": "ipc.channel.environment-export",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `environment:export`: Environment export validates environment payloads and writes native PostMeter or Postman environment JSON through a main-process save picker.",
+      "target": "renderer-to-main channel `environment:export`: Environment export validates environment payloads and writes native PostMeter JSON, Postman JSON, or .env files through a main-process save picker.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/workspaceIpc.js",
@@ -350,7 +350,7 @@
     {
       "id": "ipc.channel.environment-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `environment:import`: Environment import accepts bounded renderer-provided file contents from drag/drop or falls back to a JSON picker, then validates native or Postman environment payloads without trusting renderer-supplied paths.",
+      "target": "renderer-to-main channel `environment:import`: Environment import accepts bounded renderer-provided file contents from drag/drop or falls back to a JSON or .env picker, then validates native or Postman JSON environments or parses .env variables without trusting renderer-supplied paths.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/ipc/workspaceIpc.js",

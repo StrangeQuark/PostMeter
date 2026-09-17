@@ -2188,6 +2188,9 @@ test('renderer workflows scope captured responses to the active request', async 
     scripts: { preRequest: '', tests: '' }
   };
   state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = request.id;
+  state.openRequestTabs = [{ key: 'draft:request-1', requestId: request.id, draft: true }];
   const doc = createDocument();
 
   const workflows = createRendererWorkflows({
@@ -2222,6 +2225,7 @@ test('renderer workflows scope captured responses to the active request', async 
   await workflows.sendActiveRequest();
 
   assert.equal(state.lastResponse.requestId, 'request-1');
+  assert.equal(state.openRequestTabs[0].response.statusCode, 200);
 });
 
 test('renderer workflows apply single-request completions to the request that started the send', async () => {
@@ -2367,9 +2371,10 @@ test('renderer workflows apply single-request completions to the request that st
   assert.equal(authRenderCalls, 0);
   assert.equal(cookieJarRenders, 1);
   assert.equal(historyRenders, 1);
-  assert.equal(displayedResponse.statusCode, 200);
-  assert.equal(displayedResponse.updatedAuth, undefined);
-  assert.equal(displayedResponse.updatedAuthPersisted, undefined);
+  assert.equal(displayedResponse, null);
+  assert.equal(state.openRequestTabs[0].response.statusCode, 200);
+  assert.equal(state.openRequestTabs[0].response.updatedAuth, undefined);
+  assert.equal(state.openRequestTabs[0].response.updatedAuthPersisted, undefined);
   assert.equal(state.lastResponse.requestId, requestOne.id);
   assert.equal(state.lastResponse.updatedAuth, undefined);
   assert.equal(state.lastResponse.updatedAuthPersisted, undefined);

@@ -3,8 +3,10 @@ const test = require('node:test');
 const {
   ENVIRONMENT_FORMAT,
   exportEnvironmentDocument,
+  exportEnvironmentToDotenv,
   exportEnvironmentToJson,
   importEnvironmentDocument,
+  importEnvironmentFromDotenv,
   importEnvironmentFromText
 } = require('../../src/core/import-export/environmentFormats');
 
@@ -61,6 +63,32 @@ test('exports Postman-compatible environment JSON', () => {
     enabled: true,
     type: 'default'
   }]);
+});
+
+test('exports every environment variable to .env and imports standard assignments', () => {
+  const exported = exportEnvironmentToDotenv({
+    id: 'env-1',
+    name: 'Local',
+    variables: [
+      { enabled: true, key: 'BASE_URL', value: 'https://example.test' },
+      { enabled: false, key: 'DISABLED_TOKEN', value: 'not-stripped' },
+      { enabled: true, key: 'GREETING', value: 'hello world' }
+    ]
+  });
+
+  assert.equal(exported, 'BASE_URL=https://example.test\nDISABLED_TOKEN=not-stripped\nGREETING="hello world"\n');
+  const imported = importEnvironmentFromDotenv('# local values\nexport BASE_URL=https://example.test\nGREETING="hello world"\nTOKEN=abc # comment\n');
+  assert.equal(imported.name, 'Imported Environment');
+  assert.deepEqual(imported.variables, [
+    { enabled: true, key: 'BASE_URL', value: 'https://example.test' },
+    { enabled: true, key: 'GREETING', value: 'hello world' },
+    { enabled: true, key: 'TOKEN', value: 'abc' }
+  ]);
+  assert.deepEqual(importEnvironmentFromText(exported).variables, [
+    { enabled: true, key: 'BASE_URL', value: 'https://example.test' },
+    { enabled: true, key: 'DISABLED_TOKEN', value: 'not-stripped' },
+    { enabled: true, key: 'GREETING', value: 'hello world' }
+  ]);
 });
 
 test('rejects malformed environment imports and unsupported export formats', () => {

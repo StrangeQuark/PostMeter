@@ -25,6 +25,7 @@ const FILE_ACTIONS = new Map([
   ['File > Export > Collection > curl', 'export-curl'],
   ['File > Export > Environment > PostMeter', 'export-environment'],
   ['File > Export > Environment > Postman', 'export-postman-environment'],
+  ['File > Export > Environment > .env', 'export-dotenv-environment'],
   ['File > Export > Runner', 'export-runner-definition'],
   ['File > Export > Performance Test', 'export-performance-test'],
   ['File > Export > Workspace', 'export-workspace'],

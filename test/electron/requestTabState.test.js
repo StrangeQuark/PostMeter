@@ -1120,17 +1120,17 @@ test('request tab state saves the requested request tab when closing an inactive
   state.activeMainPanel = 'environment';
   state.activeCollectionId = null;
   state.activeRequestId = null;
-  state.openRequestTabs = [
-    {
+  const requestTab = {
       key: 'request:collection-1:request-1',
       collectionId: 'collection-1',
       requestId: 'request-1',
       dirty: true,
       createdUnsaved: false,
       draft: false,
-      snapshot: JSON.stringify(request)
-    }
-  ];
+      snapshot: JSON.stringify(request),
+      response: { statusCode: 200, body: '{"temporary":true}' }
+    };
+  state.openRequestTabs = [requestTab];
   const persistCalls = [];
   let collectionRenders = 0;
   let tabRenders = 0;
@@ -1162,6 +1162,7 @@ test('request tab state saves the requested request tab when closing an inactive
 
   assert.deepEqual(persistCalls, [{ showStatus: false, config: { requestTabKey: 'request:collection-1:request-1' } }]);
   assert.deepEqual(state.openRequestTabs, []);
+  assert.equal(Object.hasOwn(requestTab, 'response'), false);
   assert.equal(collectionRenders, 1);
   assert.equal(tabRenders, 1);
 });

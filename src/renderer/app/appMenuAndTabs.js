@@ -77,6 +77,9 @@ async function handleAppMenuAction(action) {
       case 'export-postman-environment':
         await exportEnvironmentFromPicker('postman');
         break;
+      case 'export-dotenv-environment':
+        await exportEnvironmentFromPicker('dotenv');
+        break;
       case 'export-runner-definition':
         await exportRunnerDefinitionFromPicker();
         break;

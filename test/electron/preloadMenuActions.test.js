@@ -30,6 +30,7 @@ const ALLOWED_MENU_ACTIONS = [
   'export-curl',
   'export-environment',
   'export-postman-environment',
+  'export-dotenv-environment',
   'export-runner-definition',
   'export-performance-test',
   'export-diagnostics',

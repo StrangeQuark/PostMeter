@@ -32,6 +32,7 @@
     { id: 'export-curl', label: 'Export Collection as curl', defaultShortcut: '', group: 'File' },
     { id: 'export-environment', label: 'Export Environment as PostMeter', defaultShortcut: '', group: 'File' },
     { id: 'export-postman-environment', label: 'Export Environment as Postman', defaultShortcut: '', group: 'File' },
+    { id: 'export-dotenv-environment', label: 'Export Environment as .env', defaultShortcut: '', group: 'File' },
     { id: 'export-runner-definition', label: 'Export Runner', defaultShortcut: '', group: 'File' },
     { id: 'export-performance-test', label: 'Export Performance Test', defaultShortcut: '', group: 'File' },
     { id: 'export-workspace', label: 'Export Workspace', defaultShortcut: '', group: 'File' },

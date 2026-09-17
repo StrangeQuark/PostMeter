@@ -28,6 +28,7 @@
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const collectSettingsFromEditor = options.collectSettingsFromEditor || (() => {});
     const displayResponse = options.displayResponse || (() => {});
+    const displayResponseFailure = options.displayResponseFailure || (() => {});
     const displayTestResults = options.displayTestResults || (() => {});
     const domainFromRequestUrl = options.domainFromRequestUrl || (() => '');
     const notifyUser = options.notifyUser || (() => {});
@@ -68,6 +69,7 @@
 
     function clearResponseDetailsForSend() {
       state.lastResponse = null;
+      clearResponseForRequestTab(currentRequestTabKey());
       element('responseStatus').textContent = '-';
       element('responseTime').textContent = '-';
       element('responseSize').textContent = '-';
@@ -87,6 +89,7 @@
 
     function clearFailedResponseDetails(message) {
       state.lastResponse = null;
+      setResponseForRequestTab(currentRequestTabKey(), { errorMessage: message });
       element('responseStatus').textContent = 'ERR';
       element('responseTime').textContent = '-';
       element('responseSize').textContent = '-';
@@ -102,6 +105,22 @@
       }
       displayTestResults(null);
       refreshResponseEditors({ bodyLanguage: 'text' });
+    }
+
+    function setResponseForRequestTab(tabKey, response) {
+      const tab = (state.openRequestTabs || []).find((candidate) => candidate.key === tabKey);
+      if (tab) {
+        tab.response = response;
+        return true;
+      }
+      return false;
+    }
+
+    function clearResponseForRequestTab(tabKey) {
+      const tab = (state.openRequestTabs || []).find((candidate) => candidate.key === tabKey);
+      if (tab) {
+        delete tab.response;
+      }
     }
 
     function userFacingSendErrorMessage(error) {
@@ -1247,8 +1266,11 @@
           }
           applySingleRequestScriptMutations(response, requestContext);
           const publicResponse = publicResponseResult(response);
-          state.lastResponse = requestActuallySent ? { ...publicResponse, requestId: requestContext.requestId } : null;
-          displayResponse(publicResponse);
+          const responseStored = setResponseForRequestTab(requestTabKey(requestContext), publicResponse);
+          state.lastResponse = requestActuallySent && responseStored ? { ...publicResponse, requestId: requestContext.requestId } : null;
+          if (isActiveRequestContext(requestContext)) {
+            displayResponse(publicResponse);
+          }
           if (requestActuallySent) {
             state.workspace.history = [
               {
@@ -1268,6 +1290,9 @@
         const message = userFacingSendErrorMessage(error);
         if (isActiveRequestContext(requestContext)) {
           clearFailedResponseDetails(message);
+          displayResponseFailure(message);
+        } else if (isActiveWorkspaceContext(requestContext)) {
+          setResponseForRequestTab(requestTabKey(requestContext), { errorMessage: message });
         }
         setStatus(`Request failed: ${firstMessageLine(message)}`);
       }
