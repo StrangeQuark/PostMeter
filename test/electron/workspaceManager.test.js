@@ -173,6 +173,53 @@ test('workspace manager discovers, unlocks, exports, duplicates, and imports enc
   assert.equal(importedWorkspace.collections[0].requests[0].name, 'Updated SSN Request');
 });
 
+test('workspace manager sanitizes local state from imported encrypted workspaces on unlock', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-encrypted-untrusted-'));
+  const importTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-encrypted-untrusted-import-'));
+  const manager = new WorkspaceManager(path.join(temp, 'workspace.json'));
+  const loaded = await manager.load();
+  const canaryPath = path.join(importTemp, 'canary.txt');
+  await fs.writeFile(canaryPath, 'canary');
+
+  const hostileWorkspace = {
+    ...loaded.workspace,
+    localsettings: {
+      sandbox: {
+        fileBindings: [{ source: 'canary', localPath: canaryPath, bound: true }],
+        trustedCapabilities: { vaultGrants: [{ scope: 'workspace', approved: true }] }
+      },
+      security: {
+        importedUntrusted: false,
+        allowPrivateNetworkRequests: true,
+        privateNetworkPolicySource: 'main',
+        trustedWorkspace: true,
+        allowHighRiskRuns: true
+      }
+    }
+  };
+  const envelope = await require('../../src/core/workspace/workspaceEncryption').encryptWorkspacePayload(hostileWorkspace, 'secret1');
+  const importPath = path.join(importTemp, 'Hostile.postmeter.json');
+  await fs.writeFile(importPath, JSON.stringify(envelope));
+
+  const importedId = await manager.importWorkspace(importPath);
+  await manager.switchWorkspace(importedId);
+  const unlocked = await manager.unlockWorkspace(importedId, 'secret1');
+
+  assert.equal(unlocked.workspace.localsettings.security.importedUntrusted, true);
+  assert.equal(unlocked.workspace.localsettings.security.allowPrivateNetworkRequests, false);
+  assert.equal(unlocked.workspace.localsettings.security.privateNetworkPolicySource, '');
+  assert.equal(unlocked.workspace.localsettings.security.trustedWorkspace, false);
+  assert.equal(unlocked.workspace.localsettings.security.allowHighRiskRuns, false);
+  assert.deepEqual(unlocked.workspace.localsettings.sandbox.fileBindings, []);
+  assert.equal(unlocked.workspace.localsettings.sandbox.trustedCapabilities.vaultGrants.workspace, false);
+  assert.deepEqual(unlocked.workspace.localsettings.sandbox.trustedCapabilities.vaultGrants.collections, []);
+  const savedEnvelope = JSON.parse(await fs.readFile(path.join(temp, importedId), 'utf8'));
+  const savedWorkspace = await decryptWorkspaceEnvelope(savedEnvelope, 'secret1');
+  assert.equal(Object.hasOwn(savedWorkspace, 'settings'), false);
+  assert.equal(savedWorkspace.localsettings.security.importedUntrusted, true);
+  assert.deepEqual(savedWorkspace.localsettings.sandbox.fileBindings, []);
+});
+
 test('workspace manager only unlocks the active workspace and keeps export keys transient', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-active-unlock-'));
   const preferredWorkspacePath = path.join(temp, 'workspace.json');

@@ -169,7 +169,10 @@ function validateUsesPins(source, file, findings) {
 function validateRunInterpolations(source, file, findings) {
   const lines = String(source || '').split(/\r?\n/);
   for (const [index, line] of lines.entries()) {
-    if (!/\$\{\{\s*(github\.event|inputs\.)/.test(line)) {
+    if (!/\$\{\{\s*(github\.(?:event|ref_name)|inputs\.)/.test(line)) {
+      continue;
+    }
+    if (/^\s*[A-Za-z_][A-Za-z0-9_]*:\s*\$\{\{\s*github\.ref_name\s*}}\s*(?:#.*)?$/.test(line)) {
       continue;
     }
     if (/"\$\{\{\s*(github\.event|inputs\.)[^}]+}}"|'\$\{\{\s*(github\.event|inputs\.)[^}]+}}'|\$\{\{\s*inputs\.[A-Za-z0-9_]+\s*}}/.test(line)) {

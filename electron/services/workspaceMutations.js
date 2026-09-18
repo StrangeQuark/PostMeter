@@ -6,6 +6,7 @@ const {
   normalizeCookieDomain,
   normalizeCookiePath
 } = require('../../src/core/http/cookieModel');
+const { preserveArtifactSecurity } = require('../../src/core/security/importProvenance');
 
 function cloneJson(value) {
   if (typeof structuredClone === 'function') {
@@ -525,7 +526,10 @@ function applyCollectionSaveToWorkspace(workspace, payload) {
   const collectionId = payload?.collectionId || payload?.collection?.id || '';
   const collectionIndex = nextWorkspace.collections.findIndex((collection) => collection.id === collectionId);
   if (collectionIndex >= 0) {
-    nextWorkspace.collections[collectionIndex] = cloneJson(payload.collection);
+    nextWorkspace.collections[collectionIndex] = preserveArtifactSecurity(
+      workspace?.collections?.[collectionIndex],
+      cloneJson(payload.collection)
+    );
   } else {
     nextWorkspace.collections.push(cloneJson(payload.collection));
   }

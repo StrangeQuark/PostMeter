@@ -50,13 +50,16 @@ function createVaultPrompt(options = {}) {
       });
       return { granted: false, reset: false, scope: 'request' };
     }
-    let decision = null;
     const mainWindow = getMainWindow();
-    if (mainWindow && !mainWindow.isDestroyed?.()) {
-      decision = await promptViaRenderer(mainWindow, safePayload, { timeoutMillis: promptTimeoutMillis }).catch(() => null);
-    }
+    let decision = dialog && typeof dialog.showMessageBox === 'function'
+      ? await promptViaDialog(dialog, mainWindow, safePayload)
+      : null;
+    // Renderer prompts remain only as a test/development fallback when native
+    // dialogs are unavailable. Production vault grants are main-owned.
     if (!decision) {
-      decision = await promptViaDialog(dialog, mainWindow, safePayload);
+      if (mainWindow && !mainWindow.isDestroyed?.()) {
+        decision = await promptViaRenderer(mainWindow, safePayload, { timeoutMillis: promptTimeoutMillis }).catch(() => null);
+      }
     }
     const normalizedDecision = normalizeVaultPromptDecision(decision, safePayload);
     if (normalizedDecision.granted || normalizedDecision.reset === true) {
@@ -102,7 +105,7 @@ function promptViaRenderer(mainWindow, payload, options = {}) {
 
 async function promptViaDialog(dialog, mainWindow, payload) {
   if (!dialog || typeof dialog.showMessageBox !== 'function') {
-    return { granted: false, scope: 'request' };
+    return null;
   }
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'warning',

@@ -157,6 +157,42 @@ function displayResponse(response) {
   displayVisualizer(response.testScriptResult?.visualizer);
 }
 
+function displayResponseFailure(message) {
+  $('responseStatus').textContent = 'ERR';
+  $('responseTime').textContent = '-';
+  $('responseSize').textContent = '-';
+  $('finalUrl').textContent = '-';
+  $('responseHeaders').value = '';
+  $('responseCookies').value = '';
+  if ($('responseNetwork')) {
+    $('responseNetwork').value = '';
+  }
+  $('responseBody').value = message;
+  if ($('visualizerFrame')) {
+    $('visualizerFrame').srcdoc = '';
+  }
+  displayTestResults(null);
+  refreshResponseEditors({ bodyLanguage: 'text' });
+}
+
+function clearResponseDisplay() {
+  $('responseStatus').textContent = '-';
+  $('responseTime').textContent = '-';
+  $('responseSize').textContent = '-';
+  $('finalUrl').textContent = '-';
+  $('responseHeaders').value = '';
+  $('responseCookies').value = '';
+  if ($('responseNetwork')) {
+    $('responseNetwork').value = '';
+  }
+  $('responseBody').value = '';
+  if ($('visualizerFrame')) {
+    $('visualizerFrame').srcdoc = '';
+  }
+  displayTestResults(null);
+  refreshResponseEditors({ bodyLanguage: 'text' });
+}
+
 function refreshResponseEditors({ body, bodyLanguage = 'text', cookies, headers, network } = {}) {
   CodeEditor.setLanguage?.(headers || $('responseHeaders'), 'headers');
   CodeEditor.setLanguage?.(cookies || $('responseCookies'), 'headers');

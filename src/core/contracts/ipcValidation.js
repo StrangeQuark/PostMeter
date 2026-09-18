@@ -117,6 +117,7 @@ function assertCollectionPayload(value, field = 'collection') {
   assertCertificates(value.certificates || [], `${field}.certificates`);
   assertRequestArray(value.requests || [], `${field}.requests`);
   assertFolderArray(value.folders || [], `${field}.folders`, 0);
+  assertArtifactSecurity(value.security, `${field}.security`);
 }
 
 function assertRequestPayload(value, field = 'request') {
@@ -167,6 +168,7 @@ function assertRequestPayload(value, field = 'request') {
     settings: {},
     scripts: undefined
   });
+  assertArtifactSecurity(value.security, `${field}.security`);
   if (value[RETIRED_EXECUTION_POLICY_FIELD] != null) {
     fail(`${field} contains a retired execution policy field.`);
   }
@@ -181,7 +183,8 @@ function assertRunnerPayload(value, field = 'runner') {
     'authRefresh',
     'capturePolicy',
     'csvVariables',
-    'requests'
+    'requests',
+    'security'
   ]);
   assertAuthRefreshPayload(value.authRefresh || {}, `${field}.authRefresh`);
   if (value.capturePolicy != null) {
@@ -189,6 +192,15 @@ function assertRunnerPayload(value, field = 'runner') {
   }
   assertCsvVariablesPayload(value.csvVariables || {}, `${field}.csvVariables`);
   assertRunnerRequestArray(value.requests, `${field}.requests`);
+  assertArtifactSecurity(value.security, `${field}.security`);
+}
+
+function assertArtifactSecurity(value, field) {
+  if (value == null) {
+    return;
+  }
+  assertNoUnexpectedFields('artifactSecurity', value, field, ['importedUntrusted']);
+  optionalBoolean(value.importedUntrusted, `${field}.importedUntrusted`);
 }
 
 function assertRunnerRequestPayload(value, field = 'request') {
@@ -217,6 +229,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'refreshingAuthOriginalAuth',
     'autoHeaders',
     'scripts',
+    'security',
     'source',
     'settings',
     'url',

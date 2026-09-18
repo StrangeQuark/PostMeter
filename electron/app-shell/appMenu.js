@@ -85,7 +85,8 @@ function createApplicationMenuTemplate(options = {}) {
               label: 'Environment',
               submenu: [
                 actionItem('PostMeter', 'export-environment', { accelerator: acceleratorFor('export-environment') }),
-                actionItem('Postman', 'export-postman-environment', { accelerator: acceleratorFor('export-postman-environment') })
+                actionItem('Postman', 'export-postman-environment', { accelerator: acceleratorFor('export-postman-environment') }),
+                actionItem('.env', 'export-dotenv-environment', { accelerator: acceleratorFor('export-dotenv-environment') })
               ]
             },
             actionItem('Runner', 'export-runner-definition', { accelerator: acceleratorFor('export-runner-definition') }),

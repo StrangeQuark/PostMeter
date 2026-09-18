@@ -257,6 +257,7 @@ function renderAll() {
   renderCollectionEditor();
   renderFolderEditor();
   renderRequestEditor();
+  renderActiveRequestTabResponse();
   renderCollectionVariablesEditor();
   renderFolderVariablesEditor();
   renderEnvironmentEditor();

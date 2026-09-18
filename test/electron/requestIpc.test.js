@@ -29,6 +29,46 @@ test('request IPC registers stable request channels', () => {
   ]);
 });
 
+test('request IPC reviews imported scripts and disables script egress capabilities', async () => {
+  const handlers = new Map();
+  const request = requestModel({
+    id: 'request-1',
+    method: 'GET',
+    url: 'https://example.test',
+    scripts: { preRequest: 'pm.sendRequest("https://example.test")' },
+    security: { importedUntrusted: true }
+  });
+  const workspace = workspaceModel({
+    collections: [collectionModel({ id: 'collection-1', requests: [request] })],
+    environments: [],
+    cookies: [],
+    history: []
+  });
+  let capabilities = null;
+  let reviews = 0;
+  registerRequestIpc({
+    dialog: { showMessageBox: async () => { reviews += 1; return { response: 0 }; } },
+    getWorkspace: () => workspace,
+    ipcMain: { handle(channel, handler) { handlers.set(channel, handler); } },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    runRequestWithScripts: async (_request, _environment, options) => {
+      capabilities = options.trustedCapabilities;
+      return {
+        response: { statusCode: 200, headers: {}, body: '', durationMillis: 1, responseBytes: 0, finalUrl: 'https://example.test' },
+        environment: null,
+        collectionVariables: [], localVariables: [], globals: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await handlers.get('request:send')(null, request, null);
+  assert.equal(reviews, 1);
+  assert.equal(capabilities.sendRequest, false);
+  assert.equal(capabilities.cookies, false);
+});
+
 test('request IPC validates public responses before mutating workspace state', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({

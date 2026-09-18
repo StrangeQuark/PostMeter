@@ -40,3 +40,12 @@ test('renderer cannot forge private-network acknowledgement through policy paylo
   assert.equal(policy.allowPrivateNetworkRequests, false);
   assert.equal(await policy.confirmPrivateNetworkRequest({ hostname: '10.0.0.1', category: 'private' }), false);
 });
+
+test('imported components enable private-network safe mode inside a trusted workspace', () => {
+  const policy = createRequestNetworkPolicyForWorkspace({
+    workspace: {},
+    artifacts: [{ security: { importedUntrusted: true } }]
+  });
+  assert.equal(policy.enabled, true);
+  assert.equal(policy.allowPrivateNetworkRequests, false);
+});

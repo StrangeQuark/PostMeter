@@ -1,7 +1,10 @@
+const { artifactIsImportedUntrusted } = require('../../src/core/security/importProvenance');
+
 function createRequestNetworkPolicyForWorkspace(options = {}) {
   const workspace = options.workspace || {};
   const localSecurity = workspace.localsettings?.security || {};
-  const importedUntrusted = localSecurity.importedUntrusted === true;
+  const importedUntrusted = localSecurity.importedUntrusted === true
+    || artifactIsImportedUntrusted(...(options.artifacts || []));
   const allowPrivateNetworkRequests = localSecurity.allowPrivateNetworkRequests === true
     && localSecurity.privateNetworkPolicySource === 'main';
   if (!importedUntrusted && localSecurity.blockPrivateNetworkRequests !== true) {

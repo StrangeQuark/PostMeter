@@ -58,6 +58,7 @@ const {
   classifyHostname
 } = require('../../src/core/security/networkPolicy');
 const { mainOwnedFileBindingsForWorkspace } = require('../../src/core/http/fileAttachmentBindings');
+const { artifactIsImportedUntrusted } = require('../../src/core/security/importProvenance');
 
 const RESULT_STORE_WARNING_MARGIN_BYTES = 1024 * 1024 * 1024;
 const IMPORT_TEXT_LIMIT = fieldLimit('body');
@@ -182,7 +183,8 @@ function registerRuntimeIpc(options = {}) {
         dialog,
         getMainWindow,
         recordDiagnosticEvent,
-        workspace
+        workspace,
+        artifacts: [collection]
       });
       const runnerOptions = {
         abortController,
@@ -192,7 +194,7 @@ function registerRuntimeIpc(options = {}) {
         fileBindings: mainOwnedFileBindings(workspace),
         networkPolicy,
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace),
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace, [collection]),
         includeTransportDiagnostics: true,
         tlsSettings,
         vault: vaultStore,
@@ -403,7 +405,8 @@ function registerRuntimeIpc(options = {}) {
         dialog,
         getMainWindow,
         recordDiagnosticEvent,
-        workspace
+        workspace,
+        artifacts: [performanceTest]
       });
       currentResultStore?.close?.();
       currentResultStore = await prepareRuntimeResultStore({
@@ -425,7 +428,7 @@ function registerRuntimeIpc(options = {}) {
         fileBindings: mainOwnedFileBindings(workspace),
         networkPolicy,
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
-        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace),
+        trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspace, [performanceTest]),
         tlsSettings,
         vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
@@ -748,7 +751,8 @@ function assessHighRiskRun(options = {}) {
   const kind = options.kind === 'performance' ? 'performance' : 'runner';
   const workspace = options.workspace || {};
   const security = workspace.localsettings?.security || {};
-  const importedUntrusted = security.importedUntrusted === true;
+  const importedUntrusted = security.importedUntrusted === true
+    || artifactIsImportedUntrusted(options.collection, options.performanceTest);
   const plannedRequests = boundedRuntimeNumber(options.plannedRequests, 0);
   const concurrency = boundedRuntimeNumber(options.concurrency, 1);
   const durationSeconds = boundedRuntimeNumber(options.durationSeconds, 0);
@@ -1419,11 +1423,12 @@ function safeFileOperationExportResult(filePath) {
   };
 }
 
-function scriptTrustedCapabilitiesForWorkspace(workspace = {}) {
+function scriptTrustedCapabilitiesForWorkspace(workspace = {}, artifacts = []) {
   const trusted = workspace.settings?.sandbox?.trustedCapabilities || {};
+  const importedUntrusted = artifactIsImportedUntrusted(...artifacts);
   return {
-    sendRequest: trusted.sendRequest !== false,
-    cookies: trusted.cookies !== false,
+    sendRequest: !importedUntrusted && trusted.sendRequest !== false,
+    cookies: !importedUntrusted && trusted.cookies !== false,
     vault: false,
     vaultGrants: workspace.localsettings?.sandbox?.trustedCapabilities?.vaultGrants || {}
   };

@@ -1218,24 +1218,37 @@ test('workspace IPC imports and exports environments and runner definitions', as
   assert.equal(exportedEnvironment._postman_variable_scope, 'environment');
   assert.equal(exportedEnvironment.values[0].key, 'baseUrl');
 
+  const dotenvExport = await handlers.get('environment:export')({}, environmentImport.environment, 'dotenv');
+  assert.equal(dotenvExport.cancelled, false);
+  assert.deepEqual(dotenvExport, { cancelled: false, path: 'Postman-Env.env', displayPath: 'Postman-Env.env' });
+  assert.equal(await fs.readFile(savedPaths[1], 'utf8'), 'baseUrl=https://example.test\n');
+
+  const dotenvImport = await handlers.get('environment:import')({}, {
+    fileName: '.env',
+    text: 'API_TOKEN=from-dotenv\n'
+  });
+  assert.equal(dotenvImport.environment.name, 'Imported Environment');
+  assert.deepEqual(dotenvImport.environment.variables, [{ enabled: true, key: 'API_TOKEN', value: 'from-dotenv' }]);
+
   const runnerImport = await handlers.get('runner:importDefinition')({}, {
     fileName: path.basename(runnerImportPath),
     text: await fs.readFile(runnerImportPath, 'utf8')
   });
   assert.equal(runnerImport.cancelled, false);
   assert.equal(runnerImport.runner.name, 'Smoke Runner');
+  assert.equal(runnerImport.runner.security.importedUntrusted, true);
 
   const runnerExport = await handlers.get('runner:exportDefinition')({}, runnerImport.runner, 'postmeter');
   assert.equal(runnerExport.cancelled, false);
   assert.deepEqual(runnerExport, { cancelled: false, path: 'Smoke-Runner.postmeter-runner.json', displayPath: 'Smoke-Runner.postmeter-runner.json' });
-  const exportedRunner = JSON.parse(await fs.readFile(savedPaths[1], 'utf8'));
+  const exportedRunner = JSON.parse(await fs.readFile(savedPaths[2], 'utf8'));
   assert.equal(exportedRunner.format, 'postmeter.runner.v1');
   assert.equal(exportedRunner.runner.name, 'Smoke Runner');
-  assert.equal(savedPaths.length, 2);
+  assert.equal(savedPaths.length, 3);
 
   await assert.rejects(
     () => handlers.get('environment:export')({}, environmentImport.environment, 'curl'),
-    /Environment export format must be postmeter or postman/
+    /Environment export format must be postmeter, postman, or dotenv/
   );
   await assert.rejects(
     () => handlers.get('runner:exportDefinition')({}, runnerImport.runner, 'postman'),
@@ -1300,7 +1313,10 @@ test('workspace IPC exposes only documented collection import filters', async ()
   assert.deepEqual(openDialogOptions?.properties, ['openFile']);
   assert.deepEqual(openDialogOptions?.filters, collectionImportFilters());
   assert.equal(importedPath, '/tmp/collection.openapi.json');
-  assert.deepEqual(result, { cancelled: false, collection: { id: 'c1', name: 'Imported', requests: [], folders: [] } });
+  assert.deepEqual(result, {
+    cancelled: false,
+    collection: { id: 'c1', name: 'Imported', requests: [], folders: [], security: { importedUntrusted: true } }
+  });
 });
 
 test('workspace IPC imports a workspace as an additional managed workspace without backing up or replacing the current workspace', async () => {

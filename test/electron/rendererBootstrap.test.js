@@ -2607,6 +2607,7 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['importRunnerButton', 'import-runner', 'onImportRunner'],
     ['exportEnvironmentButton', 'export-environment', 'onExportEnvironment'],
     ['exportPostmanEnvironmentButton', 'export-postman-environment', 'onExportPostmanEnvironment'],
+    ['exportDotenvEnvironmentButton', 'export-dotenv-environment', 'onExportDotenvEnvironment'],
     ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition'],
     ['exportRunnerHtmlButton', 'export-runner-html', 'onExportRunnerHtml'],
     ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
@@ -2955,6 +2956,7 @@ test('renderer supplies explicit collection export format handlers', () => {
   assert.match(rendererSource, /onExportWorkspace: \(\) => \{ void exportWorkspaceFromPicker\(\); \}/);
   assert.match(rendererSource, /onExportEnvironment: \(\) => \{ void exportEnvironmentFromPicker\('postmeter'\); \}/);
   assert.match(rendererSource, /onExportPostmanEnvironment: \(\) => \{ void exportEnvironmentFromPicker\('postman'\); \}/);
+  assert.match(rendererSource, /onExportDotenvEnvironment: \(\) => \{ void exportEnvironmentFromPicker\('dotenv'\); \}/);
   assert.match(rendererSource, /onExportRunnerDefinition: \(\) => \{ void exportRunnerDefinitionFromPicker\(\); \}/);
   assert.match(rendererSource, /onExportPerformanceTest: \(\) => \{ void exportPerformanceTestFromPicker\(\); \}/);
 });

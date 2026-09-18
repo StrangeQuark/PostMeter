@@ -85,6 +85,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
     'export-curl',
     'export-environment',
     'export-postman-environment',
+    'export-dotenv-environment',
     'export-runner-definition',
     'export-performance-test'
   ]) {

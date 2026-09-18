@@ -29,6 +29,7 @@ const {
   redactForOutput: redactSourceSandboxOutput
 } = require('../../scripts/validateSandboxRuntime');
 const { scriptBoundaryWorkerTimeoutMillis } = require('../../src/core/sandbox/sandboxRuntimeValidation');
+const { sourceElectronSmokeAttempts } = require('./electronSmokeRunner');
 
 test('smoke process helper captures successful child stdout and stderr', async () => {
   const result = await spawnWithTimeout(process.execPath, [
@@ -134,6 +135,12 @@ test('smoke process helper detects retryable Linux Electron DBus startup timeout
     timedOut: true,
     stderr: 'Failed to connect to the bus: Could not parse server address'
   }, 'linux'), true);
+});
+
+test('source Electron smoke retries transient Linux timeouts', () => {
+  assert.equal(sourceElectronSmokeAttempts('win32'), 3);
+  assert.equal(sourceElectronSmokeAttempts('linux'), 2);
+  assert.equal(sourceElectronSmokeAttempts('darwin'), 1);
 });
 
 test('smoke process helper adds Windows GPU workaround args without disabling software rasterization', () => {

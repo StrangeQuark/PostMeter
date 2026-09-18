@@ -121,8 +121,8 @@ module.exports = {
 };
 
 function assertEnvironmentExportFormat(format) {
-  if (!['postmeter', 'postman'].includes(String(format || ''))) {
-    throw new Error('Environment export format must be postmeter or postman.');
+  if (!['postmeter', 'postman', 'dotenv'].includes(String(format || ''))) {
+    throw new Error('Environment export format must be postmeter, postman, or dotenv.');
   }
 }
 

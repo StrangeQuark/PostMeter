@@ -9,6 +9,7 @@ function createAutoUpdateService(options = {}) {
     emitStatus = () => {},
     getSettings = () => ({}),
     intervalMillis = DEFAULT_AUTO_UPDATE_INTERVAL_MILLIS,
+    platform = process.platform,
     recordDiagnosticEvent = async () => {},
     setTimeoutImpl = setTimeout,
     startupDelayMillis = DEFAULT_AUTO_UPDATE_STARTUP_DELAY_MILLIS
@@ -32,13 +33,13 @@ function createAutoUpdateService(options = {}) {
   }
 
   function supported() {
-    return app?.isPackaged === true || process.env.POSTMETER_AUTO_UPDATE_DEV === '1';
+    return platform !== 'linux' && (app?.isPackaged === true || process.env.POSTMETER_AUTO_UPDATE_DEV === '1');
   }
 
   function configureUpdater() {
     const settings = currentSettings();
-    autoUpdater.autoDownload = settings.automaticUpdatesEnabled;
-    autoUpdater.autoInstallOnAppQuit = settings.automaticUpdatesEnabled;
+    autoUpdater.autoDownload = platform !== 'linux' && settings.automaticUpdatesEnabled;
+    autoUpdater.autoInstallOnAppQuit = platform !== 'linux' && settings.automaticUpdatesEnabled;
     autoUpdater.allowPrerelease = settings.includePrereleases;
     autoUpdater.disableWebInstaller = true;
     if (!configured) {
@@ -96,7 +97,9 @@ function createAutoUpdateService(options = {}) {
     if (!supported()) {
       stop();
       return publish('unsupported', {
-        reason: 'Automatic updates run only in packaged builds.'
+        reason: platform === 'linux'
+          ? 'Linux updates are installed through the system package manager.'
+          : 'Automatic updates run only in packaged builds.'
       });
     }
     scheduleCheck(optionsForApply.startup === true ? startupDelayMillis : intervalMillis);
@@ -122,7 +125,9 @@ function createAutoUpdateService(options = {}) {
     }
     if (!supported()) {
       return publish('unsupported', {
-        reason: 'Automatic updates run only in packaged builds.'
+        reason: platform === 'linux'
+          ? 'Linux updates are installed through the system package manager.'
+          : 'Automatic updates run only in packaged builds.'
       });
     }
     if (checkInFlight) {
@@ -154,6 +159,9 @@ function createAutoUpdateService(options = {}) {
   }
 
   function installUpdate() {
+    if (platform === 'linux') {
+      return publish('unsupported', { reason: 'Linux updates are installed through the system package manager.' });
+    }
     if (!downloaded) {
       return publish('failed', { error: 'No downloaded update is ready to install.' });
     }

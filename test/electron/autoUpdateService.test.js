@@ -12,6 +12,7 @@ test('auto update service stays inert when automatic updates are disabled', asyn
   const service = createAutoUpdateService({
     app: { isPackaged: true },
     autoUpdater: updater,
+    platform: 'win32',
     emitStatus: (status) => statuses.push(status),
     getSettings: () => ({ automaticUpdatesEnabled: false, includePrereleases: true }),
     setTimeoutImpl: (fn, delay) => {
@@ -36,8 +37,9 @@ test('auto update service reports unsupported outside packaged builds', async ()
     const updater = new FakeAutoUpdater();
     const statuses = [];
     const service = createAutoUpdateService({
-      app: { isPackaged: false },
-      autoUpdater: updater,
+    app: { isPackaged: false },
+    autoUpdater: updater,
+    platform: 'win32',
       emitStatus: (status) => statuses.push(status),
       getSettings: () => ({ automaticUpdatesEnabled: true }),
       setTimeoutImpl: () => {
@@ -55,6 +57,23 @@ test('auto update service reports unsupported outside packaged builds', async ()
   }
 });
 
+test('auto update service never downloads or elevates Linux packages', async () => {
+  const updater = new FakeAutoUpdater();
+  const service = createAutoUpdateService({
+    app: { isPackaged: true },
+    autoUpdater: updater,
+    platform: 'linux',
+    getSettings: () => ({ automaticUpdatesEnabled: true }),
+    setTimeoutImpl: () => { throw new Error('Linux must not schedule package updates'); }
+  });
+  assert.equal(service.start().status, 'unsupported');
+  assert.equal(updater.autoDownload, false);
+  assert.equal(await service.checkNow(), service.status());
+  assert.equal(updater.checkCount, 0);
+  assert.equal(service.installUpdate().status, 'unsupported');
+  assert.equal(updater.quitAndInstallCount, 0);
+});
+
 test('auto update service schedules packaged checks and emits updater lifecycle statuses', async () => {
   const updater = new FakeAutoUpdater();
   const timers = [];
@@ -64,6 +83,7 @@ test('auto update service schedules packaged checks and emits updater lifecycle 
   const service = createAutoUpdateService({
     app: { isPackaged: true },
     autoUpdater: updater,
+    platform: 'win32',
     emitStatus: (status) => statuses.push(status),
     getSettings: () => ({ automaticUpdatesEnabled: true, includePrereleases: true }),
     intervalMillis: 5000,
@@ -130,6 +150,7 @@ test('auto update service surfaces failures and blocks install before a download
   const service = createAutoUpdateService({
     app: { isPackaged: true },
     autoUpdater: updater,
+    platform: 'win32',
     emitStatus: (status) => statuses.push(status),
     getSettings: () => ({ automaticUpdatesEnabled: true }),
     intervalMillis: 10,
@@ -158,6 +179,7 @@ test('auto update service ignores diagnostic logging failures', async () => {
   const service = createAutoUpdateService({
     app: { isPackaged: true },
     autoUpdater: updater,
+    platform: 'win32',
     emitStatus: (status) => statuses.push(status),
     getSettings: () => ({ automaticUpdatesEnabled: true }),
     recordDiagnosticEvent: async () => {
@@ -185,6 +207,7 @@ test('auto update service can be enabled in development with an explicit env ove
     const service = createAutoUpdateService({
       app: { isPackaged: false },
       autoUpdater: updater,
+      platform: 'win32',
       getSettings: () => ({ automaticUpdatesEnabled: true }),
       setTimeoutImpl: () => ({ unref() {} })
     });

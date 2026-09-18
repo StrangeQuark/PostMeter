@@ -279,7 +279,7 @@ test('picker-first export rejects invalid export kinds and worker payloads', asy
       format: 'curl',
       payload: { id: 'env-1', name: 'Local', variables: [] }
     }),
-    /Environment export format must be postmeter or postman/
+    /Environment export format must be postmeter, postman, or dotenv/
   );
   await assert.rejects(
     () => handlers.get('file-export:choosePath')({}, {

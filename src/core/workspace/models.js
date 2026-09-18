@@ -10,6 +10,7 @@ const { normalizePersistedAuth } = require('../http/authModel');
 const { normalizeCookies: normalizeCookieCollection } = require('../http/cookieModel');
 const { normalizeCsvVariableDataDefaultOff } = require('./csvVariables');
 const { normalizeSandboxFileBindings } = require('../http/fileAttachmentBindings');
+const { normalizeArtifactSecurity } = require('../security/importProvenance');
 const { normalizeDiagnosticsSettings } = require('../diagnostics-release/diagnosticsSettings');
 const { normalizeCapturePolicy } = require('./resultCapturePolicy');
 const { normalizeKeyboardShortcuts } = require('../contracts/keyboardShortcuts');
@@ -114,6 +115,7 @@ function requestModel({
   grpc,
   websocket,
   settings,
+  security,
   metadata,
   postman,
   messages,
@@ -148,6 +150,7 @@ function requestModel({
     websocket: normalizeJsonObject(websocket, 128 * 1024),
     settings: normalizeRequestTlsSettings(settings)
   };
+  addArtifactSecurity(request, security);
   if ((request.auth?.type === 'autoRefresh' || useRefreshingAuthCookie === true)
     && refreshingAuthOriginalAuth && typeof refreshingAuthOriginalAuth === 'object') {
     request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(refreshingAuthOriginalAuth);
@@ -175,9 +178,10 @@ function runnerModel({
   capturePolicy,
   authRefresh,
   csvVariables,
-  requests
+  requests,
+  security
 } = {}) {
-  return {
+  const runner = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Runner'),
     environmentId: normalizeRunnerEnvironmentId(environmentId),
@@ -188,6 +192,8 @@ function runnerModel({
     csvVariables: normalizeCsvVariableDataDefaultOff(csvVariables),
     requests: Array.isArray(requests) ? requests.map(runnerRequestModel) : []
   };
+  addArtifactSecurity(runner, security);
+  return runner;
 }
 
 function runnerRequestModel(request = {}) {
@@ -460,7 +466,7 @@ function cloneRequestForRunner(request, source = {}) {
   });
 }
 
-function folderModel({ id, name, description, auth, scripts, variables, requests, folders, postman } = {}) {
+function folderModel({ id, name, description, auth, scripts, variables, requests, folders, postman, security } = {}) {
   const folder = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Folder'),
@@ -471,11 +477,12 @@ function folderModel({ id, name, description, auth, scripts, variables, requests
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],
     folders: Array.isArray(folders) ? folders.map(folderModel) : []
   };
+  addArtifactSecurity(folder, security);
   addOptionalJsonObject(folder, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
   return folder;
 }
 
-function collectionModel({ id, name, description, auth, scripts, variables, certificates, requests, folders, postman } = {}) {
+function collectionModel({ id, name, description, auth, scripts, variables, certificates, requests, folders, postman, security } = {}) {
   const collection = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Collection'),
@@ -487,6 +494,7 @@ function collectionModel({ id, name, description, auth, scripts, variables, cert
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],
     folders: Array.isArray(folders) ? folders.map(folderModel) : []
   };
+  addArtifactSecurity(collection, security);
   addOptionalJsonObject(collection, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
   return collection;
 }
@@ -497,6 +505,13 @@ function environmentModel({ id, name, variables } = {}) {
     name: normalizeName(name, 'Untitled Environment'),
     variables: normalizePairs(variables)
   };
+}
+
+function addArtifactSecurity(target, security) {
+  const normalized = normalizeArtifactSecurity(security);
+  if (normalized.importedUntrusted) {
+    target.security = normalized;
+  }
 }
 
 function historyEntry({ timestamp, method, url, statusCode, durationMillis } = {}) {

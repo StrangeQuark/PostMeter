@@ -5,6 +5,7 @@ const {
   assertPerformanceResultPayload,
   assertPerformanceTestPayload
 } = require('../contracts/ipcValidation');
+const { csvValue } = require('./csvSafety');
 
 const PERFORMANCE_FORMAT = 'postmeter.performance.v1';
 
@@ -113,11 +114,6 @@ function performanceResultToCsv(result) {
   }
 
   return rows.map((row) => row.map(csvValue).join(',')).join('\n');
-}
-
-function csvValue(value) {
-  const text = String(value ?? '');
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 module.exports = {

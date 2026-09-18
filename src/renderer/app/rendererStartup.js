@@ -73,6 +73,7 @@ function bindUi() {
     onExportCurl: () => exportCollection(null, 'curl'),
     onExportEnvironment: () => { void exportEnvironmentFromPicker('postmeter'); },
     onExportPostmanEnvironment: () => { void exportEnvironmentFromPicker('postman'); },
+    onExportDotenvEnvironment: () => { void exportEnvironmentFromPicker('dotenv'); },
     onExportRunnerDefinition: () => { void exportRunnerDefinitionFromPicker(); },
     onOpenSettings: () => { openSettingsModalSafely(); },
     onOpenCertificatesSettings: () => { openSettingsModalSafely('certificates'); },

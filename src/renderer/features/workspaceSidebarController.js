@@ -76,7 +76,8 @@ function environmentNode(environment) {
     ['Duplicate', () => duplicateEnvironment(environment)],
     ['Export', [
       ['PostMeter', () => { void exportEnvironment(environment, 'postmeter'); }],
-      ['Postman', () => { void exportEnvironment(environment, 'postman'); }]
+      ['Postman', () => { void exportEnvironment(environment, 'postman'); }],
+      ['.env', () => { void exportEnvironment(environment, 'dotenv'); }]
     ]],
     ['Delete', () => deleteEnvironment(environment), 'danger']
   ]);
