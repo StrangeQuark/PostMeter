@@ -18,7 +18,13 @@ function sourceElectronSmokeArgs(args = [], env = process.env, platform = proces
 }
 
 function sourceElectronSmokeAttempts(platform = process.platform) {
-  return platform === 'win32' ? 3 : 1;
+  if (platform === 'win32') {
+    return 3;
+  }
+  if (platform === 'linux') {
+    return 2;
+  }
+  return 1;
 }
 
 async function runSourceElectronSmoke(electronPath, args = [], options = {}) {
