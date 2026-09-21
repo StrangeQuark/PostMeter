@@ -156,10 +156,13 @@ function registerRuntimeIpc(options = {}) {
         dialog,
         durationSeconds: 0,
         getMainWindow,
+        getWorkspaceId,
         kind: 'runner',
+        mutateWorkspace,
         plannedRequests,
         recordDiagnosticEvent,
-        workspace
+        workspace,
+        workspaceId
       });
       currentResultStore?.close?.();
       currentResultStore = await prepareRuntimeResultStore({
@@ -182,8 +185,11 @@ function registerRuntimeIpc(options = {}) {
       const networkPolicy = createRequestNetworkPolicyForWorkspace({
         dialog,
         getMainWindow,
+        getWorkspaceId,
+        mutateWorkspace,
         recordDiagnosticEvent,
         workspace,
+        workspaceId,
         artifacts: [collection]
       });
       const runnerOptions = {
@@ -393,19 +399,25 @@ function registerRuntimeIpc(options = {}) {
         dialog,
         durationSeconds: estimatePerformanceDurationSeconds(performanceTest),
         getMainWindow,
+        getWorkspaceId,
         kind: 'performance',
+        mutateWorkspace,
         performanceTest,
         plannedRequests,
         recordDiagnosticEvent,
-        workspace
+        workspace,
+        workspaceId
       });
       const vaultStore = getVaultStore(workspaceId);
       const tlsSettings = await resolveTlsSettingsSecrets(workspace.settings || {}, vaultStore);
       const networkPolicy = createRequestNetworkPolicyForWorkspace({
         dialog,
         getMainWindow,
+        getWorkspaceId,
+        mutateWorkspace,
         recordDiagnosticEvent,
         workspace,
+        workspaceId,
         artifacts: [performanceTest]
       });
       currentResultStore?.close?.();
@@ -711,8 +723,8 @@ async function confirmHighRiskRunIfNeeded(options = {}) {
     outcome: 'prompted',
     fields: assessment.fields
   });
-  const accepted = await showHighRiskRunPrompt(options, assessment);
-  if (!accepted) {
+  const decision = await showHighRiskRunPrompt(options, assessment);
+  if (!decision) {
     await options.recordDiagnosticEvent?.({
       type: 'runtime.high-risk-run.denied',
       level: 'warn',
@@ -722,6 +734,25 @@ async function confirmHighRiskRunIfNeeded(options = {}) {
     const error = new Error(`High-risk ${assessment.kind} run was cancelled before execution.`);
     error.code = 'POSTMETER_HIGH_RISK_RUN_DENIED';
     throw error;
+  }
+  if (decision.permanent === true) {
+    let applied = false;
+    await options.mutateWorkspace?.((workspace) => {
+      if (options.getWorkspaceId?.() !== options.workspaceId) {
+        return null;
+      }
+      workspace.localsettings ||= {};
+      workspace.localsettings.security ||= {};
+      workspace.localsettings.security.allowHighRiskRuns = true;
+      workspace.localsettings.security.highRiskRunPolicySource = 'main';
+      applied = true;
+      return workspace;
+    }, { workspaceId: options.workspaceId });
+    if (!applied) {
+      const error = new Error('High-risk run approval could not be saved.');
+      error.code = 'POSTMETER_HIGH_RISK_RUN_APPROVAL_SAVE_FAILED';
+      throw error;
+    }
   }
   await options.recordDiagnosticEvent?.({
     type: 'runtime.high-risk-run.accepted',
@@ -790,7 +821,7 @@ function assessHighRiskRun(options = {}) {
   }
   const highRisk = reasons.length > 0;
   const locallyTrusted = security.trustedWorkspace === true
-    || security.allowHighRiskRuns === true
+    || (security.allowHighRiskRuns === true && security.highRiskRunPolicySource === 'main')
     || importedUntrusted !== true;
   return {
     kind,
@@ -828,15 +859,18 @@ async function showHighRiskRunPrompt(options = {}, assessment = {}) {
   }
   const result = await options.dialog.showMessageBox(options.getMainWindow?.(), {
     type: 'warning',
-    buttons: ['Run Once', 'Cancel'],
-    defaultId: 1,
-    cancelId: 1,
+    buttons: ['Run Once', 'Allow Permanently', 'Cancel'],
+    defaultId: 2,
+    cancelId: 2,
     noLink: true,
     title: 'High-Risk Run',
     message: 'Imported workspace wants to start a high-risk run.',
-    detail: detailLines.join('\n')
+    detail: `${detailLines.join('\n')}\n\nAllow Permanently remembers this high-risk run approval for this workspace on this device.`
   });
-  return result?.response === 0;
+  if (result?.response === 1) {
+    return { permanent: true };
+  }
+  return result?.response === 0 ? { permanent: false } : null;
 }
 
 function unsafeRuntimeTargetCategories(options = {}) {

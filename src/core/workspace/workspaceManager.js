@@ -781,6 +781,11 @@ function markWorkspaceImportedUntrusted(workspace) {
   next.localsettings.security ||= {};
   next.localsettings.security.importedUntrusted = true;
   next.localsettings.security.allowPrivateNetworkRequests = false;
+  next.localsettings.security.allowedPrivateNetworkHosts = [];
+  next.localsettings.security.reviewedImportedScriptFingerprints = [];
+  next.localsettings.security.importedScriptReviewSource = '';
+  next.localsettings.security.allowHighRiskRuns = false;
+  next.localsettings.security.highRiskRunPolicySource = '';
   return next;
 }
 

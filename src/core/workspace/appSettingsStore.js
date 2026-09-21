@@ -102,6 +102,16 @@ function workspaceScopedSettings(settings = {}) {
   return normalizeWorkspaceLocalSettings(settings);
 }
 
+function settingsWithWorkspaceLocalSecurity(settings = {}, localsettings = {}) {
+  const effectiveSettings = settings && typeof settings === 'object' && !Array.isArray(settings)
+    ? settings
+    : {};
+  return {
+    ...effectiveSettings,
+    security: normalizeWorkspaceLocalSettings(localsettings).security
+  };
+}
+
 function legacyWorkspaceSettingsMap(value = {}) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const workspaceSource = source.workspaces && typeof source.workspaces === 'object' && !Array.isArray(source.workspaces)
@@ -275,6 +285,11 @@ function workspaceLocalSettingsHasValues(settings = {}) {
   if (local.request?.sslCertificateVerification === false || local.request?.caCertificatePath || (local.request?.clientCertificates || []).length) {
     return true;
   }
+  if (Object.values(local.security || {}).some((value) => value === true
+    || value === 'main'
+    || (Array.isArray(value) && value.length > 0))) {
+    return true;
+  }
   const vaultGrants = local.sandbox?.trustedCapabilities?.vaultGrants || {};
   return vaultGrants.workspace === true
     || (vaultGrants.collections || []).length > 0
@@ -293,6 +308,7 @@ module.exports = {
   legacyWorkspaceSettingsMap,
   mergeEffectiveSettings,
   normalizeAppSettings,
+  settingsWithWorkspaceLocalSecurity,
   workspaceLocalSettingsHasValues,
   workspaceScopedSettings
 };

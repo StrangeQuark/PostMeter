@@ -113,9 +113,13 @@ class WorkspaceStore {
     if (importedUntrusted) {
       workspace.localsettings.security.importedUntrusted = true;
       workspace.localsettings.security.allowPrivateNetworkRequests = false;
+      workspace.localsettings.security.allowedPrivateNetworkHosts = [];
+      workspace.localsettings.security.reviewedImportedScriptFingerprints = [];
+      workspace.localsettings.security.importedScriptReviewSource = '';
       workspace.localsettings.security.privateNetworkPolicySource = '';
       workspace.localsettings.security.trustedWorkspace = false;
       workspace.localsettings.security.allowHighRiskRuns = false;
+      workspace.localsettings.security.highRiskRunPolicySource = '';
       workspace.settings = normalizeWorkspace(workspace).settings;
     }
     if (migrated || importedUntrusted) {

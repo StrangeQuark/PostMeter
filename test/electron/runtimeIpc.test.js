@@ -603,7 +603,7 @@ test('runtime IPC denies imported high-risk performance runs without native conf
         showSaveDialog: async () => ({ canceled: true }),
         showMessageBox: async () => {
           promptCalls += 1;
-          return { response: 1 };
+          return { response: 2 };
         }
       },
       fileOperationResult: (result) => result,
@@ -673,9 +673,10 @@ test('runtime IPC accepted native confirmation allows imported high-risk perform
     controller = registerRuntimeIpc({
       dialog: {
         showSaveDialog: async () => ({ canceled: true }),
-        showMessageBox: async () => {
+        showMessageBox: async (_window, options) => {
           promptCalls += 1;
-          return { response: 0 };
+          assert.deepEqual(options.buttons, ['Run Once', 'Allow Permanently', 'Cancel']);
+          return { response: 1 };
         }
       },
       fileOperationResult: (result) => result,
@@ -732,14 +733,18 @@ test('runtime IPC accepted native confirmation allows imported high-risk perform
     });
 
     const result = await handlers.get('performance:start')({ sender: { isDestroyed: () => false, send() {} } }, 'performance-accepted', performanceTest, null);
+    await handlers.get('performance:start')({ sender: { isDestroyed: () => false, send() {} } }, 'performance-accepted-again', performanceTest, null);
 
     assert.equal(promptCalls, 1);
-    assert.equal(runCalls, 1);
+    assert.equal(runCalls, 2);
     assert.equal(result.passed, true);
+    assert.equal(workspace.localsettings.security.allowHighRiskRuns, true);
+    assert.equal(workspace.localsettings.security.highRiskRunPolicySource, 'main');
     assert.deepEqual(events.map((event) => event.type), [
       'runtime.high-risk-run.prompted',
       'runtime.high-risk-run.accepted',
       'runtime.high-risk-run.started',
+      'performance.start.completed',
       'performance.start.completed'
     ]);
   } finally {
@@ -774,7 +779,7 @@ test('runtime IPC high-risk assessment includes local vault grants and file bind
   registerRuntimeIpc({
     dialog: {
       showSaveDialog: async () => ({ canceled: true }),
-      showMessageBox: async () => ({ response: 1 })
+      showMessageBox: async () => ({ response: 2 })
     },
     fileOperationResult: (result) => result,
     getMainWindow: () => null,

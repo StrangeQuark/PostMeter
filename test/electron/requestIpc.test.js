@@ -69,6 +69,52 @@ test('request IPC reviews imported scripts and disables script egress capabiliti
   assert.equal(capabilities.cookies, false);
 });
 
+test('request IPC permanently approves unchanged imported scripts for one workspace request', async () => {
+  const handlers = new Map();
+  const request = requestModel({
+    id: 'request-1',
+    method: 'GET',
+    url: 'https://example.test',
+    scripts: { preRequest: 'pm.variables.set("approved", true);' },
+    security: { importedUntrusted: true }
+  });
+  let workspace = workspaceModel({
+    collections: [collectionModel({ id: 'collection-1', requests: [request] })],
+    environments: [], cookies: [], history: []
+  });
+  let prompts = 0;
+  registerRequestIpc({
+    dialog: { showMessageBox: async (_window, options) => {
+      prompts += 1;
+      assert.deepEqual(options.buttons, ['Send Once', 'Allow Permanently', 'Cancel']);
+      return { response: 1 };
+    } },
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: { handle(channel, handler) { handlers.set(channel, handler); } },
+    runRequestWithScripts: async (_request, _environment, options) => {
+      assert.equal(options.trustedCapabilities.sendRequest, false);
+      assert.equal(options.trustedCapabilities.cookies, false);
+      return {
+        response: { statusCode: 200, headers: {}, body: '', durationMillis: 1, responseBytes: 0, finalUrl: request.url },
+        environment: null, collectionVariables: [], localVariables: [], globals: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: (nextWorkspace) => { workspace = nextWorkspace; }
+  });
+
+  await handlers.get('request:send')(null, request, null);
+  await handlers.get('request:send')(null, request, null);
+  assert.equal(prompts, 1);
+  assert.equal(workspace.localsettings.security.importedScriptReviewSource, 'main');
+  assert.equal(workspace.localsettings.security.reviewedImportedScriptFingerprints.length, 1);
+
+  const edited = { ...request, scripts: { preRequest: 'pm.variables.set("approved", false);' } };
+  await handlers.get('request:send')(null, edited, null);
+  assert.equal(prompts, 2);
+});
+
 test('request IPC validates public responses before mutating workspace state', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({
@@ -807,3 +853,33 @@ async function createServer(handler) {
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
   };
 }
+
+test('request IPC persists permanent host permission for subsequent imported requests', async () => {
+  const handlers = new Map();
+  const request = requestModel({
+    id: 'request-1', method: 'GET', url: 'http://localhost/health',
+    security: { importedUntrusted: true }
+  });
+  let workspace = workspaceModel({ collections: [collectionModel({ requests: [request] })] });
+  let prompts = 0;
+  registerRequestIpc({
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: { handle(channel, handler) { handlers.set(channel, handler); } },
+    dialog: { showMessageBox: async () => { prompts += 1; return { response: 1 }; } },
+    saveWorkspace: async (next) => workspaceModel(next),
+    setWorkspace: (next) => { workspace = next; },
+    runRequestWithScripts: async (_request, _environment, options) => {
+      assert.equal(options.networkPolicy.enabled, true);
+      assert.equal(await options.networkPolicy.confirmPrivateNetworkRequest({ hostname: 'localhost' }), true);
+      return {
+        response: { statusCode: 200, headers: {}, body: '', durationMillis: 1, responseBytes: 0, finalUrl: request.url },
+        environment: null, collectionVariables: [], localVariables: [], globals: []
+      };
+    }
+  });
+  await handlers.get('request:send')(null, request, null);
+  await handlers.get('request:send')(null, request, null);
+  assert.equal(prompts, 1);
+  assert.deepEqual(workspace.localsettings.security.allowedPrivateNetworkHosts, ['localhost']);
+});

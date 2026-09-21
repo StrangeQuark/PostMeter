@@ -7,8 +7,11 @@ const {
   APP_SETTINGS_FORMAT,
   APP_SETTINGS_VERSION,
   AppSettingsStore,
-  defaultSettingsPath
+  defaultSettingsPath,
+  settingsWithWorkspaceLocalSecurity,
+  workspaceLocalSettingsHasValues
 } = require('../../src/core/workspace/appSettingsStore');
+const { normalizeWorkspaceLocalSettings } = require('../../src/core/workspace/models');
 
 test('app settings store creates local settings.json without looking like a workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-app-settings-'));
@@ -54,6 +57,44 @@ test('app settings store creates local settings.json without looking like a work
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.cookies, true);
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.vault, true);
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.vaultGrants.workspace, false);
+});
+
+test('app settings store recognizes main-owned security approvals as workspace-local state', () => {
+  assert.equal(workspaceLocalSettingsHasValues({
+    security: {
+      reviewedImportedScriptFingerprints: ['a'.repeat(64)],
+      importedScriptReviewSource: 'main'
+    }
+  }), true);
+});
+
+test('workspace security approvals survive the save and hydration settings round trip', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-app-settings-security-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const store = new AppSettingsStore(path.join(directory, 'settings.json'));
+  await store.load();
+  const localSettings = normalizeWorkspaceLocalSettings({
+    security: {
+      importedUntrusted: true,
+      reviewedImportedScriptFingerprints: ['a'.repeat(64)],
+      importedScriptReviewSource: 'main',
+      allowedPrivateNetworkHosts: ['localhost'],
+      privateNetworkPolicySource: 'main'
+    }
+  });
+
+  await store.mergeWorkspaceSettings('Imported.json', {});
+  const savedSettings = settingsWithWorkspaceLocalSecurity(
+    store.settingsForWorkspace('Imported.json', localSettings),
+    localSettings
+  );
+  const persistedLocalSettings = normalizeWorkspaceLocalSettings(savedSettings);
+  const hydrated = normalizeWorkspaceLocalSettings(settingsWithWorkspaceLocalSecurity(
+    store.settingsForWorkspace('Imported.json', persistedLocalSettings),
+    persistedLocalSettings
+  ));
+
+  assert.deepEqual(hydrated.security, localSettings.security);
 });
 
 test('app settings store migrates legacy default runner shortcut away from reserved shortcuts', async () => {

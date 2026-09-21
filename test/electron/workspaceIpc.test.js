@@ -430,6 +430,17 @@ test('workspace IPC strips renderer-supplied file binding paths and preserves ma
   assert.equal(savedWorkspace.settings.sandbox.fileBindings[0].localPath, '/safe/main-owned/upload.txt');
   assert.equal(result.settings.sandbox.fileBindings[0].localPath, undefined);
   assert.equal(result.settings.sandbox.fileBindings[0].bound, true);
+
+  const forgedWorkspace = structuredClone(workspace);
+  forgedWorkspace.localsettings.security.allowedPrivateNetworkHosts = ['localhost'];
+  forgedWorkspace.localsettings.security.privateNetworkPolicySource = 'main';
+  await handlers.get('workspace:save')({}, forgedWorkspace);
+  assert.deepEqual(savedWorkspace.localsettings.security, workspace.localsettings.security);
+
+  workspace.localsettings.security.allowedPrivateNetworkHosts = ['10.0.0.1'];
+  workspace.localsettings.security.privateNetworkPolicySource = 'main';
+  await handlers.get('workspace:save')({}, forgedWorkspace);
+  assert.deepEqual(savedWorkspace.localsettings.security.allowedPrivateNetworkHosts, ['10.0.0.1']);
 });
 
 test('workspace IPC resets active workspace encryption keys and saves local settings first', async () => {

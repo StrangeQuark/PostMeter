@@ -10,7 +10,7 @@ const { WorkspaceManager } = require('../src/core/workspace/workspaceManager');
 const {
   WorkspaceEncryptionKeyRequiredError
 } = require('../src/core/workspace/workspaceEncryption');
-const { AppSettingsStore } = require('../src/core/workspace/appSettingsStore');
+const { AppSettingsStore, settingsWithWorkspaceLocalSecurity } = require('../src/core/workspace/appSettingsStore');
 const {
   mergeWorkspaceLocalSettingsForSave,
   normalizeWorkspaceLocalSettings
@@ -337,7 +337,7 @@ function hydrateWorkspaceSettings(nextWorkspace, workspaceId = workspaceStore?.g
   const settings = appSettingsStore.settingsForWorkspace(workspaceId, localsettings);
   return {
     ...nextWorkspace,
-    localsettings: normalizeWorkspaceLocalSettings(settings),
+    localsettings: normalizeWorkspaceLocalSettings(settingsWithWorkspaceLocalSecurity(settings, localsettings)),
     settings
   };
 }
@@ -351,7 +351,10 @@ async function saveLocalSettings(settings, workspaceId = workspaceStore?.getWork
   if (settingsToSave) {
     await appSettingsStore.mergeWorkspaceSettings(workspaceId, settingsToSave);
   }
-  return appSettingsStore.settingsForWorkspace(workspaceId, localSettings);
+  return settingsWithWorkspaceLocalSecurity(
+    appSettingsStore.settingsForWorkspace(workspaceId, localSettings),
+    localSettings
+  );
 }
 
 function saveLocalSettingsSync(settings, workspaceId = workspaceStore?.getWorkspaceId?.() || '', fallbackLocalSettings = {}) {
@@ -363,7 +366,10 @@ function saveLocalSettingsSync(settings, workspaceId = workspaceStore?.getWorksp
   if (settingsToSave) {
     appSettingsStore.mergeWorkspaceSettingsSync(workspaceId, settingsToSave);
   }
-  return appSettingsStore.settingsForWorkspace(workspaceId, localSettings);
+  return settingsWithWorkspaceLocalSecurity(
+    appSettingsStore.settingsForWorkspace(workspaceId, localSettings),
+    localSettings
+  );
 }
 
 async function renameLocalSettings(previousWorkspaceId, nextWorkspaceId) {

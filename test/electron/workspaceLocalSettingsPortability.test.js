@@ -61,6 +61,11 @@ test('workspace local settings portability strips every current local-only key f
     security: {
       importedUntrusted: true,
       allowPrivateNetworkRequests: true,
+      allowedPrivateNetworkHosts: ['localhost'],
+      reviewedImportedScriptFingerprints: ['a'.repeat(64)],
+      importedScriptReviewSource: 'main',
+      allowHighRiskRuns: true,
+      highRiskRunPolicySource: 'main',
       blockPrivateNetworkRequests: true
     }
   });
@@ -93,6 +98,11 @@ test('workspace local settings portability strips every current local-only key f
     'blocked-request',
     'importedUntrusted',
     'allowPrivateNetworkRequests',
+    'allowedPrivateNetworkHosts',
+    'reviewedImportedScriptFingerprints',
+    'importedScriptReviewSource',
+    'allowHighRiskRuns',
+    'highRiskRunPolicySource',
     'blockPrivateNetworkRequests'
   ]) {
     assert.equal(exportedText.includes(localOnlyValue), false, `${localOnlyValue} should not be portable`);
@@ -131,7 +141,8 @@ test('workspace local settings save merge preserves main-owned certificate bindi
       importedUntrusted: true,
       allowPrivateNetworkRequests: false,
       blockPrivateNetworkRequests: true,
-      privateNetworkPolicySource: 'main'
+      privateNetworkPolicySource: 'main',
+      allowedPrivateNetworkHosts: ['localhost']
     }
   });
 
@@ -153,6 +164,7 @@ test('workspace local settings save merge preserves main-owned certificate bindi
   assert.equal(merged.security.importedUntrusted, true);
   assert.equal(merged.security.blockPrivateNetworkRequests, true);
   assert.equal(merged.security.privateNetworkPolicySource, 'main');
+  assert.deepEqual(merged.security.allowedPrivateNetworkHosts, ['localhost']);
 });
 
 test('workspace local settings save merge keeps main-owned paths for renderer metadata', () => {

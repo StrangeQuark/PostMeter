@@ -628,10 +628,18 @@ function normalizeWorkspaceLocalSettings(settings) {
     security: {
       importedUntrusted: settings?.security?.importedUntrusted === true,
       allowPrivateNetworkRequests: settings?.security?.allowPrivateNetworkRequests === true,
+      allowedPrivateNetworkHosts: Array.isArray(settings?.security?.allowedPrivateNetworkHosts)
+        ? [...new Set(settings.security.allowedPrivateNetworkHosts.filter((host) => typeof host === 'string' && host))]
+        : [],
+      reviewedImportedScriptFingerprints: Array.isArray(settings?.security?.reviewedImportedScriptFingerprints)
+        ? [...new Set(settings.security.reviewedImportedScriptFingerprints.filter((value) => /^[a-f0-9]{64}$/u.test(value)))].slice(-100)
+        : [],
+      importedScriptReviewSource: settings?.security?.importedScriptReviewSource === 'main' ? 'main' : '',
       blockPrivateNetworkRequests: settings?.security?.blockPrivateNetworkRequests === true,
       privateNetworkPolicySource: settings?.security?.privateNetworkPolicySource === 'main' ? 'main' : '',
       trustedWorkspace: settings?.security?.trustedWorkspace === true,
-      allowHighRiskRuns: settings?.security?.allowHighRiskRuns === true
+      allowHighRiskRuns: settings?.security?.allowHighRiskRuns === true,
+      highRiskRunPolicySource: settings?.security?.highRiskRunPolicySource === 'main' ? 'main' : ''
     }
   };
 }
@@ -711,20 +719,28 @@ function mergeSecurityLocalSettingsForSave(sourceSecurity, fallbackSecurity = {}
   for (const key of [
     'importedUntrusted',
     'allowPrivateNetworkRequests',
+    'allowedPrivateNetworkHosts',
+    'reviewedImportedScriptFingerprints',
+    'importedScriptReviewSource',
     'blockPrivateNetworkRequests',
     'privateNetworkPolicySource',
     'trustedWorkspace',
-    'allowHighRiskRuns'
+    'allowHighRiskRuns',
+    'highRiskRunPolicySource'
   ]) {
     merged[key] = Object.hasOwn(source, key) ? nextSecurity[key] : fallbackSecurity[key];
   }
   return {
     importedUntrusted: merged.importedUntrusted === true,
     allowPrivateNetworkRequests: merged.allowPrivateNetworkRequests === true,
+    allowedPrivateNetworkHosts: merged.allowedPrivateNetworkHosts || [],
+    reviewedImportedScriptFingerprints: merged.reviewedImportedScriptFingerprints || [],
+    importedScriptReviewSource: merged.importedScriptReviewSource === 'main' ? 'main' : '',
     blockPrivateNetworkRequests: merged.blockPrivateNetworkRequests === true,
     privateNetworkPolicySource: merged.privateNetworkPolicySource === 'main' ? 'main' : '',
     trustedWorkspace: merged.trustedWorkspace === true,
-    allowHighRiskRuns: merged.allowHighRiskRuns === true
+    allowHighRiskRuns: merged.allowHighRiskRuns === true,
+    highRiskRunPolicySource: merged.highRiskRunPolicySource === 'main' ? 'main' : ''
   };
 }
 

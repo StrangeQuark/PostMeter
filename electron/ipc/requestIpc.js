@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const { validateRequest } = require('../../src/core/http/httpClient');
 const { runRequestWithScripts } = require('../../src/core/runtime/requestScriptRunner');
 const {
@@ -67,7 +68,16 @@ function registerRequestIpc(options = {}) {
     try {
       const importedArtifacts = [requestContext?.collection, requestContext?.request, request];
       if (artifactIsImportedUntrusted(...importedArtifacts) && requestHasScripts(request, requestContext)) {
-        await confirmImportedScriptSend({ dialog, getMainWindow, request });
+        await confirmImportedScriptSend({
+          dialog,
+          getMainWindow,
+          getWorkspaceId,
+          mutateWorkspace,
+          request,
+          requestContext,
+          workspace: workspaceSnapshot,
+          workspaceId
+        });
       }
       const tlsSettings = await resolveTlsSettingsSecrets(workspaceSnapshot.settings || {}, vaultStore);
       const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequest(request, environment, {
@@ -85,11 +95,14 @@ function registerRequestIpc(options = {}) {
         fileBindings: mainOwnedFileBindings(workspaceSnapshot),
         networkPolicy: createRequestNetworkPolicyForWorkspace({
           dialog,
-        getMainWindow,
-        recordDiagnosticEvent,
-        workspace: workspaceSnapshot,
-        artifacts: [requestContext?.collection, requestContext?.request, request]
-      }),
+          getMainWindow,
+          getWorkspaceId,
+          mutateWorkspace,
+          recordDiagnosticEvent,
+          workspace: workspaceSnapshot,
+          workspaceId,
+          artifacts: [requestContext?.collection, requestContext?.request, request]
+        }),
         sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
         trustedCapabilities: scriptTrustedCapabilitiesForWorkspace(workspaceSnapshot, importedArtifacts),
         tlsSettings,
@@ -365,21 +378,63 @@ async function confirmImportedScriptSend(options = {}) {
     error.code = 'POSTMETER_IMPORTED_SCRIPT_REVIEW_REQUIRED';
     throw error;
   }
+  const fingerprint = importedScriptFingerprint(options.request, options.requestContext);
+  const security = options.workspace?.localsettings?.security || {};
+  if (security.importedScriptReviewSource === 'main'
+    && Array.isArray(security.reviewedImportedScriptFingerprints)
+    && security.reviewedImportedScriptFingerprints.includes(fingerprint)) {
+    return;
+  }
   const result = await options.dialog.showMessageBox(options.getMainWindow?.(), {
     type: 'warning',
-    buttons: ['Send Once', 'Cancel'],
-    defaultId: 1,
-    cancelId: 1,
+    buttons: ['Send Once', 'Allow Permanently', 'Cancel'],
+    defaultId: 2,
+    cancelId: 2,
     noLink: true,
     title: 'Review Imported Script',
     message: 'This imported request contains scripts.',
-    detail: `Request destination: ${String(options.request?.url || '').trim() || 'unknown'}\nScript networking and cookies are disabled for this send.`
+    detail: `Request destination: ${String(options.request?.url || '').trim() || 'unknown'}\nScript networking and cookies are disabled for this send.\n\nAllow Permanently remembers these exact scripts for this request in this workspace on this device.`
   });
+  if (result?.response === 1) {
+    let applied = false;
+    await options.mutateWorkspace?.((workspace) => {
+      if (options.getWorkspaceId?.() !== options.workspaceId) {
+        return null;
+      }
+      workspace.localsettings ||= {};
+      workspace.localsettings.security ||= {};
+      const nextSecurity = workspace.localsettings.security;
+      nextSecurity.reviewedImportedScriptFingerprints = normalizeScriptFingerprints([
+        ...(nextSecurity.reviewedImportedScriptFingerprints || []),
+        fingerprint
+      ]);
+      nextSecurity.importedScriptReviewSource = 'main';
+      applied = true;
+      return workspace;
+    }, { workspaceId: options.workspaceId });
+    if (applied) {
+      return;
+    }
+  }
   if (result?.response !== 0) {
     const error = new Error('Imported scripted request was not approved.');
     error.code = 'POSTMETER_IMPORTED_SCRIPT_REVIEW_DENIED';
     throw error;
   }
+}
+
+function importedScriptFingerprint(request = {}, context = {}) {
+  const scripts = [request, context?.request, context?.collection, ...(context?.folders || [])]
+    .map((subject) => Object.fromEntries(Object.entries(subject?.scripts || {}).sort(([left], [right]) => left.localeCompare(right))));
+  return crypto.createHash('sha256').update(JSON.stringify({
+    requestId: String(request?.id || ''),
+    url: String(request?.url || ''),
+    scripts
+  })).digest('hex');
+}
+
+function normalizeScriptFingerprints(values = []) {
+  return [...new Set(values.filter((value) => /^[a-f0-9]{64}$/u.test(value)))].slice(-100);
 }
 
 module.exports = {

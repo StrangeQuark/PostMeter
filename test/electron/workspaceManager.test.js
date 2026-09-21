@@ -192,8 +192,12 @@ test('workspace manager sanitizes local state from imported encrypted workspaces
         importedUntrusted: false,
         allowPrivateNetworkRequests: true,
         privateNetworkPolicySource: 'main',
+        allowedPrivateNetworkHosts: ['localhost'],
         trustedWorkspace: true,
-        allowHighRiskRuns: true
+        allowHighRiskRuns: true,
+        highRiskRunPolicySource: 'main',
+        reviewedImportedScriptFingerprints: ['a'.repeat(64)],
+        importedScriptReviewSource: 'main'
       }
     }
   };
@@ -208,8 +212,12 @@ test('workspace manager sanitizes local state from imported encrypted workspaces
   assert.equal(unlocked.workspace.localsettings.security.importedUntrusted, true);
   assert.equal(unlocked.workspace.localsettings.security.allowPrivateNetworkRequests, false);
   assert.equal(unlocked.workspace.localsettings.security.privateNetworkPolicySource, '');
+  assert.deepEqual(unlocked.workspace.localsettings.security.allowedPrivateNetworkHosts, []);
   assert.equal(unlocked.workspace.localsettings.security.trustedWorkspace, false);
   assert.equal(unlocked.workspace.localsettings.security.allowHighRiskRuns, false);
+  assert.equal(unlocked.workspace.localsettings.security.highRiskRunPolicySource, '');
+  assert.deepEqual(unlocked.workspace.localsettings.security.reviewedImportedScriptFingerprints, []);
+  assert.equal(unlocked.workspace.localsettings.security.importedScriptReviewSource, '');
   assert.deepEqual(unlocked.workspace.localsettings.sandbox.fileBindings, []);
   assert.equal(unlocked.workspace.localsettings.sandbox.trustedCapabilities.vaultGrants.workspace, false);
   assert.deepEqual(unlocked.workspace.localsettings.sandbox.trustedCapabilities.vaultGrants.collections, []);
