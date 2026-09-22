@@ -448,8 +448,8 @@ function assertAllSetupNodeStepsUsePinnedNode24(workflow, workflowName) {
   for (const step of setupSteps) {
     assert.equal(
       step.with?.['node-version'],
-      '24.15.0',
-      `${workflowName} ${step.name || 'Setup Node'} must use pinned Node 24.15.0`
+      '24.21.0',
+      `${workflowName} ${step.name || 'Setup Node'} must use pinned Node 24.21.0`
     );
   }
 }
