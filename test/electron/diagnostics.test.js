@@ -1219,7 +1219,7 @@ test('diagnostic bundle export is local sanitized and does not use network APIs'
     history: [{ finalUrl: 'https://api.example.test/customer?token=history-token', statusCode: 200 }]
   };
   const runtimeInfo = {
-    node: '24.15.0',
+    node: '24.21.0',
     electron: '42.2.0',
     chrome: '148.0.7778.97',
     platform: 'linux',
